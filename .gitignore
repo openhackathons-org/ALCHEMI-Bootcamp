@@ -1,0 +1,8 @@
+outputs/
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.env
+.pytest_cache/
+.ruff_cache/
+.claude/
