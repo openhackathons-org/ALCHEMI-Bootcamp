@@ -1,7 +1,4 @@
-"""Pydantic models and utility functions for ALCHEMI BMD/BGR endpoints.
-
-Adapted from examples/bmd_script.py and examples/bgr_script.py.
-"""
+"""Pydantic models and utility functions for ALCHEMI BMD/BGR endpoints."""
 
 from typing import List, Optional
 
@@ -83,7 +80,7 @@ class MDReply(BaseModel):
     info: Optional[str] = None
 
 # ---------------------------------------------------------------------------
-# BGR models (from bgr_script.py)
+# BGR models
 # ---------------------------------------------------------------------------
 
 class AtomicData(BaseModel):
