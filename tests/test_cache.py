@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 from helpers.cache import cache_exists, load_cache, save_cache
-from helpers.models import MDConfig, MDReply, MDSnapshot
+from helpers.models import BGRReply, MDConfig, MDReply, MDSnapshot
 
 
 class TestCache:
@@ -92,3 +92,9 @@ class TestCachedResponses:
         reply = load_cache(cache_dir, f"naph_conf{i}_nvt_500K", MDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 0
+
+    def test_nacl_bgr_relax_cached(self, cache_dir):
+        self._skip_if_no_cache(cache_dir, "nacl_bgr_relax")
+        reply = load_cache(cache_dir, "nacl_bgr_relax", BGRReply)
+        assert reply.status == "Success"
+        assert len(reply.atoms) == 1
