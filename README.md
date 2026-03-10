@@ -15,6 +15,7 @@ End-to-end materials science workflow using NVIDIA ALCHEMI Batched Molecular Dyn
 ## Prerequisites
 
 - NVIDIA ALCHEMI BMD NIM running on `localhost:8000` (or cached responses)
+- NVIDIA ALCHEMI BGR NIM running on `localhost:8890` (or cached responses)
 - Python 3.11+ with conda environment (see below)
 
 ## Quick Start
@@ -25,7 +26,7 @@ conda env create -f environment.yml
 conda activate alchemi-bmd-materials
 
 # Launch the notebook
-jupyter notebook alchemi_bmd_materials.ipynb
+jupyter notebook alchemi-playbook-nims.ipynb
 ```
 
 ### FAST_DEMO Mode
@@ -37,19 +38,21 @@ Set `FAST_DEMO = False` for full production-length runs against a live endpoint.
 
 ```
 alchemi-bmd-materials-playbook/
-├── alchemi_bmd_materials.ipynb       # Main notebook
+├── alchemi-playbook-nims.ipynb       # Main notebook
 ├── helpers/                          # Python helper modules
 │   ├── models.py                     # Pydantic models for BMD/BGR
 │   ├── api_client.py                 # Endpoint client with caching
 │   ├── analysis.py                   # RDF, MSD, thermo extraction
 │   ├── visualization.py              # OVITO rendering
 │   └── cache.py                      # FAST_DEMO cache logic
+├── tests/                            # pytest test suite
 ├── cached_responses/                 # Populated on first live run
 ├── structures/                       # Input structure files
 │   └── naphthalene.xyz
 ├── outputs/                          # Generated plots (gitignored)
 ├── environment.yml                   # Conda environment spec
-└── requirements.txt                  # pip fallback
+├── requirements.txt                  # Runtime dependencies
+└── requirements-dev.txt              # Dev dependencies (pytest, ruff)
 ```
 
 ## Notebook Sections

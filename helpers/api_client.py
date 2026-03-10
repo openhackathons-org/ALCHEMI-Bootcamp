@@ -2,7 +2,15 @@
 
 import requests
 
-from .models import MDAtomicData, MDConfig, MDRequest, MDReply, AtomicData, BGRRequest, BGRReply
+from .models import (
+    MDAtomicData,
+    MDConfig,
+    MDRequest,
+    MDReply,
+    AtomicData,
+    BGRRequest,
+    BGRReply,
+)
 from .cache import cache_exists, load_cache, save_cache
 
 
@@ -99,11 +107,13 @@ def run_bgr_or_load_cache(
     if not endpoint_live:
         raise RuntimeError(
             f"No cached response for '{label}' and endpoint is not available.\n"
-            "Start the BGR NIM on localhost:8000 or provide cached_responses/."
+            "Start the BGR NIM on localhost:8890 or provide cached_responses/."
         )
 
     print(f"  Running live BGR optimisation: {label} ...")
-    reply = run_bgr(atoms_list, server_url, cellopt=cellopt, opttol=opttol, timeout=timeout)
+    reply = run_bgr(
+        atoms_list, server_url, cellopt=cellopt, opttol=opttol, timeout=timeout
+    )
     save_cache(cache_dir, label, reply)
     print(f"  Cached response saved: {label}")
     return reply
