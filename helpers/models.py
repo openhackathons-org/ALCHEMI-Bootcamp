@@ -6,21 +6,30 @@ import ase
 import ase.data
 import ase.io
 import numpy as np
-from pydantic import BaseModel, Field, NonNegativeFloat, NonNegativeInt, PositiveFloat, PositiveInt
+from pydantic import (
+    BaseModel,
+    Field,
+    NonNegativeFloat,
+    NonNegativeInt,
+    PositiveFloat,
+    PositiveInt,
+)
 
 # ---------------------------------------------------------------------------
 # Physical constants
 # ---------------------------------------------------------------------------
-KE_CONV = 103.64269667160806       # amu*A^2/fs^2 -> eV
+KE_CONV = 103.64269667160806  # amu*A^2/fs^2 -> eV
 BOLTZ_EV_K = 8.617333262145179e-05  # eV/K
-P_CONV = 1.602176634e6             # eV/A^3 -> Bar
+P_CONV = 1.602176634e6  # eV/A^3 -> Bar
 
 # ---------------------------------------------------------------------------
 # BMD models (from bmd_script.py)
 # ---------------------------------------------------------------------------
 
+
 class MDAtomicData(BaseModel):
     """Atomic data for molecular dynamics simulation."""
+
     coord: List[float]
     numbers: List[int]
     charge: Optional[int] = 0
@@ -34,27 +43,53 @@ class MDAtomicData(BaseModel):
 
 class MDConfig(BaseModel):
     """Configuration for molecular dynamics simulations."""
+
     temperature: PositiveFloat = Field(default=300.0, description="Temperature in K")
     dt: PositiveFloat = Field(default=1.0, description="Time step in fs")
     nvt: bool = Field(default=True, description="Enable stochastic Langevin thermostat")
-    friction: PositiveFloat = Field(default=1.0, description="Friction coefficient for Langevin thermostat in ps^-1")
+    friction: PositiveFloat = Field(
+        default=1.0, description="Friction coefficient for Langevin thermostat in ps^-1"
+    )
     npt: bool = Field(default=False, description="Enable Monte Carlo barostat")
-    barostat_prob_shear: NonNegativeFloat = Field(default=0.5, description="Probability of shear move in barostat")
-    barostat_shear_max: PositiveFloat = Field(default=1.0e-3, description="Maximum shear move in barostat")
-    barostat_diag_max: PositiveFloat = Field(default=3.0e-3, description="Maximum diagonal move in barostat")
-    barostat_log_scale_max: PositiveFloat = Field(default=5.0e-3, description="Maximum log scale move in barostat")
-    pressure: NonNegativeFloat = Field(default=0.0, description="External pressure in kBar")
-    barostat_every: PositiveInt = Field(default=25, description="Frequency of barostat updates")
-    barostat_anisotropic: bool = Field(default=False, description="Enable anisotropic barostat")
+    barostat_prob_shear: NonNegativeFloat = Field(
+        default=0.5, description="Probability of shear move in barostat"
+    )
+    barostat_shear_max: PositiveFloat = Field(
+        default=1.0e-3, description="Maximum shear move in barostat"
+    )
+    barostat_diag_max: PositiveFloat = Field(
+        default=3.0e-3, description="Maximum diagonal move in barostat"
+    )
+    barostat_log_scale_max: PositiveFloat = Field(
+        default=5.0e-3, description="Maximum log scale move in barostat"
+    )
+    pressure: NonNegativeFloat = Field(
+        default=0.0, description="External pressure in kBar"
+    )
+    barostat_every: PositiveInt = Field(
+        default=25, description="Frequency of barostat updates"
+    )
+    barostat_anisotropic: bool = Field(
+        default=False, description="Enable anisotropic barostat"
+    )
     istep: NonNegativeInt = Field(default=0, description="Simulation step")
-    md_time: NonNegativeFloat = Field(default=0.0, description="Current simulation time in ps")
-    md_time_max: NonNegativeFloat = Field(default=10.0, description="Maximum simulation time in ps")
-    save_interval: PositiveInt = Field(default=100, description="Frequency of trajectory saves in steps")
-    efield: List[float] = Field(default=[0.0, 0.0, 0.0], description="External electric field vector in uV/A")
+    md_time: NonNegativeFloat = Field(
+        default=0.0, description="Current simulation time in ps"
+    )
+    md_time_max: NonNegativeFloat = Field(
+        default=10.0, description="Maximum simulation time in ps"
+    )
+    save_interval: PositiveInt = Field(
+        default=100, description="Frequency of trajectory saves in steps"
+    )
+    efield: List[float] = Field(
+        default=[0.0, 0.0, 0.0], description="External electric field vector in uV/A"
+    )
 
 
 class MDRequest(BaseModel):
     """Request model for MD simulation."""
+
     atoms: MDAtomicData
     config: Optional[MDConfig] = None
     info: Optional[str] = None
@@ -62,6 +97,7 @@ class MDRequest(BaseModel):
 
 class MDSnapshot(BaseModel):
     """Snapshot of MD simulation state."""
+
     coord: List[float]
     velocity: List[float]
     energy: float
@@ -74,17 +110,21 @@ class MDSnapshot(BaseModel):
 
 class MDReply(BaseModel):
     """Reply model for MD simulation results."""
+
     trajectory: Optional[List[MDSnapshot]] = None
     config: MDConfig
     status: Optional[str] = "Success"
     info: Optional[str] = None
 
+
 # ---------------------------------------------------------------------------
 # BGR models
 # ---------------------------------------------------------------------------
 
+
 class AtomicData(BaseModel):
     """Atomic data for geometry optimisation."""
+
     coord: List[float]
     numbers: List[int]
     charge: Optional[int] = 0
@@ -97,6 +137,7 @@ class AtomicData(BaseModel):
 
 class BGRRequest(BaseModel):
     """Request model for batch geometry relaxation."""
+
     atoms: List[AtomicData]
     opttol: Optional[float] = None
     opttol_pressure: Optional[float] = None
@@ -106,6 +147,7 @@ class BGRRequest(BaseModel):
 
 class OptimizationResult(AtomicData):
     """Result of a single geometry optimisation."""
+
     converged: bool
     num_optimization_steps: int
     energy: float
@@ -116,13 +158,16 @@ class OptimizationResult(AtomicData):
 
 class BGRReply(BaseModel):
     """Reply model for batch geometry relaxation results."""
+
     atoms: List[OptimizationResult]
     info: Optional[str] = ""
     status: Optional[str] = "Success"
 
+
 # ---------------------------------------------------------------------------
 # ASE <-> model conversion utilities
 # ---------------------------------------------------------------------------
+
 
 def read_structure(structure_file: str) -> MDAtomicData:
     """Read atomic structure from file using ASE and return MDAtomicData."""
