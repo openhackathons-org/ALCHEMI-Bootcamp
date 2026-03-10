@@ -1,4 +1,4 @@
-name: alchemi-bmd-materials
+name: alchemi-playbook
 channels:
   - https://conda.ovito.org
   - conda-forge

@@ -13,6 +13,7 @@ CACHE_DIR = os.path.join(PLAYBOOK_DIR, "cached_responses")
 STRUCTURE_DIR = os.path.join(PLAYBOOK_DIR, "structures")
 OUTPUT_DIR = os.path.join(PLAYBOOK_DIR, "outputs")
 SERVER_URL = "http://localhost:8000"
+BGR_SERVER_URL = "http://localhost:8890"
 
 
 @pytest.fixture
@@ -36,10 +37,22 @@ def server_url():
 
 
 @pytest.fixture
+def bgr_server_url():
+    return BGR_SERVER_URL
+
+
+@pytest.fixture
 def endpoint_live(server_url):
     from helpers.api_client import check_endpoint
 
     return check_endpoint(server_url)
+
+
+@pytest.fixture
+def bgr_endpoint_live(bgr_server_url):
+    from helpers.api_client import check_endpoint
+
+    return check_endpoint(bgr_server_url)
 
 
 @pytest.fixture
@@ -75,3 +88,11 @@ def nacl_ase():
     )
     nacl.make_supercell((2, 2, 2))
     return AseAtomsAdaptor().get_atoms(nacl)
+
+
+@pytest.fixture
+def nacl_bgr_atom(nacl_ase):
+    """Build NaCl 2x2x2 supercell as AtomicData for BGR."""
+    from helpers.models import ase_to_atomic_data
+
+    return ase_to_atomic_data(nacl_ase, _id="nacl_supercell")
