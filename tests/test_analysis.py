@@ -185,7 +185,10 @@ class TestThermalExpansion:
         for T in [200, 300, 400]:
             nvt_label = f"nacl_nvt_T{T}"
             npt_label = f"nacl_npt_T{T}"
-            if not (cache_exists(cache_dir, nvt_label) and cache_exists(cache_dir, npt_label)):
+            if not (
+                cache_exists(cache_dir, nvt_label)
+                and cache_exists(cache_dir, npt_label)
+            ):
                 pytest.skip(f"Temperature sweep cache missing for T={T}")
 
             nvt_r = load_cache(cache_dir, nvt_label, MDReply)
