@@ -7,3 +7,4 @@ matplotlib>=3.7
 pandas>=2.0
 rdkit>=2023.03
 ovito>=3.10
+aiohttp>=3.9

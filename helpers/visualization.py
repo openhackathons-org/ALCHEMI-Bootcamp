@@ -19,6 +19,7 @@ def render_structure_ovito(
     from ovito.io.ase import ase_to_ovito
     from ovito.vis import TachyonRenderer, Viewport
     from ovito.pipeline import StaticSource, Pipeline
+
     data = ase_to_ovito(atoms)
     pipeline = Pipeline(source=StaticSource(data=data))
     pipeline.add_to_scene()
@@ -42,6 +43,7 @@ def render_structure_ovito(
 def display_inline(image_path: str):
     """Display a PNG image inline in a Jupyter notebook."""
     from IPython.display import Image, display
+
     display(Image(filename=image_path))
 
 
@@ -61,12 +63,16 @@ def structure_summary_table(atoms: ase.Atoms) -> pd.DataFrame:
     total_mass_amu = ase.data.atomic_masses[atoms.numbers].sum()
     density = total_mass_amu * 1.66054e-24 / (vol * 1e-24) if vol > 0 else 0.0
 
-    return pd.DataFrame([{
-        "Formula": formula,
-        "Atoms": n_atoms,
-        "a (A)": round(a, 3),
-        "b (A)": round(b, 3),
-        "c (A)": round(c, 3),
-        "Volume (A^3)": round(vol, 2),
-        "Density (g/cm^3)": round(density, 3),
-    }])
+    return pd.DataFrame(
+        [
+            {
+                "Formula": formula,
+                "Atoms": n_atoms,
+                "a (A)": round(a, 3),
+                "b (A)": round(b, 3),
+                "c (A)": round(c, 3),
+                "Volume (A^3)": round(vol, 2),
+                "Density (g/cm^3)": round(density, 3),
+            }
+        ]
+    )
