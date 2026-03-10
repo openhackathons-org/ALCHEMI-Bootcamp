@@ -11,7 +11,15 @@ from helpers.visualization import render_structure_ovito, structure_summary_tabl
 class TestStructureSummary:
     def test_summary_columns(self, nacl_ase):
         df = structure_summary_table(nacl_ase)
-        expected_cols = {"Formula", "Atoms", "a (A)", "b (A)", "c (A)", "Volume (A^3)", "Density (g/cm^3)"}
+        expected_cols = {
+            "Formula",
+            "Atoms",
+            "a (A)",
+            "b (A)",
+            "c (A)",
+            "Volume (A^3)",
+            "Density (g/cm^3)",
+        }
         assert set(df.columns) == expected_cols
 
     def test_summary_values(self, nacl_ase):

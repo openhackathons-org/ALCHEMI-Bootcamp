@@ -55,9 +55,16 @@ def extract_thermo_timeseries(
         mass = ase.data.atomic_masses[mdatoms.numbers][:, None]
 
     records: dict[str, list[float]] = {
-        "time_ps": [], "temperature_K": [], "e_pot_eV": [], "e_kin_eV": [],
-        "e_tot_eV": [], "pressure_kbar": [], "volume_A3": [],
-        "p_xx": [], "p_yy": [], "p_zz": [],
+        "time_ps": [],
+        "temperature_K": [],
+        "e_pot_eV": [],
+        "e_kin_eV": [],
+        "e_tot_eV": [],
+        "pressure_kbar": [],
+        "volume_A3": [],
+        "p_xx": [],
+        "p_yy": [],
+        "p_zz": [],
     }
 
     for snap in trajectory:
@@ -214,7 +221,9 @@ def compute_rdf(
         mean_vol = np.mean([f.get_volume() for f in frames[start_frame:]])
         shell_volumes = (4.0 / 3.0) * np.pi * (r_edges[1:] ** 3 - r_edges[:-1] ** 3)
         ideal_count = (n_pairs / mean_vol) * shell_volumes * n_frames_used
-        g_r = np.divide(hist, ideal_count, out=np.zeros_like(hist), where=ideal_count > 0)
+        g_r = np.divide(
+            hist, ideal_count, out=np.zeros_like(hist), where=ideal_count > 0
+        )
     else:
         g_r = np.zeros(n_bins)
 
