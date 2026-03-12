@@ -29,8 +29,8 @@ UDC-inspired conformer stability scoring workflow — generate conformers, run b
 
 ## Prerequisites
 
-- NVIDIA ALCHEMI BMD NIM running on `localhost:8000` (or cached responses)
-- NVIDIA ALCHEMI BGR NIM running on `localhost:8890` (or cached responses) — materials playbook only
+- NVIDIA ALCHEMI BMD NIM running on `localhost:{BMD_PORT}` (or cached responses) — port is configurable in each notebook's control panel (default `8000`)
+- NVIDIA ALCHEMI BGR NIM running on `localhost:{BGR_PORT}` (or cached responses) — materials playbook only (default `8890`)
 - Python 3.11+ with conda environment (see below)
 
 ## Quick Start
