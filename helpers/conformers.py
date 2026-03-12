@@ -7,6 +7,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolDescriptors
 
 from .analysis import kabsch_rmsd
+from .constants import KCAL_MOL_TO_EV
 
 
 def compute_n_conformers(mol: Chem.Mol) -> int:
@@ -40,7 +41,7 @@ def filter_by_energy(
     *energies* should be in eV.  The threshold is converted internally
     (1 kcal/mol = 0.0434 eV).
     """
-    threshold_ev = threshold_kcal * 0.0434
+    threshold_ev = threshold_kcal * KCAL_MOL_TO_EV
     e_min = np.min(energies)
     return (energies - e_min) <= threshold_ev
 
