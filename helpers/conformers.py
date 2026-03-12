@@ -7,6 +7,7 @@ from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolDescriptors
 
 from .analysis import kabsch_rmsd
+from .constants import KCAL_MOL_TO_EV
 
 
 def compute_n_conformers(mol: Chem.Mol) -> int:
@@ -15,7 +16,7 @@ def compute_n_conformers(mol: Chem.Mol) -> int:
     return min(1000, max(200, 3**n_rot))
 
 
-def generate_conformers(mol: Chem.Mol, n_confs: int, seed: int = 42) -> Chem.Mol:
+def generate_conformers(mol: Chem.Mol, n_confs: int, seed: int = 42, rmsd_threshold=0.5) -> Chem.Mol:
     """Generate 3-D conformers using ETKDGv3 + MMFF optimisation.
 
     Returns a copy of *mol* with embedded conformers.  Near-identical initial
@@ -24,7 +25,7 @@ def generate_conformers(mol: Chem.Mol, n_confs: int, seed: int = 42) -> Chem.Mol
     mol = Chem.AddHs(mol)
     params = AllChem.ETKDGv3()
     params.randomSeed = seed
-    params.pruneRmsThresh = 0.5
+    params.pruneRmsThresh = rmsd_threshold
     params.numThreads = 0  # use all available cores
     AllChem.EmbedMultipleConfs(mol, numConfs=n_confs, params=params)
     AllChem.MMFFOptimizeMoleculeConfs(mol, numThreads=0)
@@ -40,7 +41,7 @@ def filter_by_energy(
     *energies* should be in eV.  The threshold is converted internally
     (1 kcal/mol = 0.0434 eV).
     """
-    threshold_ev = threshold_kcal * 0.0434
+    threshold_ev = threshold_kcal * KCAL_MOL_TO_EV
     e_min = np.min(energies)
     return (energies - e_min) <= threshold_ev
 
