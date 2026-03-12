@@ -4,6 +4,7 @@ from typing import Optional
 
 import ase
 import ase.data
+import ase.neighborlist
 import numpy as np
 
 from .models import MDAtomicData, MDSnapshot, KE_CONV, BOLTZ_EV_K, P_CONV
@@ -293,3 +294,96 @@ def thermal_expansion_proxy(
     drho_dT = coeffs[0]
     rho_mean = np.mean(densities)
     return -drho_dT / rho_mean
+
+
+def kabsch_rmsd(coords_a: np.ndarray, coords_b: np.ndarray) -> float:
+    """Kabsch-aligned RMSD between two (N, 3) coordinate arrays.
+
+    Uses SVD-based optimal rotation to minimise RMSD before computing it.
+    Both arrays are centred before alignment.
+    """
+    a = coords_a - coords_a.mean(axis=0)
+    b = coords_b - coords_b.mean(axis=0)
+    H = a.T @ b
+    U, _, Vt = np.linalg.svd(H)
+    d = np.linalg.det(Vt.T @ U.T)
+    sign_matrix = np.diag([1.0, 1.0, d])
+    R = Vt.T @ sign_matrix @ U.T
+    a_rot = a @ R.T
+    return float(np.sqrt(np.mean(np.sum((a_rot - b) ** 2, axis=1))))
+
+
+def compute_rmsd(
+    frames: list[ase.Atoms],
+    start_frame: int = 0,
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compute RMSD relative to the first production frame.
+
+    Returns ``(time_ps, rmsd_A)``.  Follows the same signature pattern as
+    :func:`compute_msd`.
+    """
+    ref = frames[start_frame]
+    ref_pos = ref.positions.copy()
+    times: list[float] = []
+    rmsds: list[float] = []
+    for frame in frames[start_frame:]:
+        diff = frame.positions - ref_pos
+        rmsd_val = float(np.sqrt(np.mean(np.sum(diff**2, axis=1))))
+        times.append(frame.info.get("md_time", 0.0))
+        rmsds.append(rmsd_val)
+    return np.array(times), np.array(rmsds)
+
+
+def check_bond_integrity(
+    frames: list[ase.Atoms],
+    ref_frame_idx: int = 0,
+    tolerance: float = 0.3,
+) -> dict:
+    """Check whether covalent bonds are preserved throughout a trajectory.
+
+    Uses ASE ``natural_cutoffs`` (+ *tolerance* Angstrom) to build a bond
+    adjacency set for the reference frame and each subsequent frame.
+
+    Returns
+    -------
+    dict with keys:
+        n_broken : int — total bonds lost relative to reference (last frame)
+        n_formed : int — total bonds gained relative to reference (last frame)
+        integrity_score : float — fraction of frames with identical bond set (1.0 = perfect)
+        frame_scores : list[float] — per-frame score (1.0 if bond set matches reference)
+    """
+    ref = frames[ref_frame_idx]
+    cutoffs = ase.neighborlist.natural_cutoffs(ref, mult=1.0)
+    cutoffs = [c + tolerance for c in cutoffs]
+
+    def _bond_set(atoms: ase.Atoms) -> set[tuple[int, int]]:
+        nl = ase.neighborlist.NeighborList(
+            cutoffs, self_interaction=False, bothways=False, skin=0.0
+        )
+        nl.update(atoms)
+        bonds = set()
+        for i in range(len(atoms)):
+            indices = nl.get_neighbors(i)[0]
+            for j in indices:
+                bonds.add((min(i, j), max(i, j)))
+        return bonds
+
+    ref_bonds = _bond_set(ref)
+    frame_scores: list[float] = []
+    last_bonds = ref_bonds
+
+    for frame in frames:
+        cur_bonds = _bond_set(frame)
+        frame_scores.append(1.0 if cur_bonds == ref_bonds else 0.0)
+        last_bonds = cur_bonds
+
+    n_broken = len(ref_bonds - last_bonds)
+    n_formed = len(last_bonds - ref_bonds)
+    integrity_score = sum(frame_scores) / len(frame_scores) if frame_scores else 1.0
+
+    return {
+        "n_broken": n_broken,
+        "n_formed": n_formed,
+        "integrity_score": integrity_score,
+        "frame_scores": frame_scores,
+    }
