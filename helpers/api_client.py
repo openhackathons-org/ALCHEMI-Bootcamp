@@ -198,6 +198,60 @@ async def async_run_md_or_load_cache(
     return reply
 
 
+async def async_run_bgr(
+    atoms_list: list[AtomicData],
+    server_url: str,
+    session: aiohttp.ClientSession,
+    cellopt: bool = False,
+    opttol: float | None = None,
+    timeout: int = 300,
+) -> BGRReply:
+    """Async equivalent of ``run_bgr`` using an aiohttp session."""
+    import aiohttp as _aiohttp
+
+    url = f"{server_url}/infer"
+    payload = BGRRequest(atoms=atoms_list, cellopt=cellopt, opttol=opttol).model_dump()
+    client_timeout = _aiohttp.ClientTimeout(connect=10, total=timeout)
+    async with session.post(url, json=payload, timeout=client_timeout) as resp:
+        resp.raise_for_status()
+        data = await resp.json()
+    reply = BGRReply(**data)
+    if reply.status != "Success":
+        raise RuntimeError(f"BGR failed: {reply.status} — {reply.info}")
+    return reply
+
+
+async def async_run_bgr_or_load_cache(
+    atoms_list: list[AtomicData],
+    server_url: str,
+    session: aiohttp.ClientSession,
+    cache_dir: str,
+    label: str,
+    endpoint_live: bool,
+    cellopt: bool = False,
+    opttol: float | None = None,
+    timeout: int = 300,
+) -> BGRReply:
+    """Async equivalent of ``run_bgr_or_load_cache``."""
+    if cache_exists(cache_dir, label):
+        print(f"  Loading cached response: {label}")
+        return load_cache(cache_dir, label, BGRReply)
+
+    if not endpoint_live:
+        raise RuntimeError(
+            f"No cached response for '{label}' and endpoint is not available.\n"
+            f"Start the BGR NIM on {server_url} or provide cached_responses/."
+        )
+
+    print(f"  Running live BGR optimisation: {label} ...")
+    reply = await async_run_bgr(
+        atoms_list, server_url, session, cellopt=cellopt, opttol=opttol, timeout=timeout
+    )
+    save_cache(cache_dir, label, reply)
+    print(f"  Cached response saved: {label}")
+    return reply
+
+
 async def async_run_temperature_pipeline(
     temperature: float,
     mdatoms: MDAtomicData,
