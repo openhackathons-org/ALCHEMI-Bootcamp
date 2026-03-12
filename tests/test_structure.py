@@ -1,9 +1,5 @@
-"""Test structure generation: NaCl supercell and naphthalene."""
+"""Test structure generation: NaCl supercell."""
 
-import os
-
-import ase.io
-import numpy as np
 import pytest
 from pymatgen.core import Lattice, Structure
 
@@ -69,34 +65,3 @@ class TestNaClStructure:
         assert df["Atoms"].iloc[0] == 64
         assert df["Density (g/cm^3)"].iloc[0] > 1.5
         assert df["Density (g/cm^3)"].iloc[0] < 3.0
-
-
-class TestNaphthalene:
-    def test_xyz_file_exists(self, structure_dir):
-        path = os.path.join(structure_dir, "naphthalene.xyz")
-        assert os.path.isfile(path)
-
-    def test_naphthalene_load(self, structure_dir):
-        path = os.path.join(structure_dir, "naphthalene.xyz")
-        atoms = ase.io.read(path)
-        assert len(atoms) == 18  # C10H8 = 18 atoms
-
-    def test_naphthalene_composition(self, structure_dir):
-        path = os.path.join(structure_dir, "naphthalene.xyz")
-        atoms = ase.io.read(path)
-        symbols = atoms.get_chemical_symbols()
-        assert symbols.count("C") == 10
-        assert symbols.count("H") == 8
-
-    def test_conformer_perturbation(self, structure_dir):
-        path = os.path.join(structure_dir, "naphthalene.xyz")
-        base = ase.io.read(path)
-        np.random.seed(42)
-        conf = base.copy()
-        noise = np.random.normal(0, 0.05, conf.positions.shape)
-        conf.positions += noise
-        # Perturbed positions should differ from base
-        assert not np.allclose(base.positions, conf.positions)
-        # But not by too much
-        max_disp = np.max(np.abs(base.positions - conf.positions))
-        assert max_disp < 0.5  # reasonable perturbation

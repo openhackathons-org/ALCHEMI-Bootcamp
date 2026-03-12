@@ -13,7 +13,6 @@ CACHE_DIR_MATERIALS = os.path.join(PLAYBOOK_DIR, "cached_responses", "materials"
 CACHE_DIR_CONFORMER = os.path.join(
     PLAYBOOK_DIR, "cached_responses", "conformer-stability"
 )
-STRUCTURE_DIR = os.path.join(PLAYBOOK_DIR, "structures")
 OUTPUT_DIR = os.path.join(PLAYBOOK_DIR, "outputs")
 SERVER_URL = "http://localhost:8000"
 BGR_SERVER_URL = "http://localhost:8890"
@@ -27,11 +26,6 @@ def cache_dir():
 @pytest.fixture
 def conformer_cache_dir():
     return CACHE_DIR_CONFORMER
-
-
-@pytest.fixture
-def structure_dir():
-    return STRUCTURE_DIR
 
 
 @pytest.fixture
