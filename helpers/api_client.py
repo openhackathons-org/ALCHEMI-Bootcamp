@@ -90,7 +90,7 @@ def run_md_or_load_cache(
     if not endpoint_live:
         raise RuntimeError(
             f"No cached response for '{label}' and endpoint is not available.\n"
-            "Start the BMD NIM on localhost:8000 or provide cached_responses/."
+            f"Start the BMD NIM on {server_url} or provide cached_responses/."
         )
 
     print(f"  Running live MD simulation: {label} ...")
@@ -118,7 +118,7 @@ def run_bgr_or_load_cache(
     if not endpoint_live:
         raise RuntimeError(
             f"No cached response for '{label}' and endpoint is not available.\n"
-            "Start the BGR NIM on localhost:8890 or provide cached_responses/."
+            f"Start the BGR NIM on {server_url} or provide cached_responses/."
         )
 
     print(f"  Running live BGR optimisation: {label} ...")
@@ -188,7 +188,7 @@ async def async_run_md_or_load_cache(
     if not endpoint_live:
         raise RuntimeError(
             f"No cached response for '{label}' and endpoint is not available.\n"
-            "Start the BMD NIM on localhost:8000 or provide cached_responses/."
+            f"Start the BMD NIM on {server_url} or provide cached_responses/."
         )
 
     print(f"  Running live MD simulation: {label} ...")
