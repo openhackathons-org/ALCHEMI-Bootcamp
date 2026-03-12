@@ -6,6 +6,8 @@ import ase
 import ase.data
 import pandas as pd
 
+from .constants import AMU_TO_G, ANGSTROM3_TO_CM3
+
 
 def render_structure_ovito(
     atoms: ase.Atoms,
@@ -61,7 +63,7 @@ def structure_summary_table(atoms: ase.Atoms) -> pd.DataFrame:
     vol = atoms.get_volume()
 
     total_mass_amu = ase.data.atomic_masses[atoms.numbers].sum()
-    density = total_mass_amu * 1.66054e-24 / (vol * 1e-24) if vol > 0 else 0.0
+    density = total_mass_amu * AMU_TO_G / (vol * ANGSTROM3_TO_CM3) if vol > 0 else 0.0
 
     return pd.DataFrame(
         [

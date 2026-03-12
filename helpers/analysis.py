@@ -7,7 +7,8 @@ import ase.data
 import ase.neighborlist
 import numpy as np
 
-from .models import MDAtomicData, MDSnapshot, KE_CONV, BOLTZ_EV_K, P_CONV
+from .constants import KE_CONV, BOLTZ_EV_K, P_CONV, AMU_TO_G, ANGSTROM3_TO_CM3
+from .models import MDAtomicData, MDSnapshot
 
 
 def trajectory_to_ase_list(
@@ -141,8 +142,7 @@ def compute_density(
     else:
         total_mass_amu = float(ase.data.atomic_masses[mdatoms.numbers].sum())
     mean_vol = float(np.mean(volumes))
-    # 1 amu = 1.66054e-24 g, 1 A^3 = 1e-24 cm^3
-    return total_mass_amu * 1.66054e-24 / (mean_vol * 1e-24)
+    return total_mass_amu * AMU_TO_G / (mean_vol * ANGSTROM3_TO_CM3)
 
 
 def compute_rdf(

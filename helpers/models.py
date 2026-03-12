@@ -16,14 +16,12 @@ from pydantic import (
 )
 
 # ---------------------------------------------------------------------------
-# Physical constants
+# Physical constants (canonical definitions in constants.py)
 # ---------------------------------------------------------------------------
-KE_CONV = 103.64269667160806  # amu*A^2/fs^2 -> eV
-BOLTZ_EV_K = 8.617333262145179e-05  # eV/K
-P_CONV = 1.602176634e6  # eV/A^3 -> Bar
+from .constants import KE_CONV, BOLTZ_EV_K, P_CONV  # noqa: E402, F401
 
 # ---------------------------------------------------------------------------
-# BMD models (from bmd_script.py)
+# BMD models
 # ---------------------------------------------------------------------------
 
 

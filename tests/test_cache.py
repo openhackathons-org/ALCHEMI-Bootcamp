@@ -87,9 +87,9 @@ class TestCachedResponses:
         assert len(reply.trajectory) > 0
 
     @pytest.mark.parametrize("i", [0, 1, 2])
-    def test_conformer_cached(self, cache_dir, i):
-        self._skip_if_no_cache(cache_dir, f"naph_conf{i}_nvt_500K")
-        reply = load_cache(cache_dir, f"naph_conf{i}_nvt_500K", MDReply)
+    def test_conformer_cached(self, conformer_cache_dir, i):
+        self._skip_if_no_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K")
+        reply = load_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K", MDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 0
 
