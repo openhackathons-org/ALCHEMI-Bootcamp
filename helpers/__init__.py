@@ -16,6 +16,7 @@ from .models import (
     read_structure,
     ase_to_atomic_data,
     atomic_data_to_ase,
+    ase_to_md_atomic_data,
 )
 from .cache import save_cache, load_cache, cache_exists
 from .api_client import (
@@ -27,6 +28,8 @@ from .api_client import (
     snapshot_to_mdatoms,
     async_run_md,
     async_run_md_or_load_cache,
+    async_run_bgr,
+    async_run_bgr_or_load_cache,
     async_run_temperature_pipeline,
     async_temperature_sweep,
 )
@@ -39,6 +42,15 @@ from .analysis import (
     compute_density,
     thermal_expansion_proxy,
     pick_production_window,
+    kabsch_rmsd,
+    compute_rmsd,
+    check_bond_integrity,
+)
+from .conformers import (
+    compute_n_conformers,
+    generate_conformers,
+    filter_by_energy,
+    deduplicate_conformers,
 )
 from .visualization import (
     render_structure_ovito,
@@ -62,6 +74,7 @@ __all__ = [
     "read_structure",
     "ase_to_atomic_data",
     "atomic_data_to_ase",
+    "ase_to_md_atomic_data",
     "save_cache",
     "load_cache",
     "cache_exists",
@@ -73,6 +86,8 @@ __all__ = [
     "snapshot_to_mdatoms",
     "async_run_md",
     "async_run_md_or_load_cache",
+    "async_run_bgr",
+    "async_run_bgr_or_load_cache",
     "async_run_temperature_pipeline",
     "async_temperature_sweep",
     "extract_thermo_timeseries",
@@ -83,6 +98,13 @@ __all__ = [
     "compute_density",
     "thermal_expansion_proxy",
     "pick_production_window",
+    "kabsch_rmsd",
+    "compute_rmsd",
+    "check_bond_integrity",
+    "compute_n_conformers",
+    "generate_conformers",
+    "filter_by_energy",
+    "deduplicate_conformers",
     "render_structure_ovito",
     "display_inline",
     "structure_summary_table",
