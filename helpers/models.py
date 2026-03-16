@@ -3,7 +3,6 @@
 from typing import List, Optional
 
 import ase
-import ase.data
 import ase.io
 import numpy as np
 from pydantic import (
@@ -18,7 +17,7 @@ from pydantic import (
 # ---------------------------------------------------------------------------
 # Physical constants (canonical definitions in constants.py)
 # ---------------------------------------------------------------------------
-from .constants import BOLTZ_EV_K, KE_CONV, P_CONV  # noqa: E402, F401
+from .constants import KE_CONV, BOLTZ_EV_K, P_CONV  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # BMD models
@@ -169,7 +168,9 @@ class BGRReply(BaseModel):
 
 def read_structure(structure_file: str) -> MDAtomicData:
     """Read atomic structure from file using ASE and return MDAtomicData."""
-    atoms = ase.io.read(structure_file)
+    result = ase.io.read(structure_file)
+    assert isinstance(result, ase.Atoms), f"Expected single Atoms, got {type(result)}"
+    atoms = result
     data = {
         "coord": atoms.positions.flatten().tolist(),
         "numbers": atoms.numbers.tolist(),
