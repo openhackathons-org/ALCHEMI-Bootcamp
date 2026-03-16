@@ -14,3 +14,4 @@ KCAL_MOL_TO_EV = 0.0434  # kcal/mol -> eV
 # OER thermodynamics
 # ---------------------------------------------------------------------------
 EV_PER_OER_STEP = 1.23  # Ideal OER step free energy (eV) = 4.92 / 4
+# Ref: Rossmeisl et al., J. Electroanal. Chem. 607, 83-89 (2007).

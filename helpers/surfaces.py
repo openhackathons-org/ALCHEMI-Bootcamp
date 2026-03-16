@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
-import numpy as np
 import ase
-from ase.neighborlist import natural_cutoffs, NeighborList
+import numpy as np
+from ase.neighborlist import NeighborList, natural_cutoffs
 
 if TYPE_CHECKING:
     import pymatgen.core
+
+AdsorbateSpecies = Literal["O", "OH", "H2O", "OOH"]
 
 
 # ---------------------------------------------------------------------------
@@ -22,7 +24,7 @@ def build_rutile_bulk(
     a: float,
     c: float,
     u: float = 0.305,
-) -> "pymatgen.core.Structure":
+) -> pymatgen.core.Structure:
     """Build a rutile bulk structure (P4_2/mnm, #136).
 
     Parameters
@@ -34,6 +36,15 @@ def build_rutile_bulk(
     u : float
         Oxygen internal coordinate (Wyckoff 4f position (u, u, 0)).
         Typical values: TiO2 ~0.305, RuO2 ~0.306, IrO2 ~0.306.
+
+    References
+    ----------
+    Lattice parameters and internal coordinates from:
+    Bolzan et al., "Powder neutron diffraction study of pyrolusite,
+    beta-MnO2", Acta Cryst. B 53, 373-380 (1997).
+    Shannon, "Revised effective ionic radii and systematic studies of
+    interatomic distances in halides and chalcogenides", Acta Cryst. A
+    32, 751-767 (1976).
 
     Returns
     -------
@@ -55,7 +66,7 @@ def build_rutile_bulk(
 
 
 def build_slab(
-    bulk: "pymatgen.core.Structure",
+    bulk: pymatgen.core.Structure,
     miller_index: tuple[int, int, int] = (1, 1, 0),
     min_slab_size: float = 10.0,
     min_vacuum_size: float = 15.0,
@@ -84,7 +95,6 @@ def build_slab(
     ase.Atoms with cell and PBC=[True, True, True].
     """
     from pymatgen.core.surface import SlabGenerator
-    from pymatgen.io.ase import AseAtomsAdaptor
 
     sg = SlabGenerator(
         bulk,
@@ -100,10 +110,14 @@ def build_slab(
 
     # Prefer symmetric slabs, then pick the first (usually most stoichiometric)
     symmetric = [s for s in slabs if s.is_symmetric()]
-    slab = symmetric[0] if symmetric else slabs[0]
+    pmg_slab = symmetric[0] if symmetric else slabs[0]
 
-    atoms = AseAtomsAdaptor().get_atoms(slab)
-    atoms.set_pbc([True, True, True])
+    atoms = ase.Atoms(
+        positions=pmg_slab.cart_coords,
+        numbers=pmg_slab.atomic_numbers,
+        cell=pmg_slab.lattice.matrix,
+        pbc=True,
+    )
 
     if supercell != (1, 1, 1):
         atoms = atoms.repeat(supercell)
@@ -185,7 +199,7 @@ def find_cus_sites(
     cus_positions = []
     for i in metal_idx:
         if atoms.positions[i, 2] < z_mid:
-            continue  # skip bottom-half metals
+            continue  # skip bottom side of catalyst slab
         indices, _ = nl.get_neighbors(i)
         n_oxygen = sum(1 for j in indices if atoms.numbers[j] == 8)
         if n_oxygen < 6:
@@ -225,7 +239,6 @@ def find_bridge_site(
     if len(cus) < 2:
         raise ValueError("Need at least 2 cus sites for a bridge position.")
 
-    # Find the two closest cus sites
     from itertools import combinations
 
     best_pair, best_dist = None, np.inf
@@ -262,7 +275,7 @@ def find_central_site(positions: np.ndarray, cell: np.ndarray) -> np.ndarray:
 # ---------------------------------------------------------------------------
 
 
-def build_adsorbate(species: str) -> ase.Atoms:
+def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
     """Build a small adsorbate molecule.
 
     All adsorbates have the bonding atom (O) at the origin so that
@@ -274,59 +287,84 @@ def build_adsorbate(species: str) -> ase.Atoms:
       * O-O  = 1.33 A  (OOH peroxo intermediate)
       * O-O-H = 110 deg
 
+    References
+    ----------
+    H2O geometry: Benedict, Gailer & Plyler, J. Chem. Phys. 24, 1139 (1956).
+    OH bond length: Huber & Herzberg, "Molecular Spectra and Molecular
+    Structure IV: Constants of Diatomic Molecules" (1979).
+    OOH geometry: Binkley & Melius, J. Chem. Phys. 84, 2064 (1986).
+
     Parameters
     ----------
-    species : str
-        One of ``"O"``, ``"OH"``, ``"H2O"``, ``"OOH"``.
+    species : {"O", "OH", "H2O", "OOH"}
 
     Returns
     -------
     ase.Atoms
     """
-    if species == "O":
-        return ase.Atoms("O", positions=[[0.0, 0.0, 0.0]])
+    match species:
+        case "O":
+            return ase.Atoms("O", positions=[[0.0, 0.0, 0.0]])
 
-    if species == "OH":
-        d_oh = 0.970
-        return ase.Atoms(
-            "OH",
-            positions=[
-                [0.0, 0.0, 0.0],
-                [0.0, 0.0, d_oh],
-            ],
-        )
+        case "OH":
+            d_oh = 0.970
+            return ase.Atoms(
+                "OH",
+                positions=[
+                    [0.0, 0.0, 0.0],
+                    [0.0, 0.0, d_oh],
+                ],
+            )
 
-    if species == "H2O":
-        d_oh = 0.957
-        angle = np.radians(104.5)
-        return ase.Atoms(
-            "OH2",
-            positions=[
-                [0.0, 0.0, 0.0],
-                [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
-                [-d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
-            ],
-        )
+        case "H2O":
+            d_oh = 0.957
+            angle = np.radians(104.5)
+            return ase.Atoms(
+                "OH2",
+                positions=[
+                    [0.0, 0.0, 0.0],
+                    [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
+                    [-d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
+                ],
+            )
 
-    if species == "OOH":
-        d_oo = 1.33
-        d_oh = 0.970
-        ooh_angle = np.radians(110.0)
-        return ase.Atoms(
-            "O2H",
-            positions=[
-                [0.0, 0.0, 0.0],  # O bonding to metal
-                [0.0, 0.0, d_oo],  # O in peroxo bond
-                [0.0, d_oh * np.sin(ooh_angle), d_oo + d_oh * np.cos(ooh_angle)],
-            ],
-        )
+        case "OOH":
+            d_oo = 1.33
+            d_oh = 0.970
+            ooh_angle = np.radians(110.0)
+            return ase.Atoms(
+                "O2H",
+                positions=[
+                    [0.0, 0.0, 0.0],  # O bonding to metal
+                    [0.0, 0.0, d_oo],  # O in peroxo bond
+                    [
+                        0.0,
+                        d_oh * np.sin(ooh_angle),
+                        d_oo + d_oh * np.cos(ooh_angle),
+                    ],
+                ],
+            )
 
-    raise ValueError(f"Unknown adsorbate species: {species!r}")
+        case _:
+            raise ValueError(f"Unknown adsorbate species: {species!r}")
 
 
 # ---------------------------------------------------------------------------
 # Adsorbate placement
 # ---------------------------------------------------------------------------
+
+
+def _surface_normal(slab: ase.Atoms) -> np.ndarray:
+    """Compute the outward surface normal from the slab cell vectors.
+
+    The normal is defined as the cross product of the first two cell
+    vectors (a x b), normalised to unit length.  For standard slab cells
+    this points along the vacuum direction.
+    """
+    a_vec = slab.cell[0]
+    b_vec = slab.cell[1]
+    normal = np.cross(a_vec, b_vec)
+    return normal / np.linalg.norm(normal)
 
 
 def place_adsorbate(
@@ -339,15 +377,25 @@ def place_adsorbate(
 ) -> tuple[ase.Atoms, list[bool]]:
     """Place an adsorbate above a surface site.
 
-    The *height* parameter (default 2.0 A) approximates the equilibrium
-    metal-oxygen bond distance for transition-metal oxides (Ir-O ~ 2.0 A,
-    Ru-O ~ 1.9-2.0 A, Ti-O ~ 1.95 A), giving the optimiser a reasonable
-    starting geometry without biasing the final relaxed structure.
+    The translation direction is computed from the slab cell vectors as
+    the surface normal (a x b), so it works for both orthogonal and
+    non-orthogonal cells.
 
-    The *tilt_angle* (default 0 deg = upright) rotates the adsorbate about
-    the x-axis before placement.  A 30 deg tilt brings one hydrogen of
-    H2O or OH toward a neighbouring bridging oxygen, probing whether
-    hydrogen bonding with the surface stabilises the adsorption.
+    The *height* parameter (default 3.5 A) is above the equilibrium
+    metal-oxygen bond distance for transition-metal oxides (Ir-O ~2.0 A,
+    Ru-O ~1.9-2.0 A, Ti-O ~1.95 A), giving the optimiser room to find
+    the minimum without starting inside the surface.
+
+    References
+    ----------
+    M-O bond distances: Bolzan et al., Acta Cryst. B 53, 373 (1997);
+    Shannon, Acta Cryst. A 32, 751 (1976).
+
+    The *tilt_angle* (default 0 deg = upright) rotates the adsorbate
+    about the in-plane a-vector direction before placement.  A 30 deg
+    tilt brings one hydrogen of H2O or OH toward a neighbouring bridging
+    oxygen, probing whether hydrogen bonding with the surface stabilises
+    the adsorption.
 
     Parameters
     ----------
@@ -358,9 +406,9 @@ def place_adsorbate(
     site : np.ndarray shape (3,)
         Adsorption-site position on the surface.
     height : float
-        Distance above the site in Angstrom (along z).
+        Distance above the site along the surface normal (Angstrom).
     tilt_angle : float
-        Rotation angle in degrees about the x-axis.
+        Rotation angle in degrees about the in-plane a-vector.
     frozen_fraction : float
         Fraction of slab height to freeze (passed to ``make_active_mask``).
 
@@ -369,14 +417,17 @@ def place_adsorbate(
     (combined, active_mask) where *combined* is an ase.Atoms and
     *active_mask* is a list[bool] suitable for ``AtomicData.active_mask``.
     """
+    normal_hat = _surface_normal(slab)
+    a_hat = slab.cell[0] / np.linalg.norm(slab.cell[0])
+
     ads = adsorbate.copy()
 
-    # Tilt adsorbate
+    # Tilt adsorbate about the in-plane a-vector
     if abs(tilt_angle) > 1e-6:
-        ads.rotate(tilt_angle, "x", center=(0.0, 0.0, 0.0))
+        ads.rotate(tilt_angle, a_hat, center=(0.0, 0.0, 0.0))
 
-    # Translate to site + height above surface
-    ads.translate(site + np.array([0.0, 0.0, height]))
+    # Translate along the surface normal to the site + height
+    ads.translate(site + height * normal_hat)
 
     # Combine slab + adsorbate
     combined = slab.copy()
@@ -424,8 +475,25 @@ def classify_relaxation(
 
     Returns
     -------
-    dict with keys: converged, max_force, energy, adsorbate_height,
-    nearest_metal_dist, site_drift, status.
+    dict with the following keys:
+
+    converged : bool
+        Whether the BGR optimiser reported convergence.
+    max_force : float
+        Maximum force magnitude across all atoms (eV/A).
+    energy : float
+        Total potential energy of the relaxed structure (eV).
+    adsorbate_height : float
+        Height of the adsorbate centre-of-mass above the topmost
+        slab atom (A).
+    nearest_metal_dist : float
+        Distance from the bonding atom to the nearest metal (A).
+    site_drift : float
+        Lateral (xy) displacement of the adsorbate from its initial
+        adsorption site (A).
+    status : str
+        One of ``"converged"``, ``"moved_to_new_site"``,
+        ``"dissociated"``, ``"desorbed"``, or ``"needs_review"``.
     """
     from .models import atomic_data_to_ase
 
