@@ -13,6 +13,7 @@ CACHE_DIR_MATERIALS = os.path.join(PLAYBOOK_DIR, "cached_responses", "materials"
 CACHE_DIR_CONFORMER = os.path.join(
     PLAYBOOK_DIR, "cached_responses", "conformer-stability"
 )
+CACHE_DIR_OER = os.path.join(PLAYBOOK_DIR, "cached_responses", "oer-catalyst-screening")
 OUTPUT_DIR = os.path.join(PLAYBOOK_DIR, "outputs")
 SERVER_URL = "http://localhost:8000"
 BGR_SERVER_URL = "http://localhost:8890"
@@ -98,3 +99,8 @@ def nacl_bgr_atom(nacl_ase):
     from helpers.models import ase_to_atomic_data
 
     return ase_to_atomic_data(nacl_ase, _id="nacl_supercell")
+
+
+@pytest.fixture
+def oer_cache_dir():
+    return CACHE_DIR_OER

@@ -7,6 +7,7 @@ from .constants import (
     AMU_TO_G,
     ANGSTROM3_TO_CM3,
     KCAL_MOL_TO_EV,
+    EV_PER_OER_STEP,
 )
 from .models import (
     MDAtomicData,
@@ -59,8 +60,22 @@ from .conformers import (
 )
 from .visualization import (
     render_structure_ovito,
+    create_interactive_view,
     display_inline,
     structure_summary_table,
+)
+from .surfaces import (
+    build_rutile_bulk,
+    build_slab,
+    make_active_mask,
+    find_cus_sites,
+    find_bridge_site,
+    find_central_site,
+    build_adsorbate,
+    place_adsorbate,
+    classify_relaxation,
+    compute_adsorption_energy,
+    compute_surface_displacement,
 )
 
 __all__ = [
@@ -79,6 +94,7 @@ __all__ = [
     "AMU_TO_G",
     "ANGSTROM3_TO_CM3",
     "KCAL_MOL_TO_EV",
+    "EV_PER_OER_STEP",
     "read_structure",
     "ase_to_atomic_data",
     "atomic_data_to_ase",
@@ -114,6 +130,18 @@ __all__ = [
     "filter_by_energy",
     "deduplicate_conformers",
     "render_structure_ovito",
+    "create_interactive_view",
     "display_inline",
     "structure_summary_table",
+    "build_rutile_bulk",
+    "build_slab",
+    "make_active_mask",
+    "find_central_site",
+    "find_cus_sites",
+    "find_bridge_site",
+    "build_adsorbate",
+    "place_adsorbate",
+    "classify_relaxation",
+    "compute_adsorption_energy",
+    "compute_surface_displacement",
 ]
