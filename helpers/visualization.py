@@ -9,12 +9,36 @@ import pandas as pd
 from .constants import AMU_TO_G, ANGSTROM3_TO_CM3
 
 
+def _clean_atoms_for_ovito(atoms: ase.Atoms) -> ase.Atoms:
+    """Strip arrays with dtypes unsupported by OVITO (e.g. Unicode strings
+    added by pymatgen's SlabGenerator) to avoid conversion errors."""
+    _supported = {"int8", "int16", "int32", "int64", "float32", "float64"}
+    clean = atoms.copy()
+    for key in list(clean.arrays):
+        if key in ("numbers", "positions"):
+            continue
+        if clean.arrays[key].dtype.name not in _supported:
+            del clean.arrays[key]
+    return clean
+
+
 def render_structure_ovito(
     atoms: ase.Atoms,
     output_path: str = "structure.png",
     size: tuple[int, int] = (800, 600),
+    background: tuple[float, float, float] = (1.0, 1.0, 1.0),
 ) -> str:
     """Render an ASE Atoms object to a PNG via OVITO's TachyonRenderer.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+    output_path : str
+    size : tuple[int, int]
+    background : tuple of 3 floats in [0, 1]
+        RGB background colour.  Use (1, 1, 1) for white (default) or
+        (0.15, 0.15, 0.15) for dark charcoal (better for light-coloured
+        atoms such as hydrogen).
 
     Returns the path to the rendered image.
     """
@@ -22,7 +46,9 @@ def render_structure_ovito(
     from ovito.vis import TachyonRenderer, Viewport
     from ovito.pipeline import StaticSource, Pipeline
 
-    data = ase_to_ovito(atoms)
+    clean = _clean_atoms_for_ovito(atoms)
+
+    data = ase_to_ovito(clean)
     pipeline = Pipeline(source=StaticSource(data=data))
     pipeline.add_to_scene()
 
@@ -35,11 +61,58 @@ def render_structure_ovito(
         filename=output_path,
         size=size,
         renderer=renderer,
-        background=(1.0, 1.0, 1.0),
+        background=background,
     )
 
     pipeline.remove_from_scene()
     return output_path
+
+
+def create_interactive_view(
+    atoms: ase.Atoms,
+    width: str = "600px",
+    height: str = "400px",
+):
+    """Create an interactive 3-D OVITO widget for Jupyter notebooks.
+
+    Falls back to None if ipywidgets or OVITO GUI is unavailable.
+
+    Parameters
+    ----------
+    atoms : ase.Atoms
+    width, height : str
+        CSS size strings for the widget layout.
+
+    Returns
+    -------
+    ipywidgets.DOMWidget or None
+    """
+    try:
+        import ipywidgets
+        from ovito.io.ase import ase_to_ovito
+        from ovito.vis import Viewport
+        from ovito.pipeline import StaticSource, Pipeline
+        from ovito.gui import create_ipywidget
+    except ImportError:
+        return None
+
+    from ovito import scene
+
+    clean = _clean_atoms_for_ovito(atoms)
+    data = ase_to_ovito(clean)
+
+    # Clear previous pipelines so widgets don't overlap
+    while scene.pipelines:
+        scene.pipelines[-1].remove_from_scene()
+
+    pipeline = Pipeline(source=StaticSource(data=data))
+    pipeline.add_to_scene()
+
+    vp = Viewport(type=Viewport.Type.Perspective)
+    vp.zoom_all()
+
+    widget = create_ipywidget(vp, layout=ipywidgets.Layout(width=width, height=height))
+    return widget
 
 
 def display_inline(image_path: str):
