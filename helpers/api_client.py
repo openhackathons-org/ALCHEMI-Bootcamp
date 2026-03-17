@@ -60,7 +60,7 @@ def run_bgr(
     server_url: str,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,  # 5 minutes
+    timeout: int = 1800,  # 30 minutes
 ) -> BGRReply:
     """Submit a BGR request and return the parsed reply."""
     url = f"{server_url}/infer"
@@ -108,7 +108,7 @@ def run_bgr_or_load_cache(
     endpoint_live: bool,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,  # 5 minutes
+    timeout: int = 1800,  # 30 minutes
 ) -> BGRReply:
     """Run BGR if cache is missing and endpoint is live; otherwise load cache."""
     if cache_exists(cache_dir, label):
@@ -205,7 +205,7 @@ async def async_run_bgr(
     session: aiohttp.ClientSession,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,
+    timeout: int = 1800,
 ) -> BGRReply:
     """Async equivalent of ``run_bgr`` using an aiohttp session."""
     import aiohttp as _aiohttp
@@ -232,7 +232,7 @@ async def async_run_bgr_or_load_cache(
     endpoint_live: bool,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,
+    timeout: int = 1800,
 ) -> BGRReply:
     """Async equivalent of ``run_bgr_or_load_cache``."""
     if cache_exists(cache_dir, label):
