@@ -415,13 +415,16 @@ def place_adsorbate(
         Distance above the site along the surface normal (Angstrom).
     tilt_angle : float
         Rotation angle in degrees about the in-plane a-vector.
-    frozen_fraction : float
+    frozen_fraction : float or None
         Fraction of slab height to freeze (passed to ``make_active_mask``).
+        Set to ``None`` to let all atoms relax — recommended for large
+        supercells where the BGR NIM's convergence criterion includes
+        forces on frozen atoms.
 
     Returns
     -------
     (combined, active_mask) where *combined* is an ase.Atoms and
-    *active_mask* is a list[bool] suitable for ``AtomicData.active_mask``.
+    *active_mask* is a list[bool] or None.
     """
     normal_hat = _surface_normal(slab)
     a_hat = slab.cell[0] / np.linalg.norm(slab.cell[0])
@@ -439,9 +442,12 @@ def place_adsorbate(
     combined = slab.copy()
     combined += ads
 
-    # Build active mask: slab frozen/active + adsorbate always active
-    slab_mask = make_active_mask(slab, bottom_fraction=frozen_fraction)
-    combined_mask = slab_mask + [True] * len(ads)
+    # Build active mask if requested; None means all atoms relax
+    if frozen_fraction is not None:
+        slab_mask = make_active_mask(slab, bottom_fraction=frozen_fraction)
+        combined_mask = slab_mask + [True] * len(ads)
+    else:
+        combined_mask = None
 
     return combined, combined_mask
 
@@ -485,6 +491,10 @@ def classify_relaxation(
 
     converged : bool
         Whether the BGR optimiser reported convergence.
+    hit_step_limit : bool
+        Whether the run consumed all available steps (2000 by default).
+    n_steps : int
+        Number of optimisation steps performed.
     max_force : float
         Maximum force magnitude across all atoms (eV/A).
     energy : float
@@ -500,6 +510,11 @@ def classify_relaxation(
     status : str
         One of ``"converged"``, ``"moved_to_new_site"``,
         ``"dissociated"``, ``"desorbed"``, or ``"needs_review"``.
+    qc_label : str
+        Quality-control label: ``"reliable"`` (converged, geometry
+        sensible), ``"provisional"`` (near target or geometry sensible
+        but not formally converged), or ``"failed"`` (desorbed,
+        dissociated, or far from convergence).
     """
     from .models import atomic_data_to_ase
 
@@ -552,6 +567,9 @@ def classify_relaxation(
 
     # Classification
     converged = bool(relaxed_result.converged)
+    n_steps = int(relaxed_result.num_optimization_steps)
+    hit_step_limit = n_steps >= 2000
+
     if adsorbate_height > height_threshold:
         status = "desorbed"
     elif dissociated:
@@ -563,14 +581,29 @@ def classify_relaxation(
     else:
         status = "needs_review"
 
+    # Quality-control label (see user guidelines)
+    if status in ("desorbed", "dissociated"):
+        qc_label = "failed"
+    elif converged and status == "converged":
+        qc_label = "reliable"
+    elif max_force < 0.05 and status in ("converged", "needs_review"):
+        qc_label = "reliable"
+    elif max_force < 0.2 or status == "moved_to_new_site":
+        qc_label = "provisional"
+    else:
+        qc_label = "failed"
+
     return {
         "converged": converged,
+        "hit_step_limit": hit_step_limit,
+        "n_steps": n_steps,
         "max_force": max_force,
         "energy": float(relaxed_result.energy),
         "adsorbate_height": adsorbate_height,
         "nearest_metal_dist": nearest_metal_dist,
         "site_drift": site_drift,
         "status": status,
+        "qc_label": qc_label,
     }
 
 
