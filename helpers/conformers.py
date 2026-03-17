@@ -16,7 +16,9 @@ def compute_n_conformers(mol: Chem.Mol) -> int:
     return min(1000, max(200, 3**n_rot))
 
 
-def generate_conformers(mol: Chem.Mol, n_confs: int, seed: int = 42, rmsd_threshold=0.5) -> Chem.Mol:
+def generate_conformers(
+    mol: Chem.Mol, n_confs: int, seed: int = 42, rmsd_threshold=0.5
+) -> Chem.Mol:
     """Generate 3-D conformers using ETKDGv3 + MMFF optimisation.
 
     Returns a copy of *mol* with embedded conformers.  Near-identical initial

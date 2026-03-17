@@ -1,0 +1,63 @@
+{
+  "atoms": [
+    {
+      "coord": [
+        15.0,
+        15.0,
+        14.50574,
+        15.0,
+        15.0,
+        15.49434
+      ],
+      "numbers": [
+        8,
+        1
+      ],
+      "charge": 0,
+      "mult": 1,
+      "cell": [
+        30.0,
+        0.0,
+        0.0,
+        0.0,
+        30.0,
+        0.0,
+        0.0,
+        0.0,
+        30.0
+      ],
+      "pbc": [
+        true,
+        true,
+        true
+      ],
+      "structure_id": "gas_oh",
+      "active_mask": null,
+      "converged": true,
+      "num_optimization_steps": 51,
+      "energy": -7.621255,
+      "forces": [
+        0.0,
+        0.0,
+        0.002661,
+        0.0,
+        0.0,
+        -0.002661
+      ],
+      "stress": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "charges": null
+    }
+  ],
+  "info": "",
+  "status": "Success"
+}
