@@ -377,7 +377,7 @@ def place_adsorbate(
     slab: ase.Atoms,
     adsorbate: ase.Atoms,
     site: np.ndarray,
-    height: float = 3.5,
+    height: float = 2.0,
     tilt_angle: float = 0.0,
     frozen_fraction: float = 0.5,
 ) -> tuple[ase.Atoms, list[bool]]:
