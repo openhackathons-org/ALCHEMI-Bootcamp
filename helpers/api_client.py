@@ -160,7 +160,8 @@ async def async_run_md(
 
     url = f"{server_url}/infer"
     payload = MDRequest(atoms=mdatoms, config=mdconfig).model_dump()
-    client_timeout = _aiohttp.ClientTimeout(connect=10, total=timeout)
+    # connect timeout must accommodate queueing behind TCPConnector limit
+    client_timeout = _aiohttp.ClientTimeout(connect=timeout, total=timeout)
     async with session.post(url, json=payload, timeout=client_timeout) as resp:
         resp.raise_for_status()
         data = await resp.json()
@@ -211,7 +212,8 @@ async def async_run_bgr(
 
     url = f"{server_url}/infer"
     payload = BGRRequest(atoms=atoms_list, cellopt=cellopt, opttol=opttol).model_dump()
-    client_timeout = _aiohttp.ClientTimeout(connect=10, total=timeout)
+    # connect timeout must accommodate queueing behind TCPConnector limit
+    client_timeout = _aiohttp.ClientTimeout(connect=timeout, total=timeout)
     async with session.post(url, json=payload, timeout=client_timeout) as resp:
         resp.raise_for_status()
         data = await resp.json()
