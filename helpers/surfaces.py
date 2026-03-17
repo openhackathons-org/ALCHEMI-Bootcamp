@@ -112,6 +112,12 @@ def build_slab(
     symmetric = [s for s in slabs if s.is_symmetric()]
     pmg_slab = symmetric[0] if symmetric else slabs[0]
 
+    # Orthogonalise the c-axis so it is perpendicular to the surface.
+    # Without this, non-orthogonal cells (common for (110) slabs) cause
+    # the surface normal to be tilted, and adsorbates placed "above" the
+    # surface in z end up buried inside the slab.
+    pmg_slab = pmg_slab.get_orthogonal_c_slab()
+
     atoms = ase.Atoms(
         positions=pmg_slab.cart_coords,
         numbers=pmg_slab.atomic_numbers,

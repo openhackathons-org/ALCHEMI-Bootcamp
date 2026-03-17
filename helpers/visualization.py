@@ -72,6 +72,7 @@ def create_interactive_view(
     atoms: ase.Atoms,
     width: str = "600px",
     height: str = "400px",
+    particle_colors=None,
 ):
     """Create an interactive 3-D OVITO widget for Jupyter notebooks.
 
@@ -82,11 +83,16 @@ def create_interactive_view(
     atoms : ase.Atoms
     width, height : str
         CSS size strings for the widget layout.
+    particle_colors : np.ndarray shape (N, 3) or None
+        Per-particle RGB colours in [0, 1].  When provided, these
+        override OVITO's default element colouring.
 
     Returns
     -------
     ipywidgets.DOMWidget or None
     """
+    import numpy as np
+
     try:
         import ipywidgets
         from ovito.io.ase import ase_to_ovito
@@ -100,6 +106,11 @@ def create_interactive_view(
 
     clean = _clean_atoms_for_ovito(atoms)
     data = ase_to_ovito(clean)
+
+    # Apply per-particle colours if provided
+    if particle_colors is not None:
+        colors = np.asarray(particle_colors, dtype=np.float64)
+        data.particles_.create_property("Color", data=colors)
 
     # Clear previous pipelines so widgets don't overlap
     while scene.pipelines:
