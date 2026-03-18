@@ -365,11 +365,11 @@ class TestActiveMaskPropagation:
         from helpers.models import ase_to_atomic_data
 
         mask = make_active_mask(iro2_slab)
-        ad = ase_to_atomic_data(iro2_slab, _id="test", active_mask=mask)
+        ad = ase_to_atomic_data(iro2_slab, structure_id="test", active_mask=mask)
         assert ad.active_mask == mask
 
     def test_active_mask_none_by_default(self, iro2_slab):
         from helpers.models import ase_to_atomic_data
 
-        ad = ase_to_atomic_data(iro2_slab, _id="test")
+        ad = ase_to_atomic_data(iro2_slab, structure_id="test")
         assert ad.active_mask is None
