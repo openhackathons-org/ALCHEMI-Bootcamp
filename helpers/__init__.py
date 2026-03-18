@@ -61,6 +61,7 @@ from .conformers import (
 from .visualization import (
     render_structure_ovito,
     create_interactive_view,
+    display_widgets_row,
     display_inline,
     structure_summary_table,
 )
@@ -131,6 +132,7 @@ __all__ = [
     "deduplicate_conformers",
     "render_structure_ovito",
     "create_interactive_view",
+    "display_widgets_row",
     "display_inline",
     "structure_summary_table",
     "build_rutile_bulk",
