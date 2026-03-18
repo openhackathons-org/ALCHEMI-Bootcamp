@@ -353,10 +353,10 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
                 positions=[
                     [0.0, 0.0, 0.0],  # O bonding to metal
                     [0.0, 0.0, d_oo],  # O in peroxo bond
-                    [
+                    [  # H placed at 110° O-O-H angle at the peroxo O
                         0.0,
                         d_oh * np.sin(ooh_angle),
-                        d_oo + d_oh * np.cos(ooh_angle),
+                        d_oo - d_oh * np.cos(ooh_angle),
                     ],
                 ],
             )
