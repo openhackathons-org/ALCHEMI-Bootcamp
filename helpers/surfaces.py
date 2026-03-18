@@ -293,6 +293,12 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
       * O-O  = 1.33 A  (OOH peroxo intermediate)
       * O-O-H = 110 deg
 
+    As gas-phase OER intermediates these are radical species.  The
+    correct spin multiplicity is stored in ``atoms.info["mult"]`` so
+    that ``ase_to_atomic_data`` propagates it to the BGR request.
+    MACE-MP-0 does not use this field, but it is set for scientific
+    documentation and future compatibility with DFT-based models.
+
     References
     ----------
     H2O geometry: Benedict, Gailer & Plyler, J. Chem. Phys. 24, 1139 (1956).
@@ -310,17 +316,21 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
     """
     match species:
         case "O":
-            return ase.Atoms("O", positions=[[0.0, 0.0, 0.0]])
+            atoms = ase.Atoms("O", positions=[[0.0, 0.0, 0.0]])
+            atoms.info["mult"] = 3  # triplet ground state
+            return atoms
 
         case "OH":
             d_oh = 0.970
-            return ase.Atoms(
+            atoms = ase.Atoms(
                 "OH",
                 positions=[
                     [0.0, 0.0, 0.0],
                     [0.0, 0.0, d_oh],
                 ],
             )
+            atoms.info["mult"] = 2  # doublet radical
+            return atoms
 
         case "H2O":
             d_oh = 0.957
@@ -332,13 +342,13 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
                     [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                     [-d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                 ],
-            )
+            )  # singlet (mult=1 default)
 
         case "OOH":
             d_oo = 1.33
             d_oh = 0.970
             ooh_angle = np.radians(110.0)
-            return ase.Atoms(
+            atoms = ase.Atoms(
                 "O2H",
                 positions=[
                     [0.0, 0.0, 0.0],  # O bonding to metal
@@ -350,6 +360,8 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
                     ],
                 ],
             )
+            atoms.info["mult"] = 2  # doublet radical
+            return atoms
 
         case _:
             raise ValueError(f"Unknown adsorbate species: {species!r}")
