@@ -135,7 +135,7 @@ class TestASEConversion:
         assert len(md_data.cell) == 9
 
     def test_ase_to_atomic_data(self, nacl_ase):
-        ad = ase_to_atomic_data(nacl_ase, _id="test")
+        ad = ase_to_atomic_data(nacl_ase, structure_id="test")
         assert ad.structure_id == "test"
         assert len(ad.numbers) == 64
 

@@ -72,6 +72,8 @@ def create_interactive_view(
     atoms: ase.Atoms,
     width: str = "600px",
     height: str = "400px",
+    particle_colors=None,
+    show_cell: bool = True,
 ):
     """Create an interactive 3-D OVITO widget for Jupyter notebooks.
 
@@ -82,11 +84,19 @@ def create_interactive_view(
     atoms : ase.Atoms
     width, height : str
         CSS size strings for the widget layout.
+    particle_colors : np.ndarray shape (N, 3) or None
+        Per-particle RGB colours in [0, 1].  When provided, these
+        override OVITO's default element colouring.
+    show_cell : bool
+        If False, hide the simulation-cell wireframe.  Useful for slab
+        structures where the cell box (including vacuum) is misleading.
 
     Returns
     -------
     ipywidgets.DOMWidget or None
     """
+    import numpy as np
+
     try:
         import ipywidgets
         from ovito.io.ase import ase_to_ovito
@@ -101,6 +111,15 @@ def create_interactive_view(
     clean = _clean_atoms_for_ovito(atoms)
     data = ase_to_ovito(clean)
 
+    # Apply per-particle colours if provided
+    if particle_colors is not None:
+        colors = np.asarray(particle_colors, dtype=np.float64)
+        data.particles_.create_property("Color", data=colors)
+
+    # Optionally hide the simulation cell wireframe
+    if not show_cell and data.cell_ is not None:
+        data.cell_.vis.enabled = False
+
     # Clear previous pipelines so widgets don't overlap
     while scene.pipelines:
         scene.pipelines[-1].remove_from_scene()
@@ -113,6 +132,54 @@ def create_interactive_view(
 
     widget = create_ipywidget(vp, layout=ipywidgets.Layout(width=width, height=height))
     return widget
+
+
+def display_widgets_row(
+    items: list[tuple[str, ase.Atoms]],
+    width: str = "300px",
+    height: str = "300px",
+    particle_colors_list=None,
+    show_cell: bool = True,
+):
+    """Display a horizontal row of labelled interactive OVITO widgets.
+
+    Falls back to static PNG rendering if interactive widgets are
+    unavailable.
+
+    Parameters
+    ----------
+    items : list of (label, atoms) tuples
+    width, height : str
+        CSS size for each widget.
+    particle_colors_list : list of np.ndarray or None
+        Per-item particle colours (same length as *items*).
+    show_cell : bool
+        If False, hide the simulation-cell wireframe.
+    """
+    try:
+        from ipywidgets import HBox, VBox, Layout
+        from ipywidgets import HTML as HTMLWidget
+        from IPython.display import display
+    except ImportError:
+        for label, atoms in items:
+            print(f"{label}: {len(atoms)} atoms")
+        return
+
+    widgets = []
+    for idx, (label, atoms) in enumerate(items):
+        pc = particle_colors_list[idx] if particle_colors_list else None
+        w = create_interactive_view(
+            atoms, width=width, height=height,
+            particle_colors=pc, show_cell=show_cell,
+        )
+        if w is not None:
+            widgets.append(VBox([HTMLWidget(f"<b>{label}</b>"), w]))
+
+    if widgets:
+        display(HBox(widgets, layout=Layout(justify_content="center", gap="15px")))
+    else:
+        for label, atoms in items:
+            print(f"{label}: {len(atoms)} atoms (widget unavailable)")
 
 
 def display_inline(image_path: str):
