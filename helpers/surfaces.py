@@ -8,6 +8,8 @@ import ase
 import numpy as np
 from ase.neighborlist import NeighborList, natural_cutoffs
 
+from helpers.models import OptimizationResult
+
 if TYPE_CHECKING:
     import pymatgen.core
 
@@ -276,6 +278,18 @@ def find_central_site(positions: np.ndarray, cell: np.ndarray) -> np.ndarray:
     return positions[np.argmin(dists)].copy()
 
 
+def find_site(slab: ase.Atoms, mz: int, site: str) -> np.ndarray:
+    match site:
+        case "cus":
+            return find_central_site(find_cus_sites(slab, mz), slab.cell.array)
+
+        case "bridge":
+            return find_bridge_site(slab, mz)
+
+        case _:
+            raise ValueError(f"Unknown site: {site!r}")
+
+
 # ---------------------------------------------------------------------------
 # Adsorbate construction
 # ---------------------------------------------------------------------------
@@ -353,10 +367,10 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
                 positions=[
                     [0.0, 0.0, 0.0],  # O bonding to metal
                     [0.0, 0.0, d_oo],  # O in peroxo bond
-                    [  # H placed at 110° O-O-H angle at the peroxo O
+                    [
                         0.0,
                         d_oh * np.sin(ooh_angle),
-                        d_oo - d_oh * np.cos(ooh_angle),
+                        d_oo + d_oh * np.cos(ooh_angle),
                     ],
                 ],
             )
@@ -391,8 +405,8 @@ def place_adsorbate(
     site: np.ndarray,
     height: float = 2.0,
     tilt_angle: float = 0.0,
-    frozen_fraction: float = 0.5,
-) -> tuple[ase.Atoms, list[bool]]:
+    frozen_fraction: float | None = 0.5,
+) -> tuple[ase.Atoms, list[bool] | None]:
     """Place an adsorbate above a surface site.
 
     The translation direction is computed from the slab cell vectors as
@@ -429,30 +443,25 @@ def place_adsorbate(
         Rotation angle in degrees about the in-plane a-vector.
     frozen_fraction : float or None
         Fraction of slab height to freeze (passed to ``make_active_mask``).
-        Set to ``None`` to let all atoms relax — recommended for large
-        supercells where the BGR NIM's convergence criterion includes
-        forces on frozen atoms.
+        Set to ``None`` to let all atoms relax
 
     Returns
     -------
     (combined, active_mask) where *combined* is an ase.Atoms and
     *active_mask* is a list[bool] or None.
     """
-    normal_hat = _surface_normal(slab)
-    a_hat = slab.cell[0] / np.linalg.norm(slab.cell[0])
-
     ads = adsorbate.copy()
-
     # Tilt adsorbate about the in-plane a-vector
+    a_hat = slab.cell.array[0] / np.linalg.norm(slab.cell.array[0])
     if abs(tilt_angle) > 1e-6:
         ads.rotate(tilt_angle, a_hat, center=(0.0, 0.0, 0.0))
 
     # Translate along the surface normal to the site + height
+    normal_hat = _surface_normal(slab)
     ads.translate(site + height * normal_hat)
 
     # Combine slab + adsorbate
-    combined = slab.copy()
-    combined += ads
+    combined = slab.copy() + ads
 
     # Build active mask if requested; None means all atoms relax
     if frozen_fraction is not None:
@@ -471,7 +480,7 @@ def place_adsorbate(
 
 def classify_relaxation(
     initial: ase.Atoms,
-    relaxed_result,
+    relaxed_result: OptimizationResult,
     slab_n_atoms: int,
     site_initial: np.ndarray,
     metal_z: int,
@@ -503,8 +512,6 @@ def classify_relaxation(
 
     converged : bool
         Whether the BGR optimiser reported convergence.
-    hit_step_limit : bool
-        Whether the run consumed all available steps (2000 by default).
     n_steps : int
         Number of optimisation steps performed.
     max_force : float
@@ -544,7 +551,7 @@ def classify_relaxation(
     slab_z_max = relaxed.positions[:slab_n_atoms, 2].max()
     adsorbate_height = float(ads_centre[2] - slab_z_max)
 
-    # Nearest metal distance
+    # Nearest metal distance from bonding O
     metal_idx = [i for i in range(slab_n_atoms) if relaxed.numbers[i] == metal_z]
     if metal_idx:
         metal_pos = relaxed.positions[metal_idx]
@@ -554,7 +561,7 @@ def classify_relaxation(
         nearest_metal_dist = np.nan
 
     # Lateral drift from initial site
-    site_drift = float(np.linalg.norm(ads_centre[:2] - site_initial[:2]))
+    site_drift = float(np.linalg.norm(ads_pos[0][:2] - site_initial[:2]))
 
     # Initial adsorbate inter-atom distances
     init_ads_pos = initial.positions[slab_n_atoms:]
@@ -579,8 +586,6 @@ def classify_relaxation(
 
     # Classification
     converged = bool(relaxed_result.converged)
-    n_steps = int(relaxed_result.num_optimization_steps)
-    hit_step_limit = n_steps >= 2000
 
     if adsorbate_height > height_threshold:
         status = "desorbed"
@@ -607,10 +612,9 @@ def classify_relaxation(
 
     return {
         "converged": converged,
-        "hit_step_limit": hit_step_limit,
-        "n_steps": n_steps,
-        "max_force": max_force,
+        "n_steps": int(relaxed_result.num_optimization_steps),
         "energy": float(relaxed_result.energy),
+        "max_force": max_force,
         "adsorbate_height": adsorbate_height,
         "nearest_metal_dist": nearest_metal_dist,
         "site_drift": site_drift,

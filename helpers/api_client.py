@@ -5,12 +5,9 @@ from __future__ import annotations
 import asyncio
 import math
 import warnings
-from typing import TYPE_CHECKING
 
+import aiohttp
 import requests
-
-if TYPE_CHECKING:
-    import aiohttp
 
 from .cache import cache_exists, load_cache, save_cache
 from .models import (
@@ -208,12 +205,11 @@ async def async_run_bgr(
     timeout: int = 1800,
 ) -> BGRReply:
     """Async equivalent of ``run_bgr`` using an aiohttp session."""
-    import aiohttp as _aiohttp
 
     url = f"{server_url}/infer"
     payload = BGRRequest(atoms=atoms_list, cellopt=cellopt, opttol=opttol).model_dump()
     # connect timeout must accommodate queueing behind TCPConnector limit
-    client_timeout = _aiohttp.ClientTimeout(connect=timeout, total=timeout)
+    client_timeout = aiohttp.ClientTimeout(connect=timeout, total=timeout)
     async with session.post(url, json=payload, timeout=client_timeout) as resp:
         resp.raise_for_status()
         data = await resp.json()

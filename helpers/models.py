@@ -17,7 +17,7 @@ from pydantic import (
 # ---------------------------------------------------------------------------
 # Physical constants (canonical definitions in constants.py)
 # ---------------------------------------------------------------------------
-from .constants import KE_CONV, BOLTZ_EV_K, P_CONV  # noqa: F401
+from .constants import BOLTZ_EV_K, KE_CONV, P_CONV  # noqa: F401
 
 # ---------------------------------------------------------------------------
 # BMD models
@@ -190,7 +190,7 @@ def read_structure(structure_file: str) -> MDAtomicData:
 
 def ase_to_atomic_data(
     atoms: ase.Atoms,
-    _id: str | None = None,
+    structure_id: str | None = None,
     active_mask: list[bool] | None = None,
 ) -> AtomicData:
     """Convert an ASE Atoms object to an AtomicData instance."""
@@ -199,7 +199,7 @@ def ase_to_atomic_data(
         numbers=atoms.numbers.tolist(),
         charge=atoms.info.get("charge", 0),
         mult=atoms.info.get("mult", 1),
-        structure_id=_id,
+        structure_id=structure_id,
     )
     if atoms.cell.volume > 0:
         data.cell = atoms.cell.array.flatten().tolist()
