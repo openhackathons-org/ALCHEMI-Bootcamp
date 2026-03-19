@@ -352,8 +352,8 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
             return ase.Atoms(
                 "OH2",
                 positions=[
-                    [0.0, 0.0, 0.0],
                     [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
+                    [0.0, 0.0, 0.0],
                     [-d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                 ],
             )  # singlet (mult=1 default)
@@ -571,13 +571,11 @@ def classify_relaxation(
     dissociated = False
     if n_ads_atoms > 1:
         relax_ads_dists = []
-        for i in range(n_ads_atoms):
-            for j in range(i + 1, n_ads_atoms):
-                relax_ads_dists.append(np.linalg.norm(ads_pos[i] - ads_pos[j]))
         init_ads_dists = []
-        for i in range(n_ads_atoms):
-            for j in range(i + 1, n_ads_atoms):
-                init_ads_dists.append(np.linalg.norm(init_ads_pos[i] - init_ads_pos[j]))
+        # bonded atoms are sequentially ordered
+        for i in range(n_ads_atoms - 1):
+            relax_ads_dists.append(np.linalg.norm(ads_pos[i] - ads_pos[i + 1]))
+            init_ads_dists.append(np.linalg.norm(init_ads_pos[i] - init_ads_pos[i + 1]))
         # If any bond stretched > 50%, consider dissociated
         for d_init, d_relax in zip(init_ads_dists, relax_ads_dists):
             if d_init > 0.1 and d_relax > 1.5 * d_init:
@@ -644,14 +642,18 @@ def compute_surface_displacement(
 ) -> np.ndarray:
     """Per-atom displacement magnitude for slab atoms after relaxation.
 
-    Useful for OVITO colour-mapping: blue (minimal) to red (large).
-    A good catalyst ideally shows minimal rearrangement of its surface
-    atoms during adsorbate binding.
+    Useful for OVITO colour-mapping to highlight atoms near the
+    adsorption site.  A good catalyst ideally shows minimal
+    rearrangement of its surface atoms during adsorbate binding.
+
+    Displacements are computed using the minimum-image convention so
+    that atoms which cross a periodic boundary are not flagged as
+    having moved by an entire cell length.
 
     Parameters
     ----------
     initial : ase.Atoms
-        Pre-relaxation structure.
+        Pre-relaxation structure (must have a valid cell).
     relaxed : ase.Atoms
         Post-relaxation structure.
     slab_n_atoms : int
@@ -662,4 +664,10 @@ def compute_surface_displacement(
     np.ndarray shape (slab_n_atoms,) — displacement magnitudes in Angstrom.
     """
     d = relaxed.positions[:slab_n_atoms] - initial.positions[:slab_n_atoms]
+    if initial.cell.volume > 0:
+        cell = initial.cell.array
+        inv_cell = np.linalg.inv(cell)
+        frac = d @ inv_cell
+        frac -= np.round(frac)
+        d = frac @ cell
     return np.linalg.norm(d, axis=1)
