@@ -8,6 +8,8 @@ import ase
 import numpy as np
 from ase.neighborlist import NeighborList, natural_cutoffs
 
+from helpers.models import OptimizationResult
+
 if TYPE_CHECKING:
     import pymatgen.core
 
@@ -111,6 +113,12 @@ def build_slab(
     # Prefer symmetric slabs, then pick the first (usually most stoichiometric)
     symmetric = [s for s in slabs if s.is_symmetric()]
     pmg_slab = symmetric[0] if symmetric else slabs[0]
+
+    # Orthogonalise the c-axis so it is perpendicular to the surface.
+    # Without this, non-orthogonal cells (common for (110) slabs) cause
+    # the surface normal to be tilted, and adsorbates placed "above" the
+    # surface in z end up buried inside the slab.
+    pmg_slab = pmg_slab.get_orthogonal_c_slab()
 
     atoms = ase.Atoms(
         positions=pmg_slab.cart_coords,
@@ -270,6 +278,18 @@ def find_central_site(positions: np.ndarray, cell: np.ndarray) -> np.ndarray:
     return positions[np.argmin(dists)].copy()
 
 
+def find_site(slab: ase.Atoms, mz: int, site: str) -> np.ndarray:
+    match site:
+        case "cus":
+            return find_central_site(find_cus_sites(slab, mz), slab.cell.array)
+
+        case "bridge":
+            return find_bridge_site(slab, mz)
+
+        case _:
+            raise ValueError(f"Unknown site: {site!r}")
+
+
 # ---------------------------------------------------------------------------
 # Adsorbate construction
 # ---------------------------------------------------------------------------
@@ -286,6 +306,12 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
       * H-O-H = 104.5 deg
       * O-O  = 1.33 A  (OOH peroxo intermediate)
       * O-O-H = 110 deg
+
+    As gas-phase OER intermediates these are radical species.  The
+    correct spin multiplicity is stored in ``atoms.info["mult"]`` so
+    that ``ase_to_atomic_data`` propagates it to the BGR request.
+    MACE-MP-0 does not use this field, but it is set for scientific
+    documentation and future compatibility with DFT-based models.
 
     References
     ----------
@@ -304,17 +330,21 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
     """
     match species:
         case "O":
-            return ase.Atoms("O", positions=[[0.0, 0.0, 0.0]])
+            atoms = ase.Atoms("O", positions=[[0.0, 0.0, 0.0]])
+            atoms.info["mult"] = 3  # triplet ground state
+            return atoms
 
         case "OH":
             d_oh = 0.970
-            return ase.Atoms(
+            atoms = ase.Atoms(
                 "OH",
                 positions=[
                     [0.0, 0.0, 0.0],
                     [0.0, 0.0, d_oh],
                 ],
             )
+            atoms.info["mult"] = 2  # doublet radical
+            return atoms
 
         case "H2O":
             d_oh = 0.957
@@ -326,13 +356,13 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
                     [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                     [-d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                 ],
-            )
+            )  # singlet (mult=1 default)
 
         case "OOH":
             d_oo = 1.33
             d_oh = 0.970
             ooh_angle = np.radians(110.0)
-            return ase.Atoms(
+            atoms = ase.Atoms(
                 "O2H",
                 positions=[
                     [0.0, 0.0, 0.0],  # O bonding to metal
@@ -344,6 +374,8 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
                     ],
                 ],
             )
+            atoms.info["mult"] = 2  # doublet radical
+            return atoms
 
         case _:
             raise ValueError(f"Unknown adsorbate species: {species!r}")
@@ -371,10 +403,10 @@ def place_adsorbate(
     slab: ase.Atoms,
     adsorbate: ase.Atoms,
     site: np.ndarray,
-    height: float = 3.5,
+    height: float = 2.0,
     tilt_angle: float = 0.0,
-    frozen_fraction: float = 0.5,
-) -> tuple[ase.Atoms, list[bool]]:
+    frozen_fraction: float | None = 0.5,
+) -> tuple[ase.Atoms, list[bool] | None]:
     """Place an adsorbate above a surface site.
 
     The translation direction is computed from the slab cell vectors as
@@ -409,33 +441,34 @@ def place_adsorbate(
         Distance above the site along the surface normal (Angstrom).
     tilt_angle : float
         Rotation angle in degrees about the in-plane a-vector.
-    frozen_fraction : float
+    frozen_fraction : float or None
         Fraction of slab height to freeze (passed to ``make_active_mask``).
+        Set to ``None`` to let all atoms relax
 
     Returns
     -------
     (combined, active_mask) where *combined* is an ase.Atoms and
-    *active_mask* is a list[bool] suitable for ``AtomicData.active_mask``.
+    *active_mask* is a list[bool] or None.
     """
-    normal_hat = _surface_normal(slab)
-    a_hat = slab.cell[0] / np.linalg.norm(slab.cell[0])
-
     ads = adsorbate.copy()
-
     # Tilt adsorbate about the in-plane a-vector
+    a_hat = slab.cell.array[0] / np.linalg.norm(slab.cell.array[0])
     if abs(tilt_angle) > 1e-6:
         ads.rotate(tilt_angle, a_hat, center=(0.0, 0.0, 0.0))
 
     # Translate along the surface normal to the site + height
+    normal_hat = _surface_normal(slab)
     ads.translate(site + height * normal_hat)
 
     # Combine slab + adsorbate
-    combined = slab.copy()
-    combined += ads
+    combined = slab.copy() + ads
 
-    # Build active mask: slab frozen/active + adsorbate always active
-    slab_mask = make_active_mask(slab, bottom_fraction=frozen_fraction)
-    combined_mask = slab_mask + [True] * len(ads)
+    # Build active mask if requested; None means all atoms relax
+    if frozen_fraction is not None:
+        slab_mask = make_active_mask(slab, bottom_fraction=frozen_fraction)
+        combined_mask = slab_mask + [True] * len(ads)
+    else:
+        combined_mask = None
 
     return combined, combined_mask
 
@@ -447,7 +480,7 @@ def place_adsorbate(
 
 def classify_relaxation(
     initial: ase.Atoms,
-    relaxed_result,
+    relaxed_result: OptimizationResult,
     slab_n_atoms: int,
     site_initial: np.ndarray,
     metal_z: int,
@@ -479,6 +512,8 @@ def classify_relaxation(
 
     converged : bool
         Whether the BGR optimiser reported convergence.
+    n_steps : int
+        Number of optimisation steps performed.
     max_force : float
         Maximum force magnitude across all atoms (eV/A).
     energy : float
@@ -494,6 +529,11 @@ def classify_relaxation(
     status : str
         One of ``"converged"``, ``"moved_to_new_site"``,
         ``"dissociated"``, ``"desorbed"``, or ``"needs_review"``.
+    qc_label : str
+        Quality-control label: ``"reliable"`` (converged, geometry
+        sensible), ``"provisional"`` (near target or geometry sensible
+        but not formally converged), or ``"failed"`` (desorbed,
+        dissociated, or far from convergence).
     """
     from .models import atomic_data_to_ase
 
@@ -511,7 +551,7 @@ def classify_relaxation(
     slab_z_max = relaxed.positions[:slab_n_atoms, 2].max()
     adsorbate_height = float(ads_centre[2] - slab_z_max)
 
-    # Nearest metal distance
+    # Nearest metal distance from bonding O
     metal_idx = [i for i in range(slab_n_atoms) if relaxed.numbers[i] == metal_z]
     if metal_idx:
         metal_pos = relaxed.positions[metal_idx]
@@ -521,7 +561,7 @@ def classify_relaxation(
         nearest_metal_dist = np.nan
 
     # Lateral drift from initial site
-    site_drift = float(np.linalg.norm(ads_centre[:2] - site_initial[:2]))
+    site_drift = float(np.linalg.norm(ads_pos[0][:2] - site_initial[:2]))
 
     # Initial adsorbate inter-atom distances
     init_ads_pos = initial.positions[slab_n_atoms:]
@@ -546,6 +586,7 @@ def classify_relaxation(
 
     # Classification
     converged = bool(relaxed_result.converged)
+
     if adsorbate_height > height_threshold:
         status = "desorbed"
     elif dissociated:
@@ -557,14 +598,28 @@ def classify_relaxation(
     else:
         status = "needs_review"
 
+    # Quality-control label (see user guidelines)
+    if status in ("desorbed", "dissociated"):
+        qc_label = "failed"
+    elif converged and status == "converged":
+        qc_label = "reliable"
+    elif max_force < 0.05 and status in ("converged", "needs_review"):
+        qc_label = "reliable"
+    elif max_force < 0.2 or status == "moved_to_new_site":
+        qc_label = "provisional"
+    else:
+        qc_label = "failed"
+
     return {
         "converged": converged,
-        "max_force": max_force,
+        "n_steps": int(relaxed_result.num_optimization_steps),
         "energy": float(relaxed_result.energy),
+        "max_force": max_force,
         "adsorbate_height": adsorbate_height,
         "nearest_metal_dist": nearest_metal_dist,
         "site_drift": site_drift,
         "status": status,
+        "qc_label": qc_label,
     }
 
 

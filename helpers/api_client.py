@@ -5,12 +5,9 @@ from __future__ import annotations
 import asyncio
 import math
 import warnings
-from typing import TYPE_CHECKING
 
+import aiohttp
 import requests
-
-if TYPE_CHECKING:
-    import aiohttp
 
 from .cache import cache_exists, load_cache, save_cache
 from .models import (
@@ -60,7 +57,7 @@ def run_bgr(
     server_url: str,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,  # 5 minutes
+    timeout: int = 1800,  # 30 minutes
 ) -> BGRReply:
     """Submit a BGR request and return the parsed reply."""
     url = f"{server_url}/infer"
@@ -108,7 +105,7 @@ def run_bgr_or_load_cache(
     endpoint_live: bool,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,  # 5 minutes
+    timeout: int = 1800,  # 30 minutes
 ) -> BGRReply:
     """Run BGR if cache is missing and endpoint is live; otherwise load cache."""
     if cache_exists(cache_dir, label):
@@ -160,7 +157,8 @@ async def async_run_md(
 
     url = f"{server_url}/infer"
     payload = MDRequest(atoms=mdatoms, config=mdconfig).model_dump()
-    client_timeout = _aiohttp.ClientTimeout(connect=10, total=timeout)
+    # connect timeout must accommodate queueing behind TCPConnector limit
+    client_timeout = _aiohttp.ClientTimeout(connect=timeout, total=timeout)
     async with session.post(url, json=payload, timeout=client_timeout) as resp:
         resp.raise_for_status()
         data = await resp.json()
@@ -204,14 +202,14 @@ async def async_run_bgr(
     session: aiohttp.ClientSession,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,
+    timeout: int = 1800,
 ) -> BGRReply:
     """Async equivalent of ``run_bgr`` using an aiohttp session."""
-    import aiohttp as _aiohttp
 
     url = f"{server_url}/infer"
     payload = BGRRequest(atoms=atoms_list, cellopt=cellopt, opttol=opttol).model_dump()
-    client_timeout = _aiohttp.ClientTimeout(connect=10, total=timeout)
+    # connect timeout must accommodate queueing behind TCPConnector limit
+    client_timeout = aiohttp.ClientTimeout(connect=timeout, total=timeout)
     async with session.post(url, json=payload, timeout=client_timeout) as resp:
         resp.raise_for_status()
         data = await resp.json()
@@ -230,7 +228,7 @@ async def async_run_bgr_or_load_cache(
     endpoint_live: bool,
     cellopt: bool = False,
     opttol: float | None = None,
-    timeout: int = 300,
+    timeout: int = 1800,
 ) -> BGRReply:
     """Async equivalent of ``run_bgr_or_load_cache``."""
     if cache_exists(cache_dir, label):
