@@ -1,57 +1,65 @@
-# NVIDIA ALCHEMI: BMD & BGR NIM Playbooks
-
-GPU-accelerated molecular dynamics at **10,000x the speed of DFT** — powered by NVIDIA's Machine-Learning Interatomic Potential (MLIP) NIM microservices. Two interactive Jupyter playbooks walk through real scientific workflows: crystalline materials property extraction (NaCl) and a multi-molecule OLED material screening pipeline inspired by Universal Display Corporation's research methodology.
-
-## Playbooks
-
-### Crystalline Materials Science (`alchemi-playbook-nims.ipynb`)
-
-Build a NaCl supercell from its unit cell, equilibrate it through NVT and NPT molecular dynamics via the BMD REST API, and extract publication-quality thermodynamic properties — density, radial distribution functions, mean-square displacement, diffusion coefficients, and thermal expansion across a temperature sweep.
-
 <p align="center">
-  <img src="assets/nacl_render.png" alt="OVITO render of NaCl supercell" width="45%"/>
-  <img src="assets/nacl_thermo.png" alt="NaCl thermodynamic time series" width="45%"/>
+  <img src="assets/eneos_logo.png" alt="ENEOS" height="50"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/matlantis_logo.png" alt="Matlantis" height="35"/>
+  &nbsp;&nbsp;&nbsp;
+  <img src="assets/nvidia-logo.png" alt="NVIDIA" height="55"/>
 </p>
-<p align="center">
-  <img src="assets/nacl_rdf.png" alt="NaCl radial distribution function" width="45%"/>
-</p>
-
-**What you will learn:**
-- Connect to ALCHEMI BMD/BGR endpoints and interpret request/response schemas
-- Build crystalline supercells programmatically with pymatgen
-- Run NVT and NPT molecular dynamics simulations via the REST API
-- Extract thermodynamic properties: density, RDF, MSD, diffusion, thermal expansion
-- Batch simulations for temperature sweeps
-- Switch between MLIP models with a single parameter change
 
 ---
 
-### OLED Material Screening (`alchemi-conformer-stability.ipynb`)
+# OER Catalyst Screening with NVIDIA ALCHEMI
 
-A UDC-inspired computational screening pipeline that evaluates **5 real OLED host and transport molecules** end-to-end: RDKit conformer generation with energy filtering and RMSD deduplication, BGR geometry optimisation, batched NVT MD at elevated temperature for thermal stability assessment, and composite scoring that ranks candidates by energy variance, structural drift, and bond integrity.
+**75-minute interactive workshop** — screen oxide catalyst surfaces for oxygen-evolution activity using GPU-accelerated machine-learning interatomic potentials.
+
+Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks attendees through a complete computational catalyst screening workflow: from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
+
+## Scientific Motivation
+
+Hydrogen from water electrolysis is central to the energy transition, but the **oxygen evolution reaction (OER)** at the anode is the bottleneck. Today's best acidic-electrolyser catalyst, **iridium oxide (IrO<sub>2</sub>)**, relies on one of the rarest elements on Earth — iridium is among the [60 critical minerals](https://www.usgs.gov/news/national-news-release/us-geological-survey-releases-2022-list-critical-minerals) identified by the U.S. Geological Survey.
+
+**Computational screening** lets researchers evaluate hundreds of candidate structures *before* committing to experiments. By simulating how oxygen-containing intermediates bind to a catalyst surface, we can rank materials by their predicted activity and focus laboratory work on the most promising candidates.
+
+## What You Will Learn
+
+The notebook is structured as **11 sections** that mirror a real screening study:
+
+| Section | Topic | What you do |
+|---------|-------|-------------|
+| **1** | Environment Setup | Import packages, configure API endpoints |
+| **2** | Endpoint Connectivity | Verify BGR NIM is reachable; inspect health and model metadata |
+| **3** | The Oxygen Evolution Reaction | Review the four-step OER mechanism and the thermodynamic framework |
+| **4** | Oxide Catalyst Surfaces | Build rutile-type bulk crystals and cleave (110) surface slabs |
+| **5** | Clean Slab & Gas-Phase References | Relax pristine slabs and isolated adsorbate molecules |
+| **6** | Adsorbate Placement | Position H<sub>2</sub>O, OH, O, and OOH at catalytically active CUS sites |
+| **7** | Batched Geometry Relaxation | Submit 30+ slab-adsorbate structures to the BGR NIM in one async batch |
+| **8** | Relaxation Quality Control | Classify outcomes (converged, migrated, dissociated, desorbed) |
+| **9** | Adsorption Energies | Compute ΔE<sub>ads</sub> and free-energy corrections for each intermediate |
+| **10** | Screening Results & Material Ranking | Compare overpotentials, plot volcano-style diagnostics |
+| **11** | Extensions & Scaling | Discuss scaling to larger material libraries and multi-site sampling |
+
+## Materials
+
+Three rutile-type (P4<sub>2</sub>/mnm) oxides, all cleaved along the **(110)** plane:
+
+| Material | Role | Why included |
+|----------|------|--------------|
+| **IrO<sub>2</sub>** | Benchmark catalyst | Best-known acidic OER catalyst; our primary validation target |
+| **RuO<sub>2</sub>** | Active comparator | Highly active but less stable under prolonged operation |
+| **TiO<sub>2</sub>** | Structural control | Same crystal structure, abundant, but catalytically inactive for OER |
+
+## Output Showcase
+
+When the notebook is executed, the following figures are generated in `outputs/`:
 
 <p align="center">
-  <img src="assets/udc_workflow_diagram.png" alt="UDC screening workflow diagram" width="70%"/>
+  <img src="outputs/electrolysis_diagram.png" alt="Water electrolysis diagram" width="45%"/>
+  <img src="outputs/IrO2_slab_110.png" alt="IrO2 (110) slab visualisation" width="45%"/>
 </p>
 <p align="center">
-  <img src="assets/conformer_energy_landscape.png" alt="Conformer energy landscape" width="70%"/>
+  <img src="outputs/eads_heatmap.png" alt="Adsorption energy heatmap" width="45%"/>
+  <img src="outputs/oer_3d_scatter.png" alt="3D OER screening scatter plot" width="45%"/>
 </p>
-
-| Molecule | Role | Formula |
-|----------|------|---------|
-| **CBP** | Host | C<sub>36</sub>H<sub>24</sub>N<sub>2</sub> |
-| **NPB** | Hole transport | C<sub>44</sub>H<sub>32</sub>N<sub>2</sub> |
-| **mCP** | Host | C<sub>25</sub>H<sub>19</sub>N |
-| **BCP** | Electron transport | C<sub>26</sub>H<sub>20</sub>N<sub>2</sub> |
-| **TPBi** | Electron transport | C<sub>45</sub>H<sub>30</sub>N<sub>3</sub> |
-
-**What you will learn:**
-- Generate and filter molecular conformers with RDKit (energy windows, RMSD deduplication)
-- Optimise geometries via the BGR NIM endpoint
-- Build gas-phase simulation cells with periodic boundary conditions
-- Run batched NVT MD at elevated temperature via the REST API
-- Score thermal stability from energy statistics, structural RMSD, and bond integrity
-- Rank and compare multiple OLED candidates in a single pipeline
 
 ## Quick Start
 
@@ -63,42 +71,42 @@ conda activate alchemi-playbook
 # Install dependencies
 uv pip install -r requirements.txt
 
-# Launch a playbook
-jupyter notebook alchemi-playbook-nims.ipynb           # Materials science
-jupyter notebook alchemi-conformer-stability.ipynb      # OLED screening
+# Launch the workshop notebook
+jupyter notebook alchemi-oer-catalyst-screening.ipynb
 ```
+
+### Prerequisites
+
+| Requirement | Details |
+|-------------|---------|
+| Python | ≥ 3.11 |
+| Conda env | `alchemi-playbook` |
+| BGR NIM | Running on `localhost` (default port 8000), **or** set `FAST_DEMO = True` |
 
 ### FAST_DEMO Mode
 
-Both notebooks default to `FAST_DEMO = False` — they will call **live BMD/BGR endpoints**. Set `FAST_DEMO = True` in each notebook's control panel to use pre-cached JSON responses in `cached_responses/` for fully offline operation with shorter simulations.
-
-## Prerequisites
-
-- **BMD NIM endpoint** running on `localhost:{BMD_PORT}` (default `8000`) — or use `FAST_DEMO = True` for cached responses
-- **BGR NIM endpoint** running on `localhost:{BGR_PORT}` (default `8890`) — materials playbook only
-- **Python 3.11+** with conda
+The notebook defaults to `FAST_DEMO = False` — it will call a **live BGR endpoint**. Set `FAST_DEMO = True` in the control panel cell to use pre-cached JSON responses in `cached_responses/oer-catalyst-screening/` for fully offline operation. This is recommended for workshop environments without GPU access.
 
 ## Directory Structure
 
 ```
 alchemi-playbooks/
-├── alchemi-playbook-nims.ipynb           # Materials science playbook (NaCl MD)
-├── alchemi-conformer-stability.ipynb     # OLED material screening playbook
-├── helpers/                              # Shared Python package
+├── alchemi-oer-catalyst-screening.ipynb  # Workshop notebook
+├── helpers/                              # Python package
 │   ├── __init__.py                       # Public API re-exports
 │   ├── constants.py                      # Physical/scientific constants
 │   ├── models.py                         # Pydantic request/response models
-│   ├── api_client.py                     # BMD/BGR NIM client (sync + async)
-│   ├── analysis.py                       # MD trajectory analysis (RDF, MSD, thermo)
+│   ├── api_client.py                     # BGR NIM client (sync + async)
+│   ├── analysis.py                       # MD trajectory analysis
 │   ├── conformers.py                     # RDKit conformer generation & filtering
+│   ├── surfaces.py                       # Slab construction & adsorbate placement
 │   ├── visualization.py                  # OVITO rendering helpers
 │   └── cache.py                          # Response caching logic
-├── tests/                                # pytest test suite
-├── cached_responses/                     # Pre-cached API responses
-│   ├── materials/                        # NaCl playbook caches
-│   └── conformer-stability/              # OLED screening caches
-├── assets/                               # Static images and output showcases
-├── outputs/                              # Generated plots and structures (gitignored)
+├── tests/                                # pytest test suite (167+ tests)
+├── cached_responses/
+│   └── oer-catalyst-screening/           # Pre-cached BGR responses for FAST_DEMO
+├── assets/                               # Logos (ENEOS, Matlantis, NVIDIA, OVITO)
+├── outputs/                              # Generated figures and structures (gitignored)
 ├── environment.yml                       # Conda environment spec
 ├── requirements.txt                      # Runtime dependencies
 └── requirements-dev.txt                  # Dev dependencies (pytest, ruff)
@@ -106,7 +114,17 @@ alchemi-playbooks/
 
 ## Key Dependencies
 
-numpy, ase, pymatgen, pydantic, requests, aiohttp, matplotlib, pandas, rdkit, ovito
+numpy, ase, pymatgen, pydantic, requests, aiohttp, matplotlib, pandas, ovito
+
+## References
+
+1. Batatia, I. *et al.* "MACE: Higher Order Equivariant Message Passing Neural Networks for Fast and Accurate Force Fields." *NeurIPS* (2022).
+2. Rossmeisl, J. *et al.* "Electrolysis of water on oxide surfaces." *J. Electroanal. Chem.* **607**, 83–89 (2007).
+3. Ping, Y., Nielsen, R. J. & Goddard, W. A. "The Reaction Mechanism with Free Energy Barriers at Constant Potentials for the Oxygen Evolution Reaction at the IrO<sub>2</sub>(110) Surface." *J. Am. Chem. Soc.* **139**, 149–155 (2017).
+4. Dickens, C. F., Kirk, C. & Norskov, J. K. "Insights into the Electrochemical Oxygen Evolution Reaction with ab Initio Calculations and Microkinetic Modeling." *J. Phys. Chem. C* **123**, 18960–18977 (2019).
+5. Stukowski, A. "Visualization and analysis of atomistic simulation data with OVITO." *Model. Simul. Mater. Sci. Eng.* **18**, 015012 (2010).
+6. U.S. Geological Survey. "2022 Final List of Critical Minerals." *Federal Register* **87**, 10381 (2022).
+7. ENEOS Holdings, Matlantis, and NVIDIA. Collaboration on GPU-accelerated atomistic simulation for catalyst discovery.
 
 ## License
 
