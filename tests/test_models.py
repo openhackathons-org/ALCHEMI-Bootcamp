@@ -3,12 +3,12 @@
 import pytest
 
 from helpers.models import (
-    MDAtomicData,
-    MDConfig,
-    MDReply,
-    MDRequest,
-    MDSnapshot,
-    AtomicData,
+    BMDAtomicData,
+    BMDConfig,
+    BMDReply,
+    BMDRequest,
+    BMDSnapshot,
+    BGRAtomicData,
     BGRRequest,
     ase_to_atomic_data,
     ase_to_md_atomic_data,
@@ -18,7 +18,7 @@ from helpers.models import (
 
 class TestMDModels:
     def test_md_atomic_data_minimal(self):
-        atoms = MDAtomicData(
+        atoms = BMDAtomicData(
             coord=[0.0, 0.0, 0.0, 1.0, 0.0, 0.0],
             numbers=[1, 1],
         )
@@ -28,7 +28,7 @@ class TestMDModels:
         assert atoms.pbc is None
 
     def test_md_atomic_data_periodic(self):
-        atoms = MDAtomicData(
+        atoms = BMDAtomicData(
             coord=[0.0, 0.0, 0.0],
             numbers=[11],
             cell=[5.64, 0, 0, 0, 5.64, 0, 0, 0, 5.64],
@@ -38,7 +38,7 @@ class TestMDModels:
         assert len(atoms.cell) == 9
 
     def test_md_config_defaults(self):
-        cfg = MDConfig()
+        cfg = BMDConfig()
         assert cfg.temperature == 300.0
         assert cfg.dt == 1.0
         assert cfg.nvt is True
@@ -46,7 +46,7 @@ class TestMDModels:
         assert cfg.save_interval == 100
 
     def test_md_config_custom(self):
-        cfg = MDConfig(
+        cfg = BMDConfig(
             temperature=500.0,
             dt=0.5,
             nvt=True,
@@ -61,16 +61,16 @@ class TestMDModels:
         assert cfg.pressure == 1.0
 
     def test_md_request_serialization(self):
-        atoms = MDAtomicData(coord=[0.0, 0.0, 0.0], numbers=[1])
-        cfg = MDConfig(md_time_max=0.01)
-        req = MDRequest(atoms=atoms, config=cfg)
+        atoms = BMDAtomicData(coord=[0.0, 0.0, 0.0], numbers=[1])
+        cfg = BMDConfig(md_time_max=0.01)
+        req = BMDRequest(atoms=atoms, config=cfg)
         d = req.model_dump()
         assert "atoms" in d
         assert "config" in d
         assert d["config"]["md_time_max"] == 0.01
 
     def test_md_snapshot(self):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[1.0, 2.0, 3.0],
             velocity=[0.1, 0.2, 0.3],
             energy=-10.5,
@@ -82,7 +82,7 @@ class TestMDModels:
 
     def test_md_snapshot_string_coercion(self):
         """The live API returns string-typed floats; Pydantic must coerce them."""
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=["1.0", "2.0", "3.0"],
             velocity=["0.1", "0.2", "0.3"],
             energy="-10.5",
@@ -96,20 +96,20 @@ class TestMDModels:
         assert isinstance(snap.md_time, float)
 
     def test_md_reply(self):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[1.0, 2.0, 3.0],
             velocity=[0.1, 0.2, 0.3],
             energy=-10.0,
         )
-        cfg = MDConfig()
-        reply = MDReply(trajectory=[snap], config=cfg, status="Success")
+        cfg = BMDConfig()
+        reply = BMDReply(trajectory=[snap], config=cfg, status="Success")
         assert reply.status == "Success"
         assert len(reply.trajectory) == 1
 
 
 class TestBGRModels:
     def test_atomic_data(self):
-        ad = AtomicData(
+        ad = BGRAtomicData(
             coord=[0.0, 0.0, 0.0],
             numbers=[11],
             cell=[5.64, 0, 0, 0, 5.64, 0, 0, 0, 5.64],
@@ -119,7 +119,7 @@ class TestBGRModels:
         assert ad.mult == 1
 
     def test_bgr_request(self):
-        ad = AtomicData(coord=[0.0, 0.0, 0.0], numbers=[11])
+        ad = BGRAtomicData(coord=[0.0, 0.0, 0.0], numbers=[11])
         req = BGRRequest(atoms=[ad])
         assert len(req.atoms) == 1
         assert req.cellopt is False
@@ -140,7 +140,7 @@ class TestASEConversion:
         assert len(ad.numbers) == 64
 
     def test_atomic_data_to_ase(self):
-        ad = AtomicData(
+        ad = BGRAtomicData(
             coord=[0.0, 0.0, 0.0, 2.82, 2.82, 2.82],
             numbers=[11, 17],
             cell=[5.64, 0, 0, 0, 5.64, 0, 0, 0, 5.64],

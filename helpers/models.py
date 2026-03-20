@@ -24,7 +24,7 @@ from .constants import BOLTZ_EV_K, KE_CONV, P_CONV  # noqa: F401
 # ---------------------------------------------------------------------------
 
 
-class MDAtomicData(BaseModel):
+class BMDAtomicData(BaseModel):
     """Atomic data for molecular dynamics simulation."""
 
     coord: List[float]
@@ -38,7 +38,7 @@ class MDAtomicData(BaseModel):
     velocity: Optional[List[float]] = None
 
 
-class MDConfig(BaseModel):
+class BMDConfig(BaseModel):
     """Configuration for molecular dynamics simulations."""
 
     temperature: PositiveFloat = Field(default=300.0, description="Temperature in K")
@@ -84,15 +84,15 @@ class MDConfig(BaseModel):
     )
 
 
-class MDRequest(BaseModel):
+class BMDRequest(BaseModel):
     """Request model for MD simulation."""
 
-    atoms: MDAtomicData
-    config: Optional[MDConfig] = None
+    atoms: BMDAtomicData
+    config: Optional[BMDConfig] = None
     info: Optional[str] = None
 
 
-class MDSnapshot(BaseModel):
+class BMDSnapshot(BaseModel):
     """Snapshot of MD simulation state."""
 
     coord: List[float]
@@ -105,11 +105,11 @@ class MDSnapshot(BaseModel):
     md_time: Optional[NonNegativeFloat] = 0.0
 
 
-class MDReply(BaseModel):
+class BMDReply(BaseModel):
     """Reply model for MD simulation results."""
 
-    trajectory: Optional[List[MDSnapshot]] = None
-    config: MDConfig
+    trajectory: Optional[List[BMDSnapshot]] = None
+    config: BMDConfig
     status: Optional[str] = "Success"
     info: Optional[str] = None
 
@@ -119,7 +119,7 @@ class MDReply(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-class AtomicData(BaseModel):
+class BGRAtomicData(BaseModel):
     """Atomic data for geometry optimisation."""
 
     coord: List[float]
@@ -135,14 +135,14 @@ class AtomicData(BaseModel):
 class BGRRequest(BaseModel):
     """Request model for batch geometry relaxation."""
 
-    atoms: List[AtomicData]
+    atoms: List[BGRAtomicData]
     opttol: Optional[float] = None
     opttol_pressure: Optional[float] = None
     cellopt: bool = False
     info: str = ""
 
 
-class OptimizationResult(AtomicData):
+class OptimizationResult(BGRAtomicData):
     """Result of a single geometry optimisation."""
 
     converged: bool
@@ -166,10 +166,12 @@ class BGRReply(BaseModel):
 # ---------------------------------------------------------------------------
 
 
-def read_structure(structure_file: str) -> MDAtomicData:
-    """Read atomic structure from file using ASE and return MDAtomicData."""
+def read_to_bmd_atomic_data(structure_file: str) -> BMDAtomicData:
+    """Read atomic structure from file using ASE and return BMDAtomicData."""
     result = ase.io.read(structure_file)
-    assert isinstance(result, ase.Atoms), f"Expected single Atoms, got {type(result)}"
+    assert isinstance(result, ase.Atoms), (
+        f"Expected single ase.Atoms, got {type(result)}"
+    )
     atoms = result
     data = {
         "coord": atoms.positions.flatten().tolist(),
@@ -185,16 +187,16 @@ def read_structure(structure_file: str) -> MDAtomicData:
         if k in atoms.arrays:
             data[k] = atoms.arrays[k].flatten().tolist()
 
-    return MDAtomicData(**data)
+    return BMDAtomicData(**data)
 
 
 def ase_to_atomic_data(
     atoms: ase.Atoms,
     structure_id: str | None = None,
     active_mask: list[bool] | None = None,
-) -> AtomicData:
-    """Convert an ASE Atoms object to an AtomicData instance."""
-    data = AtomicData(
+) -> BGRAtomicData:
+    """Convert an ASE Atoms object to an BGRAtomicData instance."""
+    data = BGRAtomicData(
         coord=atoms.positions.flatten().tolist(),
         numbers=atoms.numbers.tolist(),
         charge=atoms.info.get("charge", 0),
@@ -209,8 +211,8 @@ def ase_to_atomic_data(
     return data
 
 
-def atomic_data_to_ase(atomic_data) -> ase.Atoms:
-    """Convert AtomicData / OptimizationResult to ASE Atoms."""
+def atomic_data_to_ase(atomic_data: BGRAtomicData) -> ase.Atoms:
+    """Convert BGRAtomicData / OptimizationResult to ASE Atoms."""
     atoms = ase.Atoms(
         positions=np.array(atomic_data.coord).reshape(-1, 3),
         numbers=atomic_data.numbers,
@@ -221,19 +223,20 @@ def atomic_data_to_ase(atomic_data) -> ase.Atoms:
         atoms.set_cell(np.array(atomic_data.cell).reshape(3, 3))
     if atomic_data.pbc is not None:
         atoms.set_pbc(atomic_data.pbc)
-    if hasattr(atomic_data, "charges") and atomic_data.charges is not None:
-        atoms.set_initial_charges(atomic_data.charges)
-    if hasattr(atomic_data, "stress") and atomic_data.stress is not None:
-        atoms.info["stress"] = np.array(atomic_data.stress)
-    if hasattr(atomic_data, "energy") and atomic_data.energy is not None:
-        atoms.info["energy"] = atomic_data.energy
-    if hasattr(atomic_data, "forces") and atomic_data.forces is not None:
-        atoms.arrays["forces"] = np.array(atomic_data.forces).reshape(-1, 3)
+    if isinstance(atomic_data, OptimizationResult):
+        if atomic_data.charges is not None:
+            atoms.set_initial_charges(atomic_data.charges)
+        if atomic_data.stress is not None:
+            atoms.info["stress"] = np.array(atomic_data.stress)
+        if atomic_data.energy is not None:
+            atoms.info["energy"] = np.array(atomic_data.energy)
+        if atomic_data.forces is not None:
+            atoms.info["forces"] = np.array(atomic_data.forces).reshape(-1, 3)
     return atoms
 
 
-def ase_to_md_atomic_data(atoms: ase.Atoms) -> MDAtomicData:
-    """Convert an ASE Atoms object to an MDAtomicData instance."""
+def ase_to_md_atomic_data(atoms: ase.Atoms) -> BMDAtomicData:
+    """Convert an ASE Atoms object to a BMDAtomicData instance."""
     data = {
         "coord": atoms.positions.flatten().tolist(),
         "numbers": atoms.numbers.tolist(),
@@ -249,4 +252,4 @@ def ase_to_md_atomic_data(atoms: ase.Atoms) -> MDAtomicData:
         vel = atoms.get_velocities()
         if vel is not None and np.any(vel):
             data["velocity"] = vel.flatten().tolist()
-    return MDAtomicData(**data)
+    return BMDAtomicData(**data)

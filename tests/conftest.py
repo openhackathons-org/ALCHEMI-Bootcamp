@@ -60,7 +60,7 @@ def bgr_endpoint_live(bgr_server_url):
 
 @pytest.fixture
 def nacl_md_atoms():
-    """Build NaCl 2x2x2 supercell as MDAtomicData."""
+    """Build NaCl 2x2x2 supercell as BMDAtomicData."""
     from pymatgen.core import Lattice, Structure
     from pymatgen.io.ase import AseAtomsAdaptor
 
@@ -95,7 +95,7 @@ def nacl_ase():
 
 @pytest.fixture
 def nacl_bgr_atom(nacl_ase):
-    """Build NaCl 2x2x2 supercell as AtomicData for BGR."""
+    """Build NaCl 2x2x2 supercell as BGRAtomicData for BGR."""
     from helpers.models import ase_to_atomic_data
 
     return ase_to_atomic_data(nacl_ase, _id="nacl_supercell")

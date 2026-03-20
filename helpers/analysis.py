@@ -8,14 +8,14 @@ import ase.neighborlist
 import numpy as np
 
 from .constants import KE_CONV, BOLTZ_EV_K, P_CONV, AMU_TO_G, ANGSTROM3_TO_CM3
-from .models import MDAtomicData, MDSnapshot
+from .models import BMDAtomicData, BMDSnapshot
 
 
 def trajectory_to_ase_list(
-    mdatoms: MDAtomicData,
-    trajectory: list[MDSnapshot],
+    mdatoms: BMDAtomicData,
+    trajectory: list[BMDSnapshot],
 ) -> list[ase.Atoms]:
-    """Convert a list of MDSnapshots into ASE Atoms frames."""
+    """Convert a list of BMDSnapshots into ASE Atoms frames."""
     base = ase.Atoms(
         positions=np.array(mdatoms.coord).reshape(-1, 3),
         numbers=mdatoms.numbers,
@@ -43,8 +43,8 @@ def trajectory_to_ase_list(
 
 
 def extract_thermo_timeseries(
-    mdatoms: MDAtomicData,
-    trajectory: list[MDSnapshot],
+    mdatoms: BMDAtomicData,
+    trajectory: list[BMDSnapshot],
 ) -> dict[str, np.ndarray]:
     """Extract time-resolved thermodynamic quantities from an MD trajectory.
 
@@ -133,7 +133,7 @@ def pick_production_window(
 
 
 def compute_density(
-    mdatoms: MDAtomicData,
+    mdatoms: BMDAtomicData,
     volumes: np.ndarray,
 ) -> float:
     """Compute average density in g/cm^3 from mean volume (A^3) and atomic masses."""

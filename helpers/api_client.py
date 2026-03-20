@@ -11,14 +11,14 @@ import requests
 
 from .cache import cache_exists, load_cache, save_cache
 from .models import (
-    AtomicData,
+    BGRAtomicData,
     BGRReply,
     BGRRequest,
-    MDAtomicData,
-    MDConfig,
-    MDReply,
-    MDRequest,
-    MDSnapshot,
+    BMDAtomicData,
+    BMDConfig,
+    BMDReply,
+    BMDRequest,
+    BMDSnapshot,
 )
 
 
@@ -33,27 +33,27 @@ def check_endpoint(server_url: str, timeout: int = 5) -> bool:
 
 
 def run_md(
-    mdatoms: MDAtomicData,
-    mdconfig: MDConfig,
+    mdatoms: BMDAtomicData,
+    mdconfig: BMDConfig,
     server_url: str,
     timeout: int = 1800,  # 30 minutes
-) -> MDReply:
+) -> BMDReply:
     """Submit an MD request and return the parsed reply.
 
     Unlike the CLI script this does *not* loop-wait; it raises on failure.
     """
     url = f"{server_url}/infer"
-    payload = MDRequest(atoms=mdatoms, config=mdconfig).model_dump()
+    payload = BMDRequest(atoms=mdatoms, config=mdconfig).model_dump()
     response = requests.post(url, json=payload, timeout=(10, timeout))
     response.raise_for_status()
-    reply = MDReply(**response.json())
+    reply = BMDReply(**response.json())
     if reply.status != "Success":
         raise RuntimeError(f"MD simulation failed: {reply.status} — {reply.info}")
     return reply
 
 
 def run_bgr(
-    atoms_list: list[AtomicData],
+    atoms_list: list[BGRAtomicData],
     server_url: str,
     cellopt: bool = False,
     opttol: float | None = None,
@@ -61,8 +61,16 @@ def run_bgr(
 ) -> BGRReply:
     """Submit a BGR request and return the parsed reply."""
     url = f"{server_url}/infer"
-    payload = BGRRequest(atoms=atoms_list, cellopt=cellopt, opttol=opttol).model_dump()
-    response = requests.post(url, json=payload, timeout=(10, timeout))
+    payload = BGRRequest(
+        atoms=atoms_list,
+        cellopt=cellopt,
+        opttol=opttol,
+    ).model_dump()
+    response = requests.post(
+        url,
+        json=payload,
+        timeout=(10, timeout),
+    )
     response.raise_for_status()
     reply = BGRReply(**response.json())
     if reply.status != "Success":
@@ -71,18 +79,18 @@ def run_bgr(
 
 
 def run_md_or_load_cache(
-    mdatoms: MDAtomicData,
-    mdconfig: MDConfig,
+    mdatoms: BMDAtomicData,
+    mdconfig: BMDConfig,
     server_url: str,
     cache_dir: str,
     label: str,
     endpoint_live: bool,
     timeout: int = 1800,  # 30 minutes
-) -> MDReply:
+) -> BMDReply:
     """Run MD if cache is missing and endpoint is live; otherwise load cache."""
     if cache_exists(cache_dir, label):
         print(f"  Loading cached response: {label}")
-        return load_cache(cache_dir, label, MDReply)
+        return load_cache(cache_dir, label, BMDReply)
 
     if not endpoint_live:
         raise RuntimeError(
@@ -98,7 +106,7 @@ def run_md_or_load_cache(
 
 
 def run_bgr_or_load_cache(
-    atoms_list: list[AtomicData],
+    atoms_list: list[BGRAtomicData],
     server_url: str,
     cache_dir: str,
     label: str,
@@ -120,7 +128,11 @@ def run_bgr_or_load_cache(
 
     print(f"  Running live BGR optimisation: {label} ...")
     reply = run_bgr(
-        atoms_list, server_url, cellopt=cellopt, opttol=opttol, timeout=timeout
+        atoms_list,
+        server_url,
+        cellopt=cellopt,
+        opttol=opttol,
+        timeout=timeout,
     )
     save_cache(cache_dir, label, reply)
     print(f"  Cached response saved: {label}")
@@ -132,9 +144,9 @@ def run_bgr_or_load_cache(
 # ---------------------------------------------------------------------------
 
 
-def snapshot_to_mdatoms(base: MDAtomicData, snap: MDSnapshot) -> MDAtomicData:
-    """Build a new MDAtomicData from a base structure and a trajectory snapshot."""
-    return MDAtomicData(
+def snapshot_to_mdatoms(base: BMDAtomicData, snap: BMDSnapshot) -> BMDAtomicData:
+    """Build a new BMDAtomicData from a base structure and a trajectory snapshot."""
+    return BMDAtomicData(
         coord=snap.coord,
         numbers=base.numbers,
         charge=base.charge,
@@ -146,42 +158,42 @@ def snapshot_to_mdatoms(base: MDAtomicData, snap: MDSnapshot) -> MDAtomicData:
 
 
 async def async_run_md(
-    mdatoms: MDAtomicData,
-    mdconfig: MDConfig,
+    mdatoms: BMDAtomicData,
+    mdconfig: BMDConfig,
     server_url: str,
     session: aiohttp.ClientSession,
     timeout: int = 1800,
-) -> MDReply:
+) -> BMDReply:
     """Async equivalent of ``run_md`` using an aiohttp session."""
     import aiohttp as _aiohttp
 
     url = f"{server_url}/infer"
-    payload = MDRequest(atoms=mdatoms, config=mdconfig).model_dump()
+    payload = BMDRequest(atoms=mdatoms, config=mdconfig).model_dump()
     # connect timeout must accommodate queueing behind TCPConnector limit
     client_timeout = _aiohttp.ClientTimeout(connect=timeout, total=timeout)
     async with session.post(url, json=payload, timeout=client_timeout) as resp:
         resp.raise_for_status()
         data = await resp.json()
-    reply = MDReply(**data)
+    reply = BMDReply(**data)
     if reply.status != "Success":
         raise RuntimeError(f"MD simulation failed: {reply.status} — {reply.info}")
     return reply
 
 
 async def async_run_md_or_load_cache(
-    mdatoms: MDAtomicData,
-    mdconfig: MDConfig,
+    mdatoms: BMDAtomicData,
+    mdconfig: BMDConfig,
     server_url: str,
     session: aiohttp.ClientSession,
     cache_dir: str,
     label: str,
     endpoint_live: bool,
     timeout: int = 1800,
-) -> MDReply:
+) -> BMDReply:
     """Async equivalent of ``run_md_or_load_cache``."""
     if cache_exists(cache_dir, label):
         print(f"  Loading cached response: {label}")
-        return load_cache(cache_dir, label, MDReply)
+        return load_cache(cache_dir, label, BMDReply)
 
     if not endpoint_live:
         raise RuntimeError(
@@ -197,7 +209,7 @@ async def async_run_md_or_load_cache(
 
 
 async def async_run_bgr(
-    atoms_list: list[AtomicData],
+    atoms_list: list[BGRAtomicData],
     server_url: str,
     session: aiohttp.ClientSession,
     cellopt: bool = False,
@@ -220,7 +232,7 @@ async def async_run_bgr(
 
 
 async def async_run_bgr_or_load_cache(
-    atoms_list: list[AtomicData],
+    atoms_list: list[BGRAtomicData],
     server_url: str,
     session: aiohttp.ClientSession,
     cache_dir: str,
@@ -252,7 +264,7 @@ async def async_run_bgr_or_load_cache(
 
 async def async_run_temperature_pipeline(
     temperature: float,
-    mdatoms: MDAtomicData,
+    mdatoms: BMDAtomicData,
     session: aiohttp.ClientSession,
     server_url: str,
     cache_dir: str,
@@ -265,7 +277,7 @@ async def async_run_temperature_pipeline(
     save_interval: int,
     timeout: int,
     semaphore: asyncio.Semaphore,
-) -> tuple[float, float, MDReply | None]:
+) -> tuple[float, float, BMDReply | None]:
     """Run NVT→NPT pipeline for a single temperature, return (T, density, npt_reply)."""
     from .analysis import (
         compute_density,
@@ -278,7 +290,7 @@ async def async_run_temperature_pipeline(
             print(f"\n--- T = {temperature} K ---")
 
             # NVT equilibration
-            nvt_cfg = MDConfig(
+            nvt_cfg = BMDConfig(
                 temperature=float(temperature),
                 dt=dt,
                 nvt=True,
@@ -302,7 +314,7 @@ async def async_run_temperature_pipeline(
             seed = snapshot_to_mdatoms(mdatoms, nvt_reply.trajectory[-1])
 
             # NPT production
-            npt_cfg = MDConfig(
+            npt_cfg = BMDConfig(
                 temperature=float(temperature),
                 dt=dt,
                 nvt=True,
@@ -341,7 +353,7 @@ async def async_run_temperature_pipeline(
 
 async def async_temperature_sweep(
     temperatures: list[float],
-    mdatoms: MDAtomicData,
+    mdatoms: BMDAtomicData,
     server_url: str,
     cache_dir: str,
     endpoint_live: bool,
@@ -353,7 +365,7 @@ async def async_temperature_sweep(
     save_interval: int,
     timeout: int = 1800,
     max_concurrent: int = 4,
-) -> tuple[list[float], list[float], list[MDReply | None]]:
+) -> tuple[list[float], list[float], list[BMDReply | None]]:
     """Run NVT→NPT pipelines for all temperatures concurrently.
 
     Returns ``(temps, densities, npt_replies)`` sorted by temperature.

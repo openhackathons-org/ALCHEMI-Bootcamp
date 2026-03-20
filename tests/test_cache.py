@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 from helpers.cache import cache_exists, load_cache, save_cache
-from helpers.models import BGRReply, MDConfig, MDReply, MDSnapshot
+from helpers.models import BGRReply, BMDConfig, BMDReply, BMDSnapshot
 
 
 class TestCache:
@@ -17,21 +17,21 @@ class TestCache:
 
     @pytest.fixture
     def sample_reply(self):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[1.0, 2.0, 3.0],
             velocity=[0.01, 0.02, 0.03],
             energy=-100.5,
             istep=10,
             md_time=0.01,
         )
-        cfg = MDConfig(temperature=300.0, md_time_max=0.01)
-        return MDReply(trajectory=[snap], config=cfg, status="Success")
+        cfg = BMDConfig(temperature=300.0, md_time_max=0.01)
+        return BMDReply(trajectory=[snap], config=cfg, status="Success")
 
     def test_cache_roundtrip(self, tmp_cache_dir, sample_reply):
         save_cache(tmp_cache_dir, "test_run", sample_reply)
         assert cache_exists(tmp_cache_dir, "test_run")
 
-        loaded = load_cache(tmp_cache_dir, "test_run", MDReply)
+        loaded = load_cache(tmp_cache_dir, "test_run", BMDReply)
         assert loaded.status == "Success"
         assert len(loaded.trajectory) == 1
         assert loaded.trajectory[0].energy == pytest.approx(-100.5)
@@ -63,33 +63,33 @@ class TestCachedResponses:
 
     def test_h2_hello_world_cached(self, cache_dir):
         self._skip_if_no_cache(cache_dir, "h2_hello_world")
-        reply = load_cache(cache_dir, "h2_hello_world", MDReply)
+        reply = load_cache(cache_dir, "h2_hello_world", BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 0
 
     def test_nacl_nvt_equil_cached(self, cache_dir):
         self._skip_if_no_cache(cache_dir, "nacl_nvt_equil")
-        reply = load_cache(cache_dir, "nacl_nvt_equil", MDReply)
+        reply = load_cache(cache_dir, "nacl_nvt_equil", BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 5
 
     def test_nacl_npt_prod_cached(self, cache_dir):
         self._skip_if_no_cache(cache_dir, "nacl_npt_prod")
-        reply = load_cache(cache_dir, "nacl_npt_prod", MDReply)
+        reply = load_cache(cache_dir, "nacl_npt_prod", BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 10
 
     @pytest.mark.parametrize("T", [200, 300, 400])
     def test_temperature_sweep_cached(self, cache_dir, T):
         self._skip_if_no_cache(cache_dir, f"nacl_npt_T{T}")
-        reply = load_cache(cache_dir, f"nacl_npt_T{T}", MDReply)
+        reply = load_cache(cache_dir, f"nacl_npt_T{T}", BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 0
 
     @pytest.mark.parametrize("i", [0, 1, 2])
     def test_conformer_cached(self, conformer_cache_dir, i):
         self._skip_if_no_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K")
-        reply = load_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K", MDReply)
+        reply = load_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K", BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 0
 

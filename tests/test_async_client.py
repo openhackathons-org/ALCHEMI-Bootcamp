@@ -15,13 +15,13 @@ from helpers.api_client import (
     snapshot_to_mdatoms,
 )
 from helpers.cache import cache_exists, save_cache
-from helpers.models import MDAtomicData, MDConfig, MDReply, MDSnapshot
+from helpers.models import BMDAtomicData, BMDConfig, BMDReply, BMDSnapshot
 
 
 class TestSnapshotToMdatoms:
     @pytest.fixture
     def base_atoms(self):
-        return MDAtomicData(
+        return BMDAtomicData(
             coord=[0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
             numbers=[11, 17],
             charge=0,
@@ -31,7 +31,7 @@ class TestSnapshotToMdatoms:
         )
 
     def test_basic_conversion(self, base_atoms):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[0.1, 0.2, 0.3, 1.1, 1.2, 1.3],
             velocity=[0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
             energy=-50.0,
@@ -48,7 +48,7 @@ class TestSnapshotToMdatoms:
         assert result.cell == snap.cell
 
     def test_preserves_base_cell_when_snap_has_none(self, base_atoms):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[0.1, 0.2, 0.3, 1.1, 1.2, 1.3],
             velocity=[0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
             energy=-50.0,
@@ -58,32 +58,32 @@ class TestSnapshotToMdatoms:
         assert result.cell == base_atoms.cell
 
     def test_returns_mdatomicdata_type(self, base_atoms):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[0.1, 0.2, 0.3, 1.1, 1.2, 1.3],
             velocity=[0.01, 0.02, 0.03, 0.04, 0.05, 0.06],
             energy=-50.0,
         )
         result = snapshot_to_mdatoms(base_atoms, snap)
-        assert isinstance(result, MDAtomicData)
+        assert isinstance(result, BMDAtomicData)
 
 
 class TestAsyncRunMd:
     @pytest.fixture
     def canned_reply_data(self):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[0.1, 0.2, 0.3],
             velocity=[0.01, 0.02, 0.03],
             energy=-10.0,
             istep=100,
             md_time=0.1,
         )
-        cfg = MDConfig(temperature=300.0, md_time_max=0.1)
-        reply = MDReply(trajectory=[snap], config=cfg, status="Success")
+        cfg = BMDConfig(temperature=300.0, md_time_max=0.1)
+        reply = BMDReply(trajectory=[snap], config=cfg, status="Success")
         return json.loads(reply.model_dump_json())
 
     @pytest.fixture
     def simple_atoms(self):
-        return MDAtomicData(
+        return BMDAtomicData(
             coord=[0.0, 0.0, 0.0],
             numbers=[1],
             cell=[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0],
@@ -101,10 +101,10 @@ class TestAsyncRunMd:
         mock_session = MagicMock()
         mock_session.post = MagicMock(return_value=mock_resp)
 
-        cfg = MDConfig(temperature=300.0, md_time_max=0.1)
+        cfg = BMDConfig(temperature=300.0, md_time_max=0.1)
         reply = await async_run_md(simple_atoms, cfg, "http://fake:8000", mock_session)
 
-        assert isinstance(reply, MDReply)
+        assert isinstance(reply, BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) == 1
 
@@ -125,7 +125,7 @@ class TestAsyncRunMd:
         mock_session = MagicMock()
         mock_session.post = MagicMock(return_value=mock_resp)
 
-        cfg = MDConfig(temperature=300.0, md_time_max=0.1)
+        cfg = BMDConfig(temperature=300.0, md_time_max=0.1)
         with pytest.raises(RuntimeError, match="MD simulation failed"):
             await async_run_md(simple_atoms, cfg, "http://fake:8000", mock_session)
 
@@ -133,7 +133,7 @@ class TestAsyncRunMd:
 class TestAsyncRunMdOrLoadCache:
     @pytest.fixture
     def simple_atoms(self):
-        return MDAtomicData(
+        return BMDAtomicData(
             coord=[0.0, 0.0, 0.0],
             numbers=[1],
             cell=[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0],
@@ -142,13 +142,13 @@ class TestAsyncRunMdOrLoadCache:
 
     @pytest.fixture
     def sample_reply(self):
-        snap = MDSnapshot(
+        snap = BMDSnapshot(
             coord=[0.1, 0.2, 0.3],
             velocity=[0.01, 0.02, 0.03],
             energy=-10.0,
         )
-        cfg = MDConfig(temperature=300.0, md_time_max=0.1)
-        return MDReply(trajectory=[snap], config=cfg, status="Success")
+        cfg = BMDConfig(temperature=300.0, md_time_max=0.1)
+        return BMDReply(trajectory=[snap], config=cfg, status="Success")
 
     @pytest.mark.asyncio
     async def test_cache_hit_returns_cached(self, simple_atoms, sample_reply):
@@ -158,7 +158,7 @@ class TestAsyncRunMdOrLoadCache:
 
             result = await async_run_md_or_load_cache(
                 simple_atoms,
-                MDConfig(temperature=300.0),
+                BMDConfig(temperature=300.0),
                 "http://fake:8000",
                 mock_session,
                 tmp,
@@ -176,7 +176,7 @@ class TestAsyncRunMdOrLoadCache:
             with pytest.raises(RuntimeError, match="No cached response"):
                 await async_run_md_or_load_cache(
                     simple_atoms,
-                    MDConfig(temperature=300.0),
+                    BMDConfig(temperature=300.0),
                     "http://fake:8000",
                     mock_session,
                     tmp,
@@ -202,7 +202,7 @@ class TestAsyncRunMdOrLoadCache:
 
             result = await async_run_md_or_load_cache(
                 simple_atoms,
-                MDConfig(temperature=300.0),
+                BMDConfig(temperature=300.0),
                 "http://fake:8000",
                 mock_session,
                 tmp,
@@ -215,7 +215,7 @@ class TestAsyncRunMdOrLoadCache:
 
 class TestAsyncTemperatureSweep:
     def test_empty_temperatures(self):
-        atoms = MDAtomicData(
+        atoms = BMDAtomicData(
             coord=[0.0, 0.0, 0.0],
             numbers=[1],
             cell=[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0],
@@ -298,7 +298,7 @@ class TestAsyncTemperatureSweep:
 
     def test_failed_pipeline_returns_nan(self):
         """A temperature with no cache and no endpoint should yield NaN."""
-        atoms = MDAtomicData(
+        atoms = BMDAtomicData(
             coord=[0.0, 0.0, 0.0, 1.0, 1.0, 1.0],
             numbers=[11, 17],
             cell=[5.0, 0.0, 0.0, 0.0, 5.0, 0.0, 0.0, 0.0, 5.0],

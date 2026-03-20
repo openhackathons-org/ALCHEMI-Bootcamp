@@ -12,7 +12,7 @@ from helpers.conformers import (
     filter_by_energy,
     generate_conformers,
 )
-from helpers.models import MDAtomicData, MDReply
+from helpers.models import BMDAtomicData, BMDReply
 
 
 # ---------------------------------------------------------------------------
@@ -91,7 +91,7 @@ class TestVacuumBox:
         centroid = pos.mean(axis=0)
         centred = pos - centroid + BOX_SIZE / 2.0
 
-        md_data = MDAtomicData(
+        md_data = BMDAtomicData(
             coord=centred.flatten().tolist(),
             numbers=numbers,
             cell=[BOX_SIZE, 0, 0, 0, BOX_SIZE, 0, 0, 0, BOX_SIZE],
@@ -254,7 +254,7 @@ class TestCacheValidation:
     def test_md_cache_valid(self, conformer_cache_dir, label):
         if not cache_exists(conformer_cache_dir, label):
             pytest.skip(f"Cache {label} not available")
-        reply = load_cache(conformer_cache_dir, label, MDReply)
+        reply = load_cache(conformer_cache_dir, label, BMDReply)
         assert reply.status == "Success"
         assert len(reply.trajectory) > 0
         energies = np.array([s.energy for s in reply.trajectory])

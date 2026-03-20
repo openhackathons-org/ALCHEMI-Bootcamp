@@ -8,7 +8,7 @@ They are skipped if the respective endpoint is unreachable.
 import pytest
 
 from helpers.api_client import check_endpoint, run_md, run_bgr
-from helpers.models import MDAtomicData, MDConfig
+from helpers.models import BMDAtomicData, BMDConfig
 
 
 @pytest.fixture
@@ -36,13 +36,13 @@ class TestEndpointHealth:
 class TestAPIHelloWorld:
     def test_h2_md_with_box(self, require_endpoint, server_url):
         """H2 molecule in a periodic box — minimal MD run."""
-        h2 = MDAtomicData(
+        h2 = BMDAtomicData(
             coord=[0.0, 0.0, 0.0, 0.0, 0.0, 0.74],
             numbers=[1, 1],
             cell=[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0],
             pbc=[True, True, True],
         )
-        cfg = MDConfig(
+        cfg = BMDConfig(
             temperature=300.0,
             dt=1.0,
             nvt=True,
@@ -57,11 +57,11 @@ class TestAPIHelloWorld:
 
     def test_h2_nonperiodic_fails(self, require_endpoint, server_url):
         """Non-periodic H2 should fail (endpoint requires PBC)."""
-        h2 = MDAtomicData(
+        h2 = BMDAtomicData(
             coord=[0.0, 0.0, 0.0, 0.0, 0.0, 0.74],
             numbers=[1, 1],
         )
-        cfg = MDConfig(
+        cfg = BMDConfig(
             temperature=300.0,
             dt=1.0,
             nvt=True,

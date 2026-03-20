@@ -35,12 +35,12 @@ class TestPackageImports:
 class TestHelperImports:
     def test_models_classes(self):
         from helpers.models import (  # noqa: F401
-            MDAtomicData,
-            MDConfig,
-            MDReply,
-            MDRequest,
-            MDSnapshot,
-            AtomicData,
+            BMDAtomicData,
+            BMDConfig,
+            BMDReply,
+            BMDRequest,
+            BMDSnapshot,
+            BGRAtomicData,
             BGRReply,
             BGRRequest,
             OptimizationResult,
@@ -58,7 +58,7 @@ class TestHelperImports:
             ase_to_atomic_data,
             ase_to_md_atomic_data,
             atomic_data_to_ase,
-            read_structure,
+            read_to_bmd_atomic_data,
         )
 
     def test_cache(self):
@@ -98,7 +98,7 @@ class TestHelperImports:
 
     def test_package_init_exports(self):
         from helpers import (  # noqa: F401
-            MDAtomicData,
+            BMDAtomicData,
             check_endpoint,
             compute_rdf,
             extract_thermo_timeseries,

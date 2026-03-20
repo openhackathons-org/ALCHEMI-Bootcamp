@@ -4,7 +4,7 @@ import json
 import os
 from pathlib import Path
 
-from .models import MDReply, BGRReply
+from .models import BGRReply, BMDReply
 
 
 def _cache_path(cache_dir: str, label: str, ext: str = ".json") -> Path:
@@ -16,7 +16,7 @@ def cache_exists(cache_dir: str, label: str) -> bool:
     return _cache_path(cache_dir, label).is_file()
 
 
-def save_cache(cache_dir: str, label: str, reply: MDReply | BGRReply) -> Path:
+def save_cache(cache_dir: str, label: str, reply: BMDReply | BGRReply) -> Path:
     """Serialise a Pydantic reply to JSON and return the file path."""
     os.makedirs(cache_dir, exist_ok=True)
     path = _cache_path(cache_dir, label)
@@ -24,7 +24,11 @@ def save_cache(cache_dir: str, label: str, reply: MDReply | BGRReply) -> Path:
     return path
 
 
-def load_cache(cache_dir: str, label: str, model_cls: type[MDReply] | type[BGRReply]):
+def load_cache(
+    cache_dir: str,
+    label: str,
+    model_cls: type[BMDReply] | type[BGRReply],
+) -> BMDReply | BGRReply:
     """Deserialise a cached JSON file back into *model_cls*."""
     path = _cache_path(cache_dir, label)
     data = json.loads(path.read_text())

@@ -352,8 +352,8 @@ def build_adsorbate(species: AdsorbateSpecies) -> ase.Atoms:
             return ase.Atoms(
                 "OH2",
                 positions=[
-                    [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                     [0.0, 0.0, 0.0],
+                    [d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                     [-d_oh * np.sin(angle / 2), 0.0, d_oh * np.cos(angle / 2)],
                 ],
             )  # singlet (mult=1 default)
