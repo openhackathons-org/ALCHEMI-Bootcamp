@@ -1,5 +1,8 @@
 """Tests for the OER catalyst screening workflow (surfaces module)."""
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -17,30 +20,33 @@ from helpers.surfaces import (
 )
 from helpers.constants import EV_PER_OER_STEP
 
+_DATA_DIR = Path(__file__).resolve().parent.parent / "data"
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-RUTILE_PARAMS = {
-    "IrO2": ("Ir", 4.499, 3.154, 0.3065),
-    "RuO2": ("Ru", 4.492, 3.107, 0.3058),
-    "TiO2": ("Ti", 4.594, 2.958, 0.3048),
-}
+with open(_DATA_DIR / "rutile_params.json") as _f:
+    RUTILE_PARAMS = json.load(_f)
 
-METAL_Z = {"Ir": 77, "Ru": 44, "Ti": 22}
+with open(_DATA_DIR / "atomic_numbers.json") as _f:
+    ATOMIC_NUMBERS = json.load(_f)
+
+
+def _build(name: str):
+    """Build a rutile bulk from RUTILE_PARAMS by material name."""
+    p = RUTILE_PARAMS[name]
+    return build_rutile_bulk(p["metal"], p["a"], p["c"], p["u"])
 
 
 @pytest.fixture
 def iro2_bulk():
-    metal, a, c, u = RUTILE_PARAMS["IrO2"]
-    return build_rutile_bulk(metal, a, c, u)
+    return _build("IrO2")
 
 
 @pytest.fixture
 def iro2_slab():
-    metal, a, c, u = RUTILE_PARAMS["IrO2"]
-    bulk = build_rutile_bulk(metal, a, c, u)
+    bulk = _build("IrO2")
     return build_slab(
         bulk, (1, 1, 0), min_slab_size=10.0, min_vacuum_size=15.0, supercell=(2, 2, 1)
     )
@@ -63,21 +69,19 @@ class TestRutileBulk:
         assert comp == "IrO2"
 
     def test_ruo2_lattice(self):
-        metal, a, c, u = RUTILE_PARAMS["RuO2"]
-        bulk = build_rutile_bulk(metal, a, c, u)
+        p = RUTILE_PARAMS["RuO2"]
+        bulk = build_rutile_bulk(p["metal"], p["a"], p["c"], p["u"])
         latt = bulk.lattice
-        assert abs(latt.a - a) < 0.01
-        assert abs(latt.c - c) < 0.01
+        assert abs(latt.a - p["a"]) < 0.01
+        assert abs(latt.c - p["c"]) < 0.01
 
     def test_tio2_composition(self):
-        metal, a, c, u = RUTILE_PARAMS["TiO2"]
-        bulk = build_rutile_bulk(metal, a, c, u)
+        bulk = _build("TiO2")
         assert bulk.composition.reduced_formula == "TiO2"
 
     @pytest.mark.parametrize("name", ["IrO2", "RuO2", "TiO2"])
     def test_all_materials_build(self, name):
-        metal, a, c, u = RUTILE_PARAMS[name]
-        bulk = build_rutile_bulk(metal, a, c, u)
+        bulk = _build(name)
         assert len(bulk) == 6
 
 

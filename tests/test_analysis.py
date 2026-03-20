@@ -14,15 +14,15 @@ from helpers.analysis import (
     trajectory_to_ase_list,
 )
 from helpers.cache import cache_exists, load_cache
-from helpers.models import MDAtomicData, MDReply
+from helpers.models import BMDAtomicData, BMDReply
 
 
 def _load_npt_data(cache_dir, nacl_md_atoms):
     """Load NVT + NPT cached data and reconstruct NPT seed atoms."""
-    nvt = load_cache(cache_dir, "nacl_nvt_equil", MDReply)
-    npt = load_cache(cache_dir, "nacl_npt_prod", MDReply)
+    nvt = load_cache(cache_dir, "nacl_nvt_equil", BMDReply)
+    npt = load_cache(cache_dir, "nacl_npt_prod", BMDReply)
     last = nvt.trajectory[-1]
-    npt_atoms = MDAtomicData(
+    npt_atoms = BMDAtomicData(
         coord=last.coord,
         numbers=nacl_md_atoms.numbers,
         cell=last.cell if last.cell else nacl_md_atoms.cell,
@@ -191,10 +191,10 @@ class TestThermalExpansion:
             ):
                 pytest.skip(f"Temperature sweep cache missing for T={T}")
 
-            nvt_r = load_cache(cache_dir, nvt_label, MDReply)
-            npt_r = load_cache(cache_dir, npt_label, MDReply)
+            nvt_r = load_cache(cache_dir, nvt_label, BMDReply)
+            npt_r = load_cache(cache_dir, npt_label, BMDReply)
             s = nvt_r.trajectory[-1]
-            seed = MDAtomicData(
+            seed = BMDAtomicData(
                 coord=s.coord,
                 numbers=nacl_md_atoms.numbers,
                 cell=s.cell if s.cell else nacl_md_atoms.cell,
