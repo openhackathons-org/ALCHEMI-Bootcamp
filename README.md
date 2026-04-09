@@ -26,27 +26,32 @@ Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MA
 
 ### Setup
 
+SSH into your login host, clone the dev branch, and configure your NGC API key:
+
 ```bash
+ssh <login-host>
+git clone -b dev git@github.com:Ryan-Reese/alchemi-playbooks.git
+cd alchemi-playbooks
 cp .env.example .env
 # Edit .env and set NGC_API_KEY=<your-key>
-
-docker compose up
 ```
 
-Access JupyterLab at `http://localhost:8888` and Grafana at `http://localhost:3000` (admin/admin).
-
-### HPC Pipeline
-
-For multi-hop HPC environments (local machine → login node → compute node), use the deployment scripts in `scripts/`:
+Then from your local machine, deploy the stack to a compute node:
 
 ```bash
 # Allocate a GPU node via SLURM
 ./start
+# Note the compute node hostname (e.g., dgx-node-42)
 
-# Deploy the full stack from your local machine
+# Deploy the full stack
 ./scripts/deploy.sh setup <login-host> <compute-node>
+```
 
-# Management
+Access JupyterLab at `http://localhost:8888` and Grafana at `http://localhost:3000` (admin/admin).
+
+### Management
+
+```bash
 ./scripts/deploy.sh status       # Jupyter URL, BGR health, Grafana
 ./scripts/deploy.sh restart      # Sync local changes, restart stack
 ./scripts/deploy.sh pull-changes # Sync remote Jupyter edits to local
