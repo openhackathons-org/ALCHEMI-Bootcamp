@@ -26,24 +26,24 @@ Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MA
 
 ### Setup
 
-SSH into your login host, clone the dev branch, and configure your NGC API key:
+Configure your NGC API key locally:
 
 ```bash
-ssh <login-host>
-git clone -b dev git@github.com:Ryan-Reese/alchemi-playbooks.git
-cd alchemi-playbooks
 cp .env.example .env
 # Edit .env and set NGC_API_KEY=<your-key>
 ```
 
-Then from your local machine, deploy the stack to a compute node:
+SSH into your login host and allocate a GPU node (see `./start` for an example SLURM script):
 
 ```bash
-# Allocate a GPU node via SLURM
+ssh <login-host>
 ./start
 # Note the compute node hostname (e.g., dgx-node-42)
+```
 
-# Deploy the full stack
+Then from your local machine, deploy the full stack:
+
+```bash
 ./scripts/deploy.sh setup <login-host> <compute-node>
 ```
 
