@@ -19,6 +19,3 @@ dependencies:
       - requests>=2.31
       - aiohttp>=3.9
       - ipywidgets>=8.0
-      # Dev dependencies
-      - pytest>=8.0
-      - ruff>=0.4

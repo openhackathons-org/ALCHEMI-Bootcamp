@@ -87,60 +87,28 @@ jupyter notebook alchemi-oer-catalyst-screening.ipynb
 
 The notebook defaults to `FAST_DEMO = False` — it will call a **live BGR endpoint**. Set `FAST_DEMO = True` in the control panel cell to use pre-cached JSON responses in `cached_responses/oer-catalyst-screening/` for fully offline operation. This is recommended for workshop environments without GPU access.
 
-## Container Quick Start (HPC)
+## Docker Quick Start
 
-Run the full BGR NIM + Jupyter + monitoring stack on an HPC compute node.
+Run the BGR NIM + Jupyter + monitoring stack with Docker Compose.
 
 ### Prerequisites
 
 | Requirement | Details |
 |-------------|---------|
 | NGC API key | Get one at [build.nvidia.com](https://build.nvidia.com) |
-| GPU allocation | 2 GPUs via SLURM (1 active for BGR, 1 reserved) |
-| Docker + Compose | `docker compose` (v2 plugin) on the compute node |
-| SSH access | Local machine &rarr; login node &rarr; compute node |
+| Docker + Compose | `docker compose` (v2 plugin) |
+| GPU | NVIDIA GPU with driver support |
 
 ### Setup
 
 ```bash
-# 1. Configure your NGC API key
 cp .env.example .env
 # Edit .env and set NGC_API_KEY=<your-key>
 
-# 2. Allocate a GPU node
-./start
-# Note the compute node hostname (e.g., dgx-node-42)
-
-# 3. Deploy the stack from your local machine
-./scripts/deploy.sh setup <login-host> <compute-node>
+docker compose up
 ```
 
 Access JupyterLab at `http://localhost:8888` and Grafana at `http://localhost:3000` (admin/admin).
-
-### Management
-
-```bash
-./scripts/deploy.sh status       # Jupyter URL, BGR health, Grafana
-./scripts/deploy.sh restart      # Sync local changes, restart stack
-./scripts/deploy.sh pull-changes # Sync remote Jupyter edits to local
-./scripts/deploy.sh stop         # Tear down stack, close tunnels
-```
-
-### BGR NIM Configuration
-
-The Docker Compose stack configures the BGR NIM with:
-
-| Setting | Variable | Value |
-|---------|----------|-------|
-| Model | `ALCHEMI_NIM_MODEL_TYPE` | `mace` (MACE-MPA-0) |
-| Boundary conditions | `ALCHEMI_NIM_PBC` | `true` |
-| Optimizer preset | `ALCHEMI_NIM_BGR_OPTIMIZER_PRESET` | `materials` |
-| Dispersion corrections | `ALCHEMI_NIM_DFT3_ENABLED` | `true` (DFT-D3(BJ)) |
-| Shared memory | `--shm-size` | `8g` |
-
-### Monitoring
-
-Prometheus scrapes BGR metrics at `/v1/metrics`. View them in Grafana at `localhost:3000` (datasource auto-provisioned). The BGR status endpoint is also available at `localhost:8000/v1/status`.
 
 ## Directory Structure
 
@@ -155,13 +123,9 @@ alchemi-playbooks/
 │   ├── surfaces.py                       # Slab construction & adsorbate placement
 │   ├── visualization.py                  # OVITO rendering helpers
 │   └── cache.py                          # Response caching logic
-├── tests/                                # pytest test suite (79 tests across 6 files)
-├── data/                                 # Test fixtures (rutile parameters, atomic numbers)
+├── data/                                 # Data files (rutile parameters, atomic numbers)
 ├── cached_responses/
 │   └── oer-catalyst-screening/           # Pre-cached BGR responses for FAST_DEMO
-├── scripts/                              # Deployment scripts
-│   ├── deploy.sh                         # Local orchestrator (SSH tunnels, setup/stop)
-│   └── docker-dev.sh                     # Remote container management (docker compose)
 ├── monitoring/                           # Observability configuration
 │   ├── prometheus.yml                    # Prometheus scrape config for BGR metrics
 │   └── grafana/datasources/             # Grafana auto-provisioned datasources
@@ -170,10 +134,8 @@ alchemi-playbooks/
 ├── Dockerfile                            # Jupyter container (conda + OVITO)
 ├── docker-compose.yml                    # BGR NIM + Jupyter + Prometheus + Grafana
 ├── .env.example                          # NGC API key template
-├── start                                 # SLURM GPU allocation script
 ├── environment.yml                       # Conda environment spec
-├── requirements.txt                      # Runtime dependencies
-└── requirements-dev.txt                  # Dev dependencies (pytest, ruff)
+└── requirements.txt                      # Runtime dependencies
 ```
 
 ## Key Dependencies
