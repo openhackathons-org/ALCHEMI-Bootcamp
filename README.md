@@ -154,4 +154,4 @@ numpy, ase, pymatgen, pydantic, requests, aiohttp, matplotlib, pandas, ovito
 
 ## License
 
-MIT — see [LICENSE.txt](LICENSE.txt).
+Apache 2.0 — see [LICENSE](LICENSE).
