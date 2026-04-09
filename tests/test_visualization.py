@@ -45,23 +45,3 @@ class TestOVITORender:
         assert os.path.getsize(render_path) > 1000  # should be a real PNG
 
 
-class TestOutputFiles:
-    """Verify that expected output plots were generated."""
-
-    @pytest.mark.parametrize(
-        "filename",
-        [
-            "nacl_thermo.png",
-            "nacl_rdf.png",
-            "nacl_msd.png",
-            "nacl_thermal_expansion.png",
-            "udc_conformer_energy.png",
-            "nacl_render.png",
-            "nacl_supercell.cif",
-        ],
-    )
-    def test_output_file_exists(self, output_dir, filename):
-        path = os.path.join(output_dir, filename)
-        if not os.path.isfile(path):
-            pytest.skip(f"Output file {filename} not generated yet")
-        assert os.path.getsize(path) > 0

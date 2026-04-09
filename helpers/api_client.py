@@ -24,7 +24,7 @@ from .models import (
 
 def check_endpoint(server_url: str, timeout: int = 5) -> bool:
     """Return True if the ALCHEMI endpoint health-check responds 200."""
-    url = f"{server_url}/v2/health/ready"
+    url = f"{server_url}/v1/health/ready"
     try:
         r = requests.get(url, timeout=timeout)
         return r.status_code == 200
