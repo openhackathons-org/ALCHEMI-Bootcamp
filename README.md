@@ -14,17 +14,6 @@
 
 Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks attendees through a complete computational catalyst screening workflow: from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
 
-## Output Showcase
-
-<p align="center">
-  <img src="assets/showcase/electrolysis_diagram.png" alt="Water electrolysis diagram" width="45%"/>
-  <img src="assets/showcase/IrO2_slab_110.png" alt="IrO2 (110) slab visualisation" width="45%"/>
-</p>
-<p align="center">
-  <img src="assets/showcase/eads_heatmap.png" alt="Adsorption energy heatmap" width="45%"/>
-  <img src="assets/showcase/oer_3d_scatter.png" alt="3D OER screening scatter plot" width="45%"/>
-</p>
-
 ## Getting Started
 
 ### Prerequisites
@@ -32,8 +21,8 @@ Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MA
 | Requirement | Details |
 |-------------|---------|
 | NGC API key | Get one at [build.nvidia.com](https://build.nvidia.com) |
-| Docker + Compose | `docker compose` (v2 plugin) |
-| GPU | NVIDIA GPU with driver support |
+| Docker + Compose | `docker compose` (v2 plugin) — used to build and run the container environment |
+| GPU | NVIDIA GPU (tested: A100, H100, B200, L40S, RTX 6000 Ada) |
 
 ### Setup
 
