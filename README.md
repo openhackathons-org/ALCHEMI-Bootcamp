@@ -155,7 +155,8 @@ alchemi-playbooks/
 │   ├── surfaces.py                       # Slab construction & adsorbate placement
 │   ├── visualization.py                  # OVITO rendering helpers
 │   └── cache.py                          # Response caching logic
-├── tests/                                # pytest test suite (167+ tests)
+├── tests/                                # pytest test suite (79 tests across 6 files)
+├── data/                                 # Test fixtures (rutile parameters, atomic numbers)
 ├── cached_responses/
 │   └── oer-catalyst-screening/           # Pre-cached BGR responses for FAST_DEMO
 ├── scripts/                              # Deployment scripts
