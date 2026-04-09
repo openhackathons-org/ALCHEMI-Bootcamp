@@ -1,0 +1,8 @@
+#!/bin/bash
+# Allocate an interactive GPU session on an HPC compute node.
+# 2 GPUs requested to support future multi-GPU / BMD expansion.
+srun \
+    --job-name=alchemi-playbook \
+    --time=4:00:00 \
+    --gres=gpu:2 \
+    --pty $SHELL

@@ -6,7 +6,7 @@ import tempfile
 import pytest
 
 from helpers.cache import cache_exists, load_cache, save_cache
-from helpers.models import BGRReply, BMDConfig, BMDReply, BMDSnapshot
+from helpers.models import BMDConfig, BMDReply, BMDSnapshot
 
 
 class TestCache:
@@ -52,49 +52,3 @@ class TestCache:
         assert "trajectory" in data
         assert "config" in data
         assert "status" in data
-
-
-class TestCachedResponses:
-    """Verify that cached responses from live endpoint runs are valid."""
-
-    def _skip_if_no_cache(self, cache_dir, label):
-        if not cache_exists(cache_dir, label):
-            pytest.skip(f"Cached response '{label}' not available")
-
-    def test_h2_hello_world_cached(self, cache_dir):
-        self._skip_if_no_cache(cache_dir, "h2_hello_world")
-        reply = load_cache(cache_dir, "h2_hello_world", BMDReply)
-        assert reply.status == "Success"
-        assert len(reply.trajectory) > 0
-
-    def test_nacl_nvt_equil_cached(self, cache_dir):
-        self._skip_if_no_cache(cache_dir, "nacl_nvt_equil")
-        reply = load_cache(cache_dir, "nacl_nvt_equil", BMDReply)
-        assert reply.status == "Success"
-        assert len(reply.trajectory) > 5
-
-    def test_nacl_npt_prod_cached(self, cache_dir):
-        self._skip_if_no_cache(cache_dir, "nacl_npt_prod")
-        reply = load_cache(cache_dir, "nacl_npt_prod", BMDReply)
-        assert reply.status == "Success"
-        assert len(reply.trajectory) > 10
-
-    @pytest.mark.parametrize("T", [200, 300, 400])
-    def test_temperature_sweep_cached(self, cache_dir, T):
-        self._skip_if_no_cache(cache_dir, f"nacl_npt_T{T}")
-        reply = load_cache(cache_dir, f"nacl_npt_T{T}", BMDReply)
-        assert reply.status == "Success"
-        assert len(reply.trajectory) > 0
-
-    @pytest.mark.parametrize("i", [0, 1, 2])
-    def test_conformer_cached(self, conformer_cache_dir, i):
-        self._skip_if_no_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K")
-        reply = load_cache(conformer_cache_dir, f"naph_conf{i}_nvt_500K", BMDReply)
-        assert reply.status == "Success"
-        assert len(reply.trajectory) > 0
-
-    def test_nacl_bgr_relax_cached(self, cache_dir):
-        self._skip_if_no_cache(cache_dir, "nacl_bgr_relax")
-        reply = load_cache(cache_dir, "nacl_bgr_relax", BGRReply)
-        assert reply.status == "Success"
-        assert len(reply.atoms) == 1

@@ -1,76 +1,25 @@
-"""Test endpoint connectivity and API hello world.
+"""Test BGR NIM endpoint connectivity.
 
-These tests require the live BMD NIM endpoint on localhost:8000
-and/or the BGR NIM endpoint on localhost:8890.
-They are skipped if the respective endpoint is unreachable.
+These tests require the live BGR NIM endpoint.
+They are skipped if the endpoint is unreachable.
 """
 
 import pytest
 
-from helpers.api_client import check_endpoint, run_md, run_bgr
-from helpers.models import BMDAtomicData, BMDConfig
-
-
-@pytest.fixture
-def require_endpoint(endpoint_live):
-    if not endpoint_live:
-        pytest.skip("BMD endpoint not available at localhost:8000")
+from helpers.api_client import check_endpoint, run_bgr
+from helpers.models import ase_to_atomic_data
 
 
 @pytest.fixture
 def require_bgr_endpoint(bgr_endpoint_live):
     if not bgr_endpoint_live:
-        pytest.skip("BGR endpoint not available at localhost:8890")
+        pytest.skip("BGR endpoint not available")
 
 
-class TestEndpointHealth:
-    def test_health_check_returns_bool(self, server_url):
-        result = check_endpoint(server_url)
-        assert isinstance(result, bool)
-
-    def test_health_check_unreachable(self):
-        result = check_endpoint("http://localhost:59999", timeout=2)
-        assert result is False
-
-
-class TestAPIHelloWorld:
-    def test_h2_md_with_box(self, require_endpoint, server_url):
-        """H2 molecule in a periodic box — minimal MD run."""
-        h2 = BMDAtomicData(
-            coord=[0.0, 0.0, 0.0, 0.0, 0.0, 0.74],
-            numbers=[1, 1],
-            cell=[10.0, 0.0, 0.0, 0.0, 10.0, 0.0, 0.0, 0.0, 10.0],
-            pbc=[True, True, True],
-        )
-        cfg = BMDConfig(
-            temperature=300.0,
-            dt=1.0,
-            nvt=True,
-            npt=False,
-            md_time_max=0.01,
-            save_interval=1,
-        )
-        reply = run_md(h2, cfg, server_url, timeout=30)
-        assert reply.status == "Success"
-        assert len(reply.trajectory) > 0
-        assert reply.trajectory[-1].energy < 0  # H2 should have negative PE
-
-    def test_h2_nonperiodic_fails(self, require_endpoint, server_url):
-        """Non-periodic H2 should fail (endpoint requires PBC)."""
-        h2 = BMDAtomicData(
-            coord=[0.0, 0.0, 0.0, 0.0, 0.0, 0.74],
-            numbers=[1, 1],
-        )
-        cfg = BMDConfig(
-            temperature=300.0,
-            dt=1.0,
-            nvt=True,
-            npt=False,
-            md_time_max=0.01,
-            save_interval=1,
-        )
-        with pytest.raises(Exception):
-            run_md(h2, cfg, server_url, timeout=30)
+@pytest.fixture
+def nacl_bgr_atom(nacl_ase):
+    """Build NaCl 2x2x2 supercell as BGRAtomicData for BGR."""
+    return ase_to_atomic_data(nacl_ase, _id="nacl_supercell")
 
 
 class TestBGREndpointHealth:

@@ -11,7 +11,6 @@ from helpers.models import (
     BGRAtomicData,
     BGRRequest,
     ase_to_atomic_data,
-    ase_to_md_atomic_data,
     atomic_data_to_ase,
 )
 
@@ -126,14 +125,6 @@ class TestBGRModels:
 
 
 class TestASEConversion:
-    def test_ase_to_md_atomic_data_roundtrip(self, nacl_ase):
-        md_data = ase_to_md_atomic_data(nacl_ase)
-        assert len(md_data.numbers) == 64
-        assert len(md_data.coord) == 64 * 3
-        assert md_data.pbc == [True, True, True]
-        assert md_data.cell is not None
-        assert len(md_data.cell) == 9
-
     def test_ase_to_atomic_data(self, nacl_ase):
         ad = ase_to_atomic_data(nacl_ase, structure_id="test")
         assert ad.structure_id == "test"

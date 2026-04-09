@@ -1,0 +1,51 @@
+services:
+  bgr:
+    image: nvcr.io/nim/nvidia/alchemi-bgr:1.0.0
+    network_mode: host
+    shm_size: 8g
+    environment:
+      - NGC_API_KEY=${NGC_API_KEY}
+      - ALCHEMI_NIM_MODEL_TYPE=mace
+      - ALCHEMI_NIM_PBC=true
+      - ALCHEMI_NIM_BGR_OPTIMIZER_PRESET=materials
+      - ALCHEMI_NIM_DFT3_ENABLED=true
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8001/v1/health/ready"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 120s
+
+  jupyter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    network_mode: host
+    environment:
+      - BGR_SERVER=http://localhost:8000
+    volumes:
+      - .:/workspace
+    depends_on:
+      bgr:
+        condition: service_healthy
+
+  prometheus:
+    image: prom/prometheus:latest
+    network_mode: host
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:latest
+    network_mode: host
+    environment:
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+    volumes:
+      - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
