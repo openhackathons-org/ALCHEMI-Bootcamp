@@ -10,7 +10,7 @@ ENV VIRTUAL_ENV=/opt/venv UV_PROJECT_ENVIRONMENT=/opt/venv PATH="/opt/venv/bin:$
 WORKDIR /workspace
 RUN uv pip install "nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git"
 RUN uv pip install torch --reinstall --index-url https://download.pytorch.org/whl/cu130
-RUN uv pip install jupyterlab
+RUN uv pip install jupyterlab jupyterlab-vim
 
 COPY . .
 
