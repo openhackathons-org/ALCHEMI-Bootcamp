@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-REPO_DIR="/tmp/alchemi-playbooks"
-IMAGE="alchemi-playbook-jupyter"
-COMPOSE_PROJECT="alchemi-playbook"
+REPO_DIR="/tmp/alchemi-playbook-part1"
+IMAGE="alchemi-playbook-part1-jupyter"
+COMPOSE_PROJECT="alchemi-playbook-part1"
 
 load_env() {
     if [ -f "$REPO_DIR/.env" ]; then
