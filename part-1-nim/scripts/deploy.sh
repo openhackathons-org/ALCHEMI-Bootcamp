@@ -3,9 +3,9 @@ set -euo pipefail
 
 JUPYTER_LOCAL_PORT="${JUPYTER_LOCAL_PORT:-8888}"
 GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3000}"
-REMOTE_REPO_DIR="/tmp/alchemi-playbooks"
-STATE_FILE="/tmp/alchemi-playbook-deploy.env"
-REMOTE_SCRIPT="/tmp/docker-dev.sh"
+REMOTE_REPO_DIR="/tmp/alchemi-playbook-part1"
+STATE_FILE="/tmp/alchemi-playbook-part1-deploy.env"
+REMOTE_SCRIPT="/tmp/docker-dev-part1.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 
