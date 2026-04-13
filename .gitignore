@@ -1,4 +1,4 @@
-outputs/
+**/outputs/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
@@ -11,4 +11,4 @@ CLAUDE.md
 matplotlib-*/
 tmp*/
 docker-compose.override.yml
-monitoring/grafana/data/
+**/monitoring/grafana/data/
