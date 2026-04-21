@@ -4,9 +4,9 @@ Hands-on tutorials for GPU-accelerated computational chemistry with NVIDIA ALCHE
 
 ## Tutorials
 
-### [Part 1: OER Catalyst Screening with ALCHEMI NIMs](part-1-nim/)
+### [Part 1: Atmospheric Water Harvesting with ALCHEMI NIMs](part-1-nim/)
 
-Screen rutile oxide catalyst surfaces (IrO2, RuO2, TiO2) for oxygen-evolution activity using the ALCHEMI BGR NIM and MACE-MP-0 foundation model. Full Docker Compose stack with Jupyter, Prometheus, and Grafana monitoring.
+Screen six inorganic sorbent frameworks (zeolites, alumina, titania, zirconia) for H₂O adsorption strength using the ALCHEMI BGR NIM and the MACE-MPA-0 foundation model with DFT-D3(BJ) dispersion. Validates against published DFT/CC benchmarks, flags the one host that lacks reference data. Full Docker Compose stack with JupyterLab, Prometheus, and Grafana monitoring.
 
 **Requirements**: NGC API key, NVIDIA GPU, Docker Compose
 
