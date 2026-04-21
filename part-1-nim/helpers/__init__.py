@@ -26,6 +26,20 @@ from .models import (
     ase_to_atomic_data,
     atomic_data_to_ase,
 )
+from .oxide_slabs import (
+    build_alpha_alumina_0001_slab,
+    build_alpha_alumina_bulk,
+    build_monoclinic_zro2_bulk,
+    build_rutile_tio2_bulk,
+    build_tio2_110_slab,
+    build_zro2_m111_slab,
+)
+from .zeolites import (
+    build_h_cha,
+    build_h_sapo34,
+    build_siliceous_cha,
+    build_siliceous_mfi,
+)
 from .surfaces import (
     build_adsorbate,
     build_slab,
@@ -86,4 +100,16 @@ __all__ = [
     "display_widgets_row",
     "display_inline",
     "structure_summary_table",
+    # oxide_slabs
+    "build_alpha_alumina_bulk",
+    "build_rutile_tio2_bulk",
+    "build_monoclinic_zro2_bulk",
+    "build_alpha_alumina_0001_slab",
+    "build_tio2_110_slab",
+    "build_zro2_m111_slab",
+    # zeolites
+    "build_siliceous_cha",
+    "build_siliceous_mfi",
+    "build_h_cha",
+    "build_h_sapo34",
 ]
