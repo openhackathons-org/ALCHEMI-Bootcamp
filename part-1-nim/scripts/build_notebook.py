@@ -238,7 +238,13 @@ for pkg in ("ase", "numpy", "pandas", "matplotlib", "pymatgen", "pydantic",
 ))
 
 cells.append(code(
-    """from helpers import (
+    """import ase
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+from ase.build import molecule as ase_molecule
+
+from helpers import (
     # BGR client + cache
     check_endpoint,
     run_bgr_or_load_cache,
@@ -318,12 +324,15 @@ Send one water molecule through the BGR NIM to (i) confirm the wire protocol and
 
 cells.append(code(
     """def gas_phase_h2o_atoms(box: float = 15.0) -> ase.Atoms:
-    \"\"\"Return a single water molecule centred in a cubic vacuum box.\"\"\"
-    h2o = build_adsorbate("H2O")
-    h2o.set_cell(np.eye(3) * box)
+    \"\"\"Return a single water molecule centred in a cubic vacuum box.
+
+    Uses ASE's canonical H2O geometry (Benedict/Gailer/Plyler 1956:
+    O-H = 0.957 A, H-O-H = 104.5 deg) from ase.build.molecule.
+    \"\"\"
+    h2o = ase_molecule("H2O")
+    h2o.set_cell([box, box, box])
     h2o.set_pbc(True)
-    # centre the oxygen (which is at origin from build_adsorbate) in the box
-    h2o.translate(np.array([box / 2.0, box / 2.0, box / 2.0]))
+    h2o.center()  # centre atoms in the cell (no numpy needed)
     return h2o
 
 
