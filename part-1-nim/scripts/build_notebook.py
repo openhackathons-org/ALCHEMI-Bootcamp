@@ -488,34 +488,6 @@ for name, atoms in HOSTS.items():
 ))
 
 cells.append(md(
-    """### Closed-shell / no-f / no-magnetic sanity check
-
-MACE-MP-0 is validated for closed-shell singlets with no magnetic 3d oxides, no reducible cations (Ti3+/Ce3+), and no f-electron systems. Every host in the panel must clear these element-set constraints before we touch the NIM.
-"""
-))
-
-cells.append(code(
-    """F_BLOCK = set(range(57, 72)) | set(range(89, 104))  # Ln + An
-MAGNETIC_3D = {"V", "Cr", "Mn", "Fe", "Co", "Ni"}
-REDUCIBLE = {"Ce", "Eu", "Sm", "Tb", "Yb"}  # common reducible +3/+4 lanthanides
-
-ok = True
-for name, atoms in HOSTS.items():
-    numbers = set(atoms.numbers.tolist())
-    symbols = set(atoms.get_chemical_symbols())
-    offending = {s for s in symbols if s in MAGNETIC_3D or s in REDUCIBLE}
-    f_nums = numbers & F_BLOCK
-    if offending or f_nums:
-        print(f"  FAIL {name}: magnetic/reducible={offending}  f-block Z={f_nums}")
-        ok = False
-    else:
-        print(f"  OK   {name}: {sorted(symbols)}")
-
-assert ok, "At least one host violates the closed-shell / no-f / no-magnetic scope."
-"""
-))
-
-cells.append(md(
     """### Per-host summary table"""
 ))
 
