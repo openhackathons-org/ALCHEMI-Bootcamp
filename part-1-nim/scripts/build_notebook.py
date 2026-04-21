@@ -588,37 +588,84 @@ bulk_df
 ))
 
 cells.append(md(
-    """### Parity plot: MACE vs experiment
+    """### Parity plot + residuals: MACE vs experiment
 
-One point per (host, lattice vector). The diagonal is y=x; deviations are MACE's systematic offset on bulk lattice constants.
+Two panels from the same data: **left** — parity scatter (diagonal = perfect agreement); **right** — per-axis residual Δ = MACE − experiment in A *and* in percent error. Headline numbers: mean absolute error (MAE) in A and mean absolute percent error (MAPE) across all (host, axis) pairs.
 """
 ))
 
 cells.append(code(
     """import matplotlib.pyplot as plt
 
-fig, ax = plt.subplots(figsize=(5.5, 5.5))
-colors = {"Al2O3": "#1f77b4", "TiO2": "#d62728", "ZrO2-m": "#2ca02c"}
+# Flatten (host, axis) pairs into rows with expt / MACE / residual / % error
+residual_rows = []
 for _, r in bulk_df.iterrows():
     for axis in ("a", "b", "c"):
-        ax.scatter(r[f"{axis}_expt (A)"], r[f"{axis}_MACE (A)"],
-                   color=colors[r["Host"]], s=60, edgecolor="black",
-                   label=f"{r['Host']} {axis}" if axis == "a" else None)
+        e = float(r[f"{axis}_expt (A)"])
+        m = float(r[f"{axis}_MACE (A)"])
+        residual_rows.append({
+            "Host": r["Host"], "Axis": axis,
+            "expt (A)": e, "MACE (A)": m,
+            "Delta (A)": m - e,
+            "|Delta| (mA)": round(abs(m - e) * 1000, 1),
+            "% error": 100.0 * (m - e) / e,
+        })
+res_df = pd.DataFrame(residual_rows)
 
-lo, hi = 2.8, 13.5
-ax.plot([lo, hi], [lo, hi], "k--", lw=1, alpha=0.5)
-ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
-ax.set_xlabel("Experimental lattice constant (A)")
-ax.set_ylabel("MACE-MPA-0 cell-opt (A)")
-ax.set_title("Bulk lattice parity: MACE-MPA-0 vs experiment")
-ax.legend(loc="lower right", fontsize=9)
-ax.grid(True, ls="--", alpha=0.4)
+mae_A = res_df["Delta (A)"].abs().mean()
+mape = res_df["% error"].abs().mean()
+print(f"MAE  = {mae_A*1000:5.1f} mA")
+print(f"MAPE = {mape:5.2f} %")
+
+colors = {"Al2O3": "#1f77b4", "TiO2": "#d62728", "ZrO2-m": "#2ca02c"}
+
+fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5.2))
+
+# --- Parity
+for _, r in res_df.iterrows():
+    ax1.scatter(r["expt (A)"], r["MACE (A)"],
+                color=colors[r["Host"]], s=70, edgecolor="black",
+                label=r["Host"] if r["Axis"] == "a" else None)
+lo, hi = res_df["expt (A)"].min() - 0.5, res_df["expt (A)"].max() + 0.5
+ax1.plot([lo, hi], [lo, hi], "k--", lw=1, alpha=0.5, label="y = x")
+ax1.set_xlim(lo, hi); ax1.set_ylim(lo, hi)
+ax1.set_xlabel("Experimental lattice constant (A)")
+ax1.set_ylabel("MACE-MPA-0 cell-opt (A)")
+ax1.set_title("Parity")
+ax1.legend(loc="lower right", fontsize=9)
+ax1.grid(True, ls="--", alpha=0.4)
+ax1.set_aspect("equal", adjustable="box")
+
+# --- Residual bar chart (% error on y; value labels in mA for absolute scale)
+x_labels = [r["Host"] + "\\n" + r["Axis"] for _, r in res_df.iterrows()]
+x = range(len(res_df))
+bar_colors = [colors[r["Host"]] for _, r in res_df.iterrows()]
+bars = ax2.bar(x, res_df["% error"], color=bar_colors, edgecolor="black")
+ax2.axhline(0, color="k", lw=0.5)
+ax2.axhline(mape, color="#888", ls=":", lw=1, label=f"+MAPE = {mape:.2f}%")
+ax2.axhline(-mape, color="#888", ls=":", lw=1)
+ax2.set_xticks(list(x))
+ax2.set_xticklabels(x_labels, fontsize=9)
+ax2.set_ylabel("% error  (MACE - expt) / expt")
+ax2.set_title(f"Residuals  ·  MAE = {mae_A*1000:.1f} mA  ·  MAPE = {mape:.2f}%")
+ax2.grid(True, axis="y", ls="--", alpha=0.4)
+ax2.legend(loc="upper right", fontsize=9, framealpha=0.9)
+
+# Annotate each bar with the signed mA deviation
+for rect, delta_A in zip(bars, res_df["Delta (A)"]):
+    h = rect.get_height()
+    ax2.text(rect.get_x() + rect.get_width() / 2,
+             h + (0.02 if h >= 0 else -0.02),
+             f"{delta_A*1000:+.0f} mA",
+             ha="center", va="bottom" if h >= 0 else "top", fontsize=8)
+
 fig.tight_layout()
 parity_path = os.path.join(ASSETS_DIR, "bulk_lattice_parity.png")
 fig.savefig(parity_path, dpi=150, bbox_inches="tight")
 plt.close(fig)
 display_inline(parity_path)
 print(f"Saved: {os.path.abspath(parity_path)}")
+res_df[["Host", "Axis", "expt (A)", "MACE (A)", "Delta (A)", "|Delta| (mA)", "% error"]].round(3)
 """
 ))
 
