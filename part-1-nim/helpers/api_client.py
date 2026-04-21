@@ -42,7 +42,7 @@ def run_md(
 
     Unlike the CLI script this does *not* loop-wait; it raises on failure.
     """
-    url = f"{server_url}/infer"
+    url = f"{server_url}/v1/infer"
     payload = BMDRequest(atoms=mdatoms, config=mdconfig).model_dump()
     response = requests.post(url, json=payload, timeout=(10, timeout))
     response.raise_for_status()
@@ -60,7 +60,7 @@ def run_bgr(
     timeout: int = 1800,  # 30 minutes
 ) -> BGRReply:
     """Submit a BGR request and return the parsed reply."""
-    url = f"{server_url}/infer"
+    url = f"{server_url}/v1/infer"
     payload = BGRRequest(
         atoms=atoms_list,
         cellopt=cellopt,
@@ -167,7 +167,7 @@ async def async_run_md(
     """Async equivalent of ``run_md`` using an aiohttp session."""
     import aiohttp as _aiohttp
 
-    url = f"{server_url}/infer"
+    url = f"{server_url}/v1/infer"
     payload = BMDRequest(atoms=mdatoms, config=mdconfig).model_dump()
     # connect timeout must accommodate queueing behind TCPConnector limit
     client_timeout = _aiohttp.ClientTimeout(connect=timeout, total=timeout)
@@ -218,7 +218,7 @@ async def async_run_bgr(
 ) -> BGRReply:
     """Async equivalent of ``run_bgr`` using an aiohttp session."""
 
-    url = f"{server_url}/infer"
+    url = f"{server_url}/v1/infer"
     payload = BGRRequest(atoms=atoms_list, cellopt=cellopt, opttol=opttol).model_dump()
     # connect timeout must accommodate queueing behind TCPConnector limit
     client_timeout = aiohttp.ClientTimeout(connect=timeout, total=timeout)
