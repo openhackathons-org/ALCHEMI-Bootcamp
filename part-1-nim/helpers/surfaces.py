@@ -1,4 +1,4 @@
-"""Slab construction, adsorbate placement, and OER analysis utilities."""
+"""Slab construction, adsorbate placement, and post-relaxation analysis."""
 
 from __future__ import annotations
 
@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Literal
 
 import ase
 import numpy as np
-from ase.neighborlist import NeighborList, natural_cutoffs
 
 from helpers.models import OptimizationResult
 
@@ -14,52 +13,6 @@ if TYPE_CHECKING:
     import pymatgen.core
 
 AdsorbateSpecies = Literal["O", "OH", "H2O", "OOH"]
-
-
-# ---------------------------------------------------------------------------
-# Rutile bulk structure
-# ---------------------------------------------------------------------------
-
-
-def build_rutile_bulk(
-    metal: str,
-    a: float,
-    c: float,
-    u: float = 0.305,
-) -> pymatgen.core.Structure:
-    """Build a rutile bulk structure (P4_2/mnm, #136).
-
-    Parameters
-    ----------
-    metal : str
-        Metal element symbol (e.g. "Ir", "Ru", "Ti").
-    a, c : float
-        Tetragonal lattice parameters in Angstrom.
-    u : float
-        Oxygen internal coordinate (Wyckoff 4f position (u, u, 0)).
-        Typical values: TiO2 ~0.305, RuO2 ~0.306, IrO2 ~0.306.
-
-    References
-    ----------
-    Lattice parameters and internal coordinates from:
-    Bolzan et al., "Powder neutron diffraction study of pyrolusite,
-    beta-MnO2", Acta Cryst. B 53, 373-380 (1997).
-    Shannon, "Revised effective ionic radii and systematic studies of
-    interatomic distances in halides and chalcogenides", Acta Cryst. A
-    32, 751-767 (1976).
-
-    Returns
-    -------
-    pymatgen.core.Structure
-    """
-    from pymatgen.core import Lattice, Structure
-
-    return Structure.from_spacegroup(
-        136,
-        Lattice.tetragonal(a, c),
-        [metal, "O"],
-        [[0.0, 0.0, 0.0], [u, u, 0.0]],
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -82,7 +35,7 @@ def build_slab(
     Parameters
     ----------
     bulk : pymatgen Structure
-        Bulk crystal (e.g. from build_rutile_bulk).
+        Bulk crystal (pymatgen Structure).
     miller_index : tuple
         Miller index, e.g. (1, 1, 0).
     min_slab_size : float
@@ -164,99 +117,8 @@ def make_active_mask(
 
 
 # ---------------------------------------------------------------------------
-# Site identification on rutile (110)
+# Site identification
 # ---------------------------------------------------------------------------
-
-
-def find_cus_sites(
-    atoms: ase.Atoms,
-    metal_z: int,
-    cutoff_mult: float = 1.2,
-) -> np.ndarray:
-    """Locate coordinatively unsaturated (cus) metal sites on the surface.
-
-    On rutile (110), cus metals are 5-fold coordinated (one missing oxygen
-    neighbour compared to bulk 6-fold coordination).  This function finds
-    metal atoms in the top half of the slab with fewer than 6 oxygen
-    neighbours.
-
-    Parameters
-    ----------
-    atoms : ase.Atoms
-        Slab structure.
-    metal_z : int
-        Atomic number of the metal (e.g. 77 for Ir).
-    cutoff_mult : float
-        Multiplier for natural_cutoffs neighbour search.
-
-    Returns
-    -------
-    np.ndarray shape (N, 3) — positions of all cus metal sites.
-    """
-    cutoffs = natural_cutoffs(atoms, mult=cutoff_mult)
-    nl = NeighborList(cutoffs, self_interaction=False, bothways=True)
-    nl.update(atoms)
-
-    metal_idx = [i for i, z in enumerate(atoms.numbers) if z == metal_z]
-    if not metal_idx:
-        raise ValueError(f"No atoms with Z={metal_z} found in structure.")
-
-    z_coords = atoms.positions[metal_idx, 2]
-    z_mid = (z_coords.min() + z_coords.max()) / 2.0
-
-    cus_positions = []
-    for i in metal_idx:
-        if atoms.positions[i, 2] < z_mid:
-            continue  # skip bottom side of catalyst slab
-        indices, _ = nl.get_neighbors(i)
-        n_oxygen = sum(1 for j in indices if atoms.numbers[j] == 8)
-        if n_oxygen < 6:
-            cus_positions.append(atoms.positions[i].copy())
-
-    if not cus_positions:
-        # Fallback: return the topmost metal atom
-        top_idx = metal_idx[np.argmax(z_coords)]
-        cus_positions.append(atoms.positions[top_idx].copy())
-
-    return np.array(cus_positions)
-
-
-def find_bridge_site(
-    atoms: ase.Atoms,
-    metal_z: int,
-    cutoff_mult: float = 1.2,
-) -> np.ndarray:
-    """Find the bridge site between two adjacent cus metal atoms.
-
-    Returns the midpoint of the two closest cus sites on the surface.
-
-    Parameters
-    ----------
-    atoms : ase.Atoms
-        Slab structure.
-    metal_z : int
-        Atomic number of the metal.
-    cutoff_mult : float
-        Multiplier for natural_cutoffs.
-
-    Returns
-    -------
-    np.ndarray shape (3,) — Cartesian position of the bridge site.
-    """
-    cus = find_cus_sites(atoms, metal_z, cutoff_mult)
-    if len(cus) < 2:
-        raise ValueError("Need at least 2 cus sites for a bridge position.")
-
-    from itertools import combinations
-
-    best_pair, best_dist = None, np.inf
-    for i, j in combinations(range(len(cus)), 2):
-        d = np.linalg.norm(cus[i] - cus[j])
-        if d < best_dist:
-            best_dist = d
-            best_pair = (i, j)
-
-    return (cus[best_pair[0]] + cus[best_pair[1]]) / 2.0
 
 
 def find_central_site(positions: np.ndarray, cell: np.ndarray) -> np.ndarray:
@@ -265,7 +127,7 @@ def find_central_site(positions: np.ndarray, cell: np.ndarray) -> np.ndarray:
     Parameters
     ----------
     positions : np.ndarray shape (N, 3)
-        Candidate site positions (e.g. from ``find_cus_sites``).
+        Candidate site positions (N x 3) on the surface.
     cell : np.ndarray shape (3, 3)
         Unit cell matrix.
 
@@ -276,18 +138,6 @@ def find_central_site(positions: np.ndarray, cell: np.ndarray) -> np.ndarray:
     center_xy = (cell[0, :2] + cell[1, :2]) / 2.0
     dists = np.linalg.norm(positions[:, :2] - center_xy, axis=1)
     return positions[np.argmin(dists)].copy()
-
-
-def find_site(slab: ase.Atoms, mz: int, site: str) -> np.ndarray:
-    match site:
-        case "cus":
-            return find_central_site(find_cus_sites(slab, mz), slab.cell.array)
-
-        case "bridge":
-            return find_bridge_site(slab, mz)
-
-        case _:
-            raise ValueError(f"Unknown site: {site!r}")
 
 
 # ---------------------------------------------------------------------------

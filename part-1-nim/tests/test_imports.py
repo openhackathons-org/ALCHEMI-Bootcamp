@@ -65,10 +65,11 @@ class TestHelperImports:
 
     def test_surfaces(self):
         from helpers.surfaces import (  # noqa: F401
-            build_rutile_bulk,
             build_slab,
             build_adsorbate,
             place_adsorbate,
+            find_central_site,
+            compute_adsorption_energy,
         )
 
     def test_package_init_exports(self):
@@ -77,6 +78,7 @@ class TestHelperImports:
             check_endpoint,
             run_bgr_or_load_cache,
             structure_summary_table,
-            build_rutile_bulk,
-            EV_PER_OER_STEP,
+            build_slab,
+            place_adsorbate,
+            KJ_MOL_TO_EV,
         )

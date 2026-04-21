@@ -1,4 +1,4 @@
-"""Shared fixtures for ALCHEMI OER Catalyst Screening tests."""
+"""Shared fixtures for ALCHEMI NIM tutorial tests."""
 
 import os
 import sys
@@ -9,7 +9,6 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 PLAYBOOK_DIR = os.path.join(os.path.dirname(__file__), "..")
-CACHE_DIR_OER = os.path.join(PLAYBOOK_DIR, "cached_responses", "oer-catalyst-screening")
 OUTPUT_DIR = os.path.join(PLAYBOOK_DIR, "outputs")
 BGR_SERVER_URL = "http://localhost:8000"
 
@@ -45,8 +44,3 @@ def nacl_ase():
     )
     nacl.make_supercell((2, 2, 2))
     return AseAtomsAdaptor().get_atoms(nacl)
-
-
-@pytest.fixture
-def oer_cache_dir():
-    return CACHE_DIR_OER

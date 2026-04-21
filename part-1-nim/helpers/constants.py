@@ -9,9 +9,5 @@ P_CONV = 1.602176634e6  # eV/A^3 -> Bar
 AMU_TO_G = 1.66054e-24  # atomic mass unit -> grams
 ANGSTROM3_TO_CM3 = 1e-24  # A^3 -> cm^3
 KCAL_MOL_TO_EV = 0.0434  # kcal/mol -> eV
-
-# ---------------------------------------------------------------------------
-# OER thermodynamics
-# ---------------------------------------------------------------------------
-EV_PER_OER_STEP = 1.23  # Ideal OER step free energy (eV) = 4.92 / 4
-# Ref: Rossmeisl et al., J. Electroanal. Chem. 607, 83-89 (2007).
+KJ_MOL_TO_EV = 0.01036427  # kJ/mol -> eV (exact to 7 sig figs)
+EV_TO_KJ_MOL = 1.0 / KJ_MOL_TO_EV  # eV -> kJ/mol
