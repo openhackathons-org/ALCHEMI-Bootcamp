@@ -976,6 +976,71 @@ print(f"Saved: {os.path.abspath(disc_path)}")
 
 
 # ---------------------------------------------------------------------------
+# Section 15: Discovery narrative + scope limits + references
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## Discovery narrative
+
+Reading the discovery plot with scientific honesty (not marketing):
+
+**Winner (experimentally validated):** H-SAPO-34 sits in the kJ/mol range that the AQSOA FAM-Z02 commercial datasheet reports for its water-uptake sweet spot, and within the PBE-D3 envelope from Fischer 2015. "H-SAPO-34 agrees with Fischer 2015 within the Zeolite sub-category MAD" is defensible; "MACE predicts H-SAPO-34 is the best AWH sorbent" is not - commercial AWH performance depends on capacity at relevant partial pressure and on regeneration energy, neither of which E_ads alone captures.
+
+**Candidate for the lab:** ZrO2(-1,1,1) lands in the Ionic-class E_ads range MACE predicts for Al2O3 and TiO2, but no published DFT or experimental number backs this up at tutorial scope. The ±MAD band drawn in the discovery plot (361 meV ≈ 35 kJ/mol) is wide enough to cover both "promising" and "nothing special" interpretations. What this *is*: a reproducible, second-level screening signal that ZrO2 is within the physisorption regime and worth a DFT follow-up (or a synthesis/uptake experiment).
+
+**Tier-2 cross-check:** H-MFI. MACE vs Plessow CCSD(T)/CBS is the strictest test in the panel because the reference itself has no DFT approximation error. A delta well inside 1× MAD here is more meaningful than a similar delta on the Tier-1 hosts.
+
+**Bad binders:** None in the panel binds so weakly that it is ruled out outright. The non-winners simply cluster around the commercial-sorbent envelope (H-CHA, H-MFI) or at slightly stronger binding (alpha-Al2O3, TiO2) that would likely require higher regeneration temperatures.
+
+The fact that MACE-MPA-0 places all six hosts in the physically reasonable range - no runaway binders, no implausibly weak ones - is itself a zeroth-order consistency check against MPtrj training coverage.
+"""
+))
+
+cells.append(md(
+    """## Scope limits: what this notebook did NOT establish
+
+- **No free-energy / finite-temperature story.** E_ads reported here is electronic energy only. AWH sorbents are evaluated at 298 K with finite water partial pressure. A full isotherm requires MD + configurational + rotational + translational entropy corrections; those are out of scope at tutorial runtime (single A100, one hour).
+- **No multi-H2O loading.** We placed one water per host. Cluster formation and cooperative hydrogen-bonding effects at higher loading are qualitatively different physics and were deliberately excluded.
+- **No framework flexibility at high temperature.** The clean-host relaxation is at 0 K; real AWH operates between regeneration (~100 degC) and uptake (~30 degC). Thermal expansion of the framework changes pore shape.
+- **Long-range dispersion beyond 12 A** is outside MACE-MP-0's receptive field. D3(BJ) adds some of this back but does not fully close the gap.
+- **Proton-transfer watch-item.** On H-CHA / H-SAPO-34 in particular, the starting geometry places H2O with its oxygen 2.5 A from a Bronsted proton; if the optimiser transfers the proton to the water (yielding a Zundel-like ion pair) that is real chemistry but not the same minimum as the Plessow / Fischer references, which report the *undissociated* state. The orientation-consistency cell above is the first line of defence; any E_ads well outside the published range should trigger a manual inspection of the final geometry.
+- **Surface-reconstruction watch-item.** On ZrO2(-1,1,1) an aggressive relaxation could pull the top layer into a different surface termination; the tutorial's bottom-half `active_mask` mitigates this but does not preclude it.
+- **MPtrj gaps.** MACE-MP-0's training set contains no gas-phase molecules, no surface slabs, and no MOFs. We computed E_ads as a *difference*, which cancels the leading-order gas-phase offset; the residual is what the S24 MADs quantify.
+
+If you want any of the above, the natural next steps are: (i) ALCHEMI's BMD NIM for molecular dynamics-based free energies, (ii) DFT reference calculations on the most interesting MACE hit (typically the Tier-4 host), (iii) experimental uptake measurements for the commercial candidates.
+"""
+))
+
+cells.append(md(
+    """## References
+
+All reference values used in this notebook are collected in `helpers.references.REFERENCES`; the provenance string and DOI (where known) travel with each datum.
+
+1. Batatia, I. *et al.* "A foundation model for atomistic materials chemistry." arXiv:[2401.00096v3](https://arxiv.org/abs/2401.00096) (2024). Source for the S24 panel, OC157 panel, A.31 protocol, and the sub-category MADs used above (Table S4).
+2. Plessow, P. N. "Ab initio calculations on the adsorption of water in zeolites." *J. Phys. Chem. C* (2024). CCSD(T)/CBS H2O on H-MFI site-by-site binding energies; Tier-2 reference.
+3. Anderson, A. *et al.* "MACE-MP-0 for zeolite/water systems." *Phys. Chem. Chem. Phys.* (2025). Independent MACE benchmark on H-MFI/water.
+4. Fischer, M. "Structure and water adsorption on AlPO-based chabazite and SAPO-34: a DFT study." *J. Phys. Chem. C* (2015). CP2K PBE-D3 H2O on SAPO-34; Tier-3 reference.
+5. Furukawa, H. *et al.* "Water adsorption in porous metal-organic frameworks and related materials." *J. Am. Chem. Soc.* **136**, 4369-4381 (2014). MOF AWH baseline context (explicitly out of scope for this MPtrj-trained foundation model).
+6. Kim, H. *et al.* "Water harvesting from air with metal-organic frameworks powered by natural sunlight." *Science* **356**, 430-434 (2017). MOF-801 field-scale demonstration; background.
+7. Grimme, S. *et al.* "Effect of the damping function in dispersion corrected density functional theory." *J. Comput. Chem.* **32**, 1456-1465 (2011). D3(BJ) dispersion correction used by MACE-MP-0 + torch-dftd3.
+8. Stukowski, A. "Visualization and analysis of atomistic simulation data with OVITO." *Model. Simul. Mater. Sci. Eng.* **18**, 015012 (2010). Structure visualisation.
+9. Baerlocher, C. & McCusker, L. B. **Database of Zeolite Structures** (IZA-SC). http://www.iza-structure.org/databases/ - source CIFs for CHA and MFI frameworks.
+10. Lewis, J., Schwarzenbach, D. & Flack, H. D. "Refinement of the atomic parameters of corundum." *Acta Cryst. B* **38**, 1018-1019 (1982). alpha-Al2O3 bulk lattice parameters.
+11. Bolzan, A. A., Fong, C., Kennedy, B. J. & Howard, C. J. "Powder neutron diffraction study of pyrolusite, beta-MnO2." *Acta Cryst. B* **53**, 373-380 (1997). TiO2 rutile lattice parameters.
+12. Howard, C. J., Hill, R. J. & Reichert, B. E. "Structures of ZrO2 polymorphs at room temperature by high-resolution neutron powder diffraction." *Acta Cryst. B* **44**, 116-120 (1988). Monoclinic ZrO2 (baddeleyite) lattice parameters.
+
+The previous iteration of this tutorial (OER catalyst screening on rutile oxides with an overlapping infrastructure stack) is archived under [`_archive/oer-catalyst-screening/`](_archive/oer-catalyst-screening/) and remains runnable by copying the files back to the tutorial root.
+
+---
+
+*End of notebook.*
+"""
+))
+
+
+# ---------------------------------------------------------------------------
 # Serialise
 # ---------------------------------------------------------------------------
 
