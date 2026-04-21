@@ -4,5 +4,6 @@
 srun \
     --job-name=alchemi-playbook \
     --time=4:00:00 \
+    --constraint=aarch64 \
     --gres=gpu:2 \
     --pty $SHELL
