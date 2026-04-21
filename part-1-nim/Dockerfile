@@ -11,7 +11,9 @@ COPY environment.yml .
 RUN conda env create -f environment.yml && conda clean -afy
 
 SHELL ["conda", "run", "-n", "alchemi-playbook", "/bin/bash", "-c"]
-RUN pip install jupyterlab jupyterlab-vim
+RUN pip install jupyterlab jupyterlab-vim ipykernel
+RUN python -m ipykernel install --name alchemi-playbook \
+    --display-name "Python 3 (alchemi-playbook)"
 
 COPY . .
 

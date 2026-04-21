@@ -1112,7 +1112,7 @@ notebook = {
         "kernelspec": {
             "display_name": "Python 3 (alchemi-playbook)",
             "language": "python",
-            "name": "python3",
+            "name": "alchemi-playbook",
         },
         "language_info": {
             "name": "python",
