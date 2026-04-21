@@ -885,6 +885,97 @@ cells.append(md(
 
 
 # ---------------------------------------------------------------------------
+# Section 13: MACE self-consistency across H2O starting orientations
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## MACE self-consistency across orientations
+
+For each host, plot the relaxed E(host+H2O) as a function of the starting orientation. Tight clustering (spread < few meV) = MACE converges to the same local minimum from different starts; outliers flag proton transfer, wrong site, or a metastable basin.
+"""
+))
+
+cells.append(code(
+    """fig, ax = plt.subplots(figsize=(8, 4.5))
+for i, name in enumerate(HOST_NAMES):
+    e_series = [E_HOST_H2O[(name, o)] - (E_HOST[name] + E_H2O_gas) for o in ORIENTATIONS_DEG]
+    e_series_kj = [e * EV_TO_KJ_MOL for e in e_series]
+    ax.scatter([i] * len(e_series_kj), e_series_kj, s=60, alpha=0.7, label=name)
+    # mark the minimum with a larger marker
+    e_min = min(e_series_kj)
+    ax.scatter([i], [e_min], s=120, facecolors="none", edgecolors="black", lw=1.5)
+
+ax.set_xticks(range(len(HOST_NAMES)))
+ax.set_xticklabels(HOST_NAMES, rotation=25, ha="right")
+ax.set_ylabel("E_ads (kJ/mol) per starting orientation")
+ax.set_title("Orientation-level self-consistency (outlined marker = reported lowest)")
+ax.grid(True, ls="--", alpha=0.4)
+fig.tight_layout()
+orient_path = os.path.join(ASSETS_DIR, "orientation_consistency.png")
+fig.savefig(orient_path, dpi=150, bbox_inches="tight")
+plt.close(fig)
+display_inline(orient_path)
+print(f"Saved: {os.path.abspath(orient_path)}")
+"""
+))
+
+
+# ---------------------------------------------------------------------------
+# Section 14: Discovery plot - MACE E_ads vs published references
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """## Discovery plot
+
+Hosts ordered by MACE E_ads (most exothermic at the top). Markers show MACE; horizontal bars show the published DFT/CC reference where it exists, with a ±sub-category-MAD band for Tier-1 hosts. Tier-4 ZrO2 appears MACE-only.
+"""
+))
+
+cells.append(code(
+    """order = sorted(HOST_NAMES, key=lambda n: E_ADS_EV[n] * EV_TO_KJ_MOL)
+y = list(range(len(order)))
+
+fig, ax = plt.subplots(figsize=(8.5, 5.5))
+
+# MACE points
+for i, name in enumerate(order):
+    e_kj = E_ADS_EV[name] * EV_TO_KJ_MOL
+    ax.plot([e_kj], [i], "o", color="#1f77b4", markersize=10, zorder=3, label="MACE-MPA-0" if i == 0 else None)
+
+# DFT/CC references + MAD band
+for i, name in enumerate(order):
+    ref = get_reference(name)
+    if ref is None:
+        continue
+    ax.plot([ref.value_kj_mol], [i], "D", color="#d62728", markersize=9, zorder=3,
+            label=f"Reference (Tier {ref.tier})" if i == 0 else None)
+    if ref.s24_class is not None:
+        mad_meV = get_mad_meV(ref.s24_class)
+        mad_kj = mad_meV * 1e-3 * EV_TO_KJ_MOL  # meV -> kJ/mol
+        ax.barh(i, 2 * mad_kj, left=ref.value_kj_mol - mad_kj, height=0.25,
+                color="#d62728", alpha=0.15, zorder=1,
+                label=f"±MAD ({ref.s24_class})" if i == 0 else None)
+
+ax.set_yticks(y)
+ax.set_yticklabels([f"{n} (T{TIER[n]})" for n in order])
+ax.set_xlabel("E_ads (kJ/mol)   —   more negative = stronger binding")
+ax.set_title("Discovery plot: MACE-MPA-0 vs published references, ±S24 MAD")
+ax.axvline(0, color="k", lw=0.5)
+ax.grid(True, axis="x", ls="--", alpha=0.4)
+ax.legend(loc="lower right", fontsize=9, framealpha=0.9)
+fig.tight_layout()
+disc_path = os.path.join(ASSETS_DIR, "discovery_plot.png")
+fig.savefig(disc_path, dpi=150, bbox_inches="tight")
+plt.close(fig)
+display_inline(disc_path)
+print(f"Saved: {os.path.abspath(disc_path)}")
+"""
+))
+
+
+# ---------------------------------------------------------------------------
 # Serialise
 # ---------------------------------------------------------------------------
 
