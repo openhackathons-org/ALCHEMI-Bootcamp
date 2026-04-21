@@ -677,48 +677,62 @@ res_df[["Host", "Axis", "expt (A)", "MACE (A)", "Delta (A)", "|Delta| (mA)", "% 
 cells.append(md(
     """---
 
-## Clean host relaxation: all six in one BGR call
+## Clean host relaxation: six concurrent BGR calls with per-host progress
 
-Six structures - three zeolite bulks and three oxide slabs - submitted as a single BGR request with `cellopt=False`. Oxide slabs carry an `active_mask` that freezes the bottom half of each slab (standard idiom: lock bulk-like layers, let the top surface rearrange). Zeolite bulks relax without constraint.
+Six structures — three zeolite bulks and three oxide slabs — submitted as **six concurrent** `/v1/infer` calls and awaited with `asyncio.gather`. Each host gets its own cache file (`clean_<host>.json`) and its own tqdm progress tick so you can see which host lands when and who lags.
 
-Caches as `clean_hosts.json`.
+Oxide slabs carry an `active_mask` that freezes the bottom half of each slab (standard idiom: lock bulk-like layers, let the top surface rearrange). Zeolite bulks relax without constraint.
+
+Batch-in-one-call parallelism is still demonstrated elsewhere (throughput sweep in §6, 24-config H2O batch in §11); here, spreading across HTTP requests buys per-host observability while the NIM server batches internally anyway.
 """
 ))
 
 cells.append(code(
-    """HOST_NAMES = list(HOSTS.keys())
+    """import asyncio, aiohttp
+from tqdm.auto import tqdm
+
+HOST_NAMES = list(HOSTS.keys())
 IS_SLAB = {
     "H-CHA": False, "H-SAPO-34": False, "H-MFI": False,
     "Al2O3(0001)": True, "TiO2(110)": True, "ZrO2(-1,1,1)": True,
 }
 
-active_masks: dict[str, list[bool] | None] = {}
-for name, atoms in HOSTS.items():
-    if IS_SLAB[name]:
-        active_masks[name] = make_active_mask(atoms, bottom_fraction=0.5)
-    else:
-        active_masks[name] = None  # zeolite bulks relax unconstrained
+def _safe_label(name: str) -> str:
+    return name.replace("(", "_").replace(")", "").replace(",", "_")
 
-clean_atoms_list = [
-    ase_to_atomic_data(HOSTS[name], structure_id=f"clean_{name.replace('(', '_').replace(')', '')}",
-                       active_mask=active_masks[name])
-    for name in HOST_NAMES
-]
 
-reply_clean = run_bgr_or_load_cache(
-    clean_atoms_list,
-    server_url=BGR_SERVER,
-    cache_dir=CACHE_DIR,
-    label="clean_hosts",
-    endpoint_live=BGR_LIVE,
-    cellopt=False,
-    opttol=OPTTOL,
-)
+async def _relax_one(name, atoms, session):
+    mask = make_active_mask(atoms, bottom_fraction=0.5) if IS_SLAB[name] else None
+    data = ase_to_atomic_data(atoms, structure_id=f"clean_{_safe_label(name)}",
+                              active_mask=mask)
+    reply = await async_run_bgr_or_load_cache(
+        [data], server_url=BGR_SERVER, session=session,
+        cache_dir=CACHE_DIR,
+        label=f"clean_{_safe_label(name)}",
+        endpoint_live=BGR_LIVE, cellopt=False, opttol=OPTTOL,
+    )
+    return name, reply.atoms[0]
+
+
+async def _relax_all():
+    connector = aiohttp.TCPConnector(limit=len(HOST_NAMES))
+    async with aiohttp.ClientSession(connector=connector) as session:
+        tasks = [asyncio.create_task(_relax_one(n, HOSTS[n], session)) for n in HOST_NAMES]
+        results = {}
+        with tqdm(total=len(tasks), desc="Relaxing clean hosts", ncols=80) as pbar:
+            for coro in asyncio.as_completed(tasks):
+                name, opt = await coro
+                results[name] = opt
+                pbar.set_postfix_str(f"done: {name}")
+                pbar.update(1)
+    return [results[n] for n in HOST_NAMES]  # preserve original order
+
+clean_opts = await _relax_all()
 
 clean_rows = []
 E_HOST = {}
 HOST_RELAXED: dict[str, ase.Atoms] = {}
-for name, opt in zip(HOST_NAMES, reply_clean.atoms):
+for name, opt in zip(HOST_NAMES, clean_opts):
     relaxed = atomic_data_to_ase(opt)
     HOST_RELAXED[name] = relaxed
     E_HOST[name] = float(opt.energy)
