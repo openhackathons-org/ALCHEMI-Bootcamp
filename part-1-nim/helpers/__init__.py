@@ -26,6 +26,13 @@ from .models import (
     ase_to_atomic_data,
     atomic_data_to_ase,
 )
+from .references import (
+    REFERENCES,
+    S24_SUBCATEGORY_MAD_MEV,
+    AdsorptionReference,
+    get_mad_meV,
+    get_reference,
+)
 from .oxide_slabs import (
     build_alpha_alumina_0001_slab,
     build_alpha_alumina_bulk,
@@ -123,4 +130,10 @@ __all__ = [
     "measure_batch_throughput",
     "sweep_batch_throughput",
     "plot_throughput",
+    # references
+    "AdsorptionReference",
+    "REFERENCES",
+    "S24_SUBCATEGORY_MAD_MEV",
+    "get_reference",
+    "get_mad_meV",
 ]

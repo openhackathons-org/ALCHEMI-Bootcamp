@@ -199,6 +199,9 @@ cells.append(code(
     display_inline, structure_summary_table,
     # Throughput scan
     measure_batch_throughput, sweep_batch_throughput, plot_throughput,
+    # Reference data
+    REFERENCES, S24_SUBCATEGORY_MAD_MEV,
+    get_reference, get_mad_meV,
     # Constants
     KJ_MOL_TO_EV, EV_TO_KJ_MOL,
 )
@@ -793,6 +796,90 @@ for k, opt in zip(batch_keys, reply_h2o_batch.atoms):
     })
 h2o_df = pd.DataFrame(h2o_rows)
 h2o_df.pivot_table(index="Host", columns="Orient (deg)", values="E_host+H2O (eV)").round(3)
+"""
+))
+
+
+# ---------------------------------------------------------------------------
+# Section 12: Per-host E_ads + apples-to-apples comparison with published DFT/CC
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## Per-host adsorption energies and DFT/CC comparison
+
+For every host, pick the lowest-energy orientation from the 24-configuration batch and compute
+
+$$
+E_{ads} = E(\\text{host} + \\text{H}_2\\text{O}) - E(\\text{host}) - E(\\text{H}_2\\text{O, gas})
+$$
+
+Negative E_ads = favourable binding. We report in kJ/mol (convention in the AWH literature) and compare each host against its validation-tier reference:
+
+- **Tier 1** (H-CHA, Al2O3(0001), TiO2(110)) - S24 PBE-D3(BJ) checkpoint; delta expressed in meV and as a fraction of the published sub-category MAD.
+- **Tier 2** (H-MFI) - Plessow 2024 CCSD(T)/CBS per-site.
+- **Tier 3** (H-SAPO-34) - Fischer 2015 CP2K PBE-D3 per-site.
+- **Tier 4** (ZrO2(-1,1,1)) - no published reference; reported bare, with the Ionic-class MAD as an illustrative uncertainty band.
+"""
+))
+
+cells.append(code(
+    """# For each host pick the orientation with the lowest E(host+H2O)
+BEST_ORIENT: dict[str, int] = {}
+for name in HOST_NAMES:
+    orient_energies = {o: E_HOST_H2O[(name, o)] for o in ORIENTATIONS_DEG}
+    BEST_ORIENT[name] = min(orient_energies, key=orient_energies.get)
+
+# Compute E_ads (eV and kJ/mol)
+E_ADS_EV: dict[str, float] = {}
+for name in HOST_NAMES:
+    e_hh = E_HOST_H2O[(name, BEST_ORIENT[name])]
+    E_ADS_EV[name] = compute_adsorption_energy(e_hh, E_HOST[name], E_H2O_gas)
+
+ads_rows = []
+for name in HOST_NAMES:
+    e_ev = E_ADS_EV[name]
+    e_kj = e_ev * EV_TO_KJ_MOL
+    ref = get_reference(name)
+    if ref is None:
+        delta_kj = float("nan")
+        delta_mad = float("nan")
+        ref_str = "(no published reference - Tier 4)"
+        mad_meV = S24_SUBCATEGORY_MAD_MEV["Ionic"]  # illustrative band
+    else:
+        delta_kj = e_kj - ref.value_kj_mol
+        if ref.s24_class is not None:
+            mad_meV = get_mad_meV(ref.s24_class)
+            delta_meV = delta_kj * KJ_MOL_TO_EV * 1000.0
+            delta_mad = delta_meV / mad_meV
+        else:
+            mad_meV = None
+            delta_mad = float("nan")
+        ref_str = ref.ref
+    ads_rows.append({
+        "Host": name,
+        "Tier": TIER[name],
+        "Orient": BEST_ORIENT[name],
+        "E_ads MACE (eV)": round(e_ev, 4),
+        "E_ads MACE (kJ/mol)": round(e_kj, 1),
+        "E_ads ref (kJ/mol)": round(ref.value_kj_mol, 1) if ref else None,
+        "Delta (kJ/mol)": round(delta_kj, 1) if ref else None,
+        "Delta / MAD": round(delta_mad, 2) if mad_meV else None,
+        "Reference": ref_str,
+    })
+ads_df = pd.DataFrame(ads_rows)
+ads_df
+"""
+))
+
+cells.append(md(
+    """### Quick read of the deltas
+
+- **Tier 1** MACE-vs-DFT deltas within ±1 MAD are "at the level of the paper's own benchmark noise"; deltas in (1, 2] MAD are consistent with S24 performance; >2 MAD warrants a root-cause look (proton transfer? surface reconstruction? wrong site?).
+- **Tier 2** (H-MFI vs CCSD(T)) is the stricter test - CCSD(T) has no DFT-induced error, so any MACE-vs-Plessow delta is fully MACE's own.
+- **Tier 3** (H-SAPO-34) the reference method itself is PBE-D3; MACE being close to Fischer's number means "MACE reproduces a consistent PBE-D3 picture", not ground truth.
+- **Tier 4** (ZrO2) the MACE number stands alone; the Ionic-MAD uncertainty band is indicative not quantitative.
 """
 ))
 
