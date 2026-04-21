@@ -225,18 +225,15 @@ cells.append(md(
 
 cells.append(code(
     """import sys
-import ase
-import numpy as np
-import pandas as pd
-import matplotlib
-import pymatgen
+from importlib.metadata import version as _pkgver
 
 print(f"Python     : {sys.version.split()[0]}")
-print(f"ase        : {ase.__version__}")
-print(f"numpy      : {np.__version__}")
-print(f"pandas     : {pd.__version__}")
-print(f"matplotlib : {matplotlib.__version__}")
-print(f"pymatgen   : {pymatgen.__version__}")
+for pkg in ("ase", "numpy", "pandas", "matplotlib", "pymatgen", "pydantic",
+            "requests", "aiohttp", "ipywidgets", "ovito"):
+    try:
+        print(f"{pkg:<10} : {_pkgver(pkg)}")
+    except Exception as e:
+        print(f"{pkg:<10} : NOT INSTALLED ({type(e).__name__})")
 """
 ))
 
