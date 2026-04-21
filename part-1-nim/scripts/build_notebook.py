@@ -125,6 +125,71 @@ cells.append(md(
 Edit once; all downstream cells read from here."""
 ))
 
+cells.append(md(
+    """> **DEV-ONLY CELL — trim before the tutorial cluster run.**
+>
+> Spin up the BGR NIM on the local workstation (`ws-loc` in the author's
+> setup: RTX 4000 SFF Ada, Docker Desktop / Docker Engine, WSL2). The
+> production workflow on the workshop cluster uses
+> `./scripts/deploy.sh setup <login-host> <compute-node>` instead; that
+> path is documented in the top-level README and should replace this
+> cell once the tutorial ships.
+>
+> Prereqs on `ws-loc`:
+>
+> 1. `docker` + `docker compose` v2 plugin installed, GPU passthrough
+>    (`nvidia-smi` works from inside a CUDA container).
+> 2. `.env` file with `NGC_API_KEY=<key>` at the repo root of
+>    `~/projects/tutorials/part-1-nim/`.
+> 3. NGC login cached (or the compose stack will `docker login nvcr.io`
+>    on first `up`).
+>
+> The commands below are shell (`!`-prefixed), executed in the Jupyter
+> kernel's current working directory — i.e., `part-1-nim/`.
+"""
+))
+
+cells.append(code(
+    """%%bash
+# NGC login (no-op if already logged in; the .env var drives it)
+set -euo pipefail
+if [ -f .env ]; then set -a; . .env; set +a; fi
+if [ -z "${NGC_API_KEY:-}" ]; then
+    echo "ERROR: NGC_API_KEY not set. Add it to .env before running this cell."
+    exit 1
+fi
+echo "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
+
+# Start only the BGR service (we don't need Prometheus/Grafana for the
+# notebook to work). Use 'docker compose up -d' (no --build) for the
+# first run so the NIM image is pulled from NGC; build the jupyter
+# service explicitly only if you plan to run Jupyter in-container.
+docker compose up -d bgr
+
+# Wait for readiness (up to 5 min; MACE-MPA-0 weights are ~1 GB)
+echo "Waiting for BGR /v1/health/ready ..."
+for i in $(seq 1 60); do
+    if curl -sf http://localhost:8000/v1/health/ready >/dev/null; then
+        echo "BGR is ready after ${i}x5s"
+        break
+    fi
+    sleep 5
+done
+
+# Health summary
+curl -s http://localhost:8000/v1/health/ready || true
+echo
+docker compose ps bgr
+"""
+))
+
+cells.append(md(
+    """*Teardown after the tutorial:* `!docker compose down` tears the NIM
+container down. Any trimming step for the workshop cluster should
+remove both the markdown above and the `%%bash` cell that follows it.*
+"""
+))
+
 cells.append(code(
     """import os
 
