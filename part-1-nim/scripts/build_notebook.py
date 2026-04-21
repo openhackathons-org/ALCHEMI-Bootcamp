@@ -470,6 +470,178 @@ cells.append(code(
 
 
 # ---------------------------------------------------------------------------
+# Section 8: Bulk cell-optimisation for the oxide hosts
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## Bulk cell optimisation for the three oxide hosts
+
+Before cleaving slabs we want to know whether MACE-MPA-0 reproduces the published experimental lattice parameters for each oxide bulk. This is the Batatia 2024 Fig. A.6-style sanity check: tight agreement on bulk lattice constants is a prerequisite for trusting the surface chemistry on top.
+
+Zeolites are skipped - the IZA CIFs were already DLS76-optimised under a pure-SiO2 composition, and re-relaxing them with MACE at this tutorial scope is needlessly expensive for the discovery story.
+"""
+))
+
+cells.append(code(
+    """from helpers.oxide_slabs import (
+    build_alpha_alumina_bulk, build_rutile_tio2_bulk, build_monoclinic_zro2_bulk,
+)
+from pymatgen.io.ase import AseAtomsAdaptor
+
+# Experimental references (same lattice parameters used in the bulk builders)
+EXPT_LATTICE = {
+    "Al2O3":  {"a": 4.7607, "b": 4.7607, "c": 12.9947, "ref": "Lewis 1982"},
+    "TiO2":   {"a": 4.594,  "b": 4.594,  "c": 2.958,   "ref": "Bolzan 1997"},
+    "ZrO2-m": {"a": 5.1454, "b": 5.2075, "c": 5.3107,  "ref": "Howard 1988"},
+}
+
+BULKS_PMG = {
+    "Al2O3":  build_alpha_alumina_bulk(),
+    "TiO2":   build_rutile_tio2_bulk(),
+    "ZrO2-m": build_monoclinic_zro2_bulk(),
+}
+BULKS_ASE = {k: AseAtomsAdaptor().get_atoms(s) for k, s in BULKS_PMG.items()}
+for k, a in BULKS_ASE.items():
+    a.pbc = True
+"""
+))
+
+cells.append(code(
+    """bulk_labels = list(BULKS_ASE.keys())
+bulk_atoms_data = [ase_to_atomic_data(BULKS_ASE[k], structure_id=f"bulk_{k}") for k in bulk_labels]
+
+reply_bulks = run_bgr_or_load_cache(
+    bulk_atoms_data,
+    server_url=BGR_SERVER,
+    cache_dir=CACHE_DIR,
+    label="oxide_bulks_cellopt",
+    endpoint_live=BGR_LIVE,
+    cellopt=True,
+    opttol=OPTTOL,
+)
+
+rows = []
+for k, opt in zip(bulk_labels, reply_bulks.atoms):
+    atoms_relaxed = atomic_data_to_ase(opt)
+    a, b, c = atoms_relaxed.cell.lengths()
+    ref = EXPT_LATTICE[k]
+    rows.append({
+        "Host": k,
+        "a_MACE (A)": round(a, 3), "a_expt (A)": ref["a"], "Δa (A)": round(a - ref["a"], 3),
+        "b_MACE (A)": round(b, 3), "b_expt (A)": ref["b"], "Δb (A)": round(b - ref["b"], 3),
+        "c_MACE (A)": round(c, 3), "c_expt (A)": ref["c"], "Δc (A)": round(c - ref["c"], 3),
+        "converged": opt.converged,
+    })
+bulk_df = pd.DataFrame(rows)
+bulk_df
+"""
+))
+
+cells.append(md(
+    """### Parity plot: MACE vs experiment
+
+One point per (host, lattice vector). The diagonal is y=x; deviations are MACE's systematic offset on bulk lattice constants.
+"""
+))
+
+cells.append(code(
+    """import matplotlib.pyplot as plt
+
+fig, ax = plt.subplots(figsize=(5.5, 5.5))
+colors = {"Al2O3": "#1f77b4", "TiO2": "#d62728", "ZrO2-m": "#2ca02c"}
+for _, r in bulk_df.iterrows():
+    for axis in ("a", "b", "c"):
+        ax.scatter(r[f"{axis}_expt (A)"], r[f"{axis}_MACE (A)"],
+                   color=colors[r["Host"]], s=60, edgecolor="black",
+                   label=f"{r['Host']} {axis}" if axis == "a" else None)
+
+lo, hi = 2.8, 13.5
+ax.plot([lo, hi], [lo, hi], "k--", lw=1, alpha=0.5)
+ax.set_xlim(lo, hi); ax.set_ylim(lo, hi)
+ax.set_xlabel("Experimental lattice constant (A)")
+ax.set_ylabel("MACE-MPA-0 cell-opt (A)")
+ax.set_title("Bulk lattice parity: MACE-MPA-0 vs experiment")
+ax.legend(loc="lower right", fontsize=9)
+ax.grid(True, ls="--", alpha=0.4)
+fig.tight_layout()
+parity_path = os.path.join(ASSETS_DIR, "bulk_lattice_parity.png")
+fig.savefig(parity_path, dpi=150, bbox_inches="tight")
+plt.close(fig)
+display_inline(parity_path)
+print(f"Saved: {os.path.abspath(parity_path)}")
+"""
+))
+
+
+# ---------------------------------------------------------------------------
+# Section 9: Clean host relaxation (all 6 in one batch)
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## Clean host relaxation: all six in one BGR call
+
+Six structures - three zeolite bulks and three oxide slabs - submitted as a single BGR request with `cellopt=False`. Oxide slabs carry an `active_mask` that freezes the bottom half of each slab (standard idiom: lock bulk-like layers, let the top surface rearrange). Zeolite bulks relax without constraint.
+
+Caches as `clean_hosts.json`.
+"""
+))
+
+cells.append(code(
+    """HOST_NAMES = list(HOSTS.keys())
+IS_SLAB = {
+    "H-CHA": False, "H-SAPO-34": False, "H-MFI": False,
+    "Al2O3(0001)": True, "TiO2(110)": True, "ZrO2(-1,1,1)": True,
+}
+
+active_masks: dict[str, list[bool] | None] = {}
+for name, atoms in HOSTS.items():
+    if IS_SLAB[name]:
+        active_masks[name] = make_active_mask(atoms, bottom_fraction=0.5)
+    else:
+        active_masks[name] = None  # zeolite bulks relax unconstrained
+
+clean_atoms_list = [
+    ase_to_atomic_data(HOSTS[name], structure_id=f"clean_{name.replace('(', '_').replace(')', '')}",
+                       active_mask=active_masks[name])
+    for name in HOST_NAMES
+]
+
+reply_clean = run_bgr_or_load_cache(
+    clean_atoms_list,
+    server_url=BGR_SERVER,
+    cache_dir=CACHE_DIR,
+    label="clean_hosts",
+    endpoint_live=BGR_LIVE,
+    cellopt=False,
+    opttol=OPTTOL,
+)
+
+clean_rows = []
+E_HOST = {}
+HOST_RELAXED: dict[str, ase.Atoms] = {}
+for name, opt in zip(HOST_NAMES, reply_clean.atoms):
+    relaxed = atomic_data_to_ase(opt)
+    HOST_RELAXED[name] = relaxed
+    E_HOST[name] = float(opt.energy)
+    fmax = float(np.max(np.linalg.norm(np.array(opt.forces).reshape(-1, 3), axis=1)))
+    clean_rows.append({
+        "Host": name,
+        "atoms": len(relaxed),
+        "converged": opt.converged,
+        "n_steps": opt.num_optimization_steps,
+        "max |F| (eV/A)": round(fmax, 4),
+        "E_host (eV)": round(E_HOST[name], 4),
+    })
+pd.DataFrame(clean_rows)
+"""
+))
+
+
+# ---------------------------------------------------------------------------
 # Serialise
 # ---------------------------------------------------------------------------
 
