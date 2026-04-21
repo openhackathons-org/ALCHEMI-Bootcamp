@@ -1173,5 +1173,33 @@ notebook = {
 }
 
 out_path = Path(__file__).resolve().parent.parent / "alchemi-mace-water-sorbents.ipynb"
+
+# Preserve outputs from the existing ipynb on disk (if any).
+# For each generated cell, if the source at the same position in the
+# previous file matches exactly, carry over its outputs + execution_count.
+# If the source differs, leave outputs empty (stale). This keeps cells
+# that the user has already executed from being wiped when we regen for
+# an unrelated downstream cell change.
+if out_path.exists():
+    try:
+        prev = json.loads(out_path.read_text())
+        prev_cells = prev.get("cells", [])
+        preserved = 0
+        for i, c in enumerate(notebook["cells"]):
+            if c["cell_type"] != "code":
+                continue
+            if i >= len(prev_cells):
+                break
+            pc = prev_cells[i]
+            if pc.get("cell_type") != "code":
+                continue
+            if c.get("source") == pc.get("source"):
+                c["outputs"] = pc.get("outputs", [])
+                c["execution_count"] = pc.get("execution_count")
+                preserved += 1
+        print(f"Preserved outputs for {preserved} unchanged cells")
+    except (json.JSONDecodeError, KeyError, IndexError) as e:
+        print(f"[warn] could not merge previous ipynb: {e}; regenerating fresh")
+
 out_path.write_text(json.dumps(notebook, indent=1) + "\n")
 print(f"Wrote {len(cells)} cells to {out_path}")
