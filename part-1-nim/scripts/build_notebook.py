@@ -372,6 +372,104 @@ The rest of the notebook drops from structures-per-second into scientific-discov
 ))
 
 # ---------------------------------------------------------------------------
+# Section 7: Host construction
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## Six-host panel: construction and visualisation
+
+Build all six hosts from reproducible recipes, then inspect each as an interactive 3-D OVITO widget. The zeolites are bulk 3-D frameworks (H2O will be placed *inside* the pore network, not on a cleaved surface); the oxides are slabs with vacuum (H2O sits on the top surface).
+"""
+))
+
+cells.append(code(
+    """HOSTS: dict[str, ase.Atoms] = {
+    # Zeolites (3-D bulk frameworks, no slab/vacuum)
+    "H-CHA":       build_h_cha(),
+    "H-SAPO-34":   build_h_sapo34(),
+    "H-MFI":       build_siliceous_mfi(),
+    # Oxide slabs (vacuum along c-axis)
+    "Al2O3(0001)": build_alpha_alumina_0001_slab(min_slab_size=8.0, min_vacuum_size=15.0),
+    "TiO2(110)":   build_tio2_110_slab(min_slab_size=8.0, min_vacuum_size=15.0, supercell=(2, 2, 1)),
+    "ZrO2(-1,1,1)": build_zro2_m111_slab(min_slab_size=8.0, min_vacuum_size=15.0),
+}
+
+# Tier labels (for later reporting)
+TIER = {
+    "H-CHA": 1, "Al2O3(0001)": 1, "TiO2(110)": 1,
+    "H-MFI": 2,
+    "H-SAPO-34": 3,
+    "ZrO2(-1,1,1)": 4,
+}
+
+for name, atoms in HOSTS.items():
+    comp = {s: atoms.get_chemical_symbols().count(s) for s in sorted(set(atoms.get_chemical_symbols()))}
+    formula = " ".join(f"{s}{n}" for s, n in comp.items())
+    print(f"  {name:<14}  atoms={len(atoms):>4}  cell={atoms.cell.lengths().round(2).tolist()}  {formula}")
+"""
+))
+
+cells.append(md(
+    """### Closed-shell / no-f / no-magnetic sanity check
+
+MACE-MP-0 is validated for closed-shell singlets with no magnetic 3d oxides, no reducible cations (Ti3+/Ce3+), and no f-electron systems. Every host in the panel must clear these element-set constraints before we touch the NIM.
+"""
+))
+
+cells.append(code(
+    """F_BLOCK = set(range(57, 72)) | set(range(89, 104))  # Ln + An
+MAGNETIC_3D = {"V", "Cr", "Mn", "Fe", "Co", "Ni"}
+REDUCIBLE = {"Ce", "Eu", "Sm", "Tb", "Yb"}  # common reducible +3/+4 lanthanides
+
+ok = True
+for name, atoms in HOSTS.items():
+    numbers = set(atoms.numbers.tolist())
+    symbols = set(atoms.get_chemical_symbols())
+    offending = {s for s in symbols if s in MAGNETIC_3D or s in REDUCIBLE}
+    f_nums = numbers & F_BLOCK
+    if offending or f_nums:
+        print(f"  FAIL {name}: magnetic/reducible={offending}  f-block Z={f_nums}")
+        ok = False
+    else:
+        print(f"  OK   {name}: {sorted(symbols)}")
+
+assert ok, "At least one host violates the closed-shell / no-f / no-magnetic scope."
+"""
+))
+
+cells.append(md(
+    """### Per-host summary table"""
+))
+
+cells.append(code(
+    """rows = []
+for name, atoms in HOSTS.items():
+    row = structure_summary_table(atoms).iloc[0].to_dict()
+    row = {"Host": name, "Tier": TIER[name], **row}
+    rows.append(row)
+pd.DataFrame(rows)
+"""
+))
+
+cells.append(md(
+    """### Interactive 3-D views
+
+OVITO widgets (drag to rotate, scroll to zoom). Oxide slabs show their vacuum gap; zeolites show their full 3-D pore networks.
+"""
+))
+
+cells.append(code(
+    """display_widgets_row(
+    [(name, atoms) for name, atoms in HOSTS.items()],
+    width="260px", height="260px",
+)
+"""
+))
+
+
+# ---------------------------------------------------------------------------
 # Serialise
 # ---------------------------------------------------------------------------
 
