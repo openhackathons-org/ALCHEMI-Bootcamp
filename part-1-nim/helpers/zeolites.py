@@ -173,6 +173,17 @@ def build_h_cha(t_site_index: int | None = None) -> ase.Atoms:
     return _substitute_al_and_protonate(build_siliceous_cha(), t_site_index)
 
 
+def build_h_mfi(t_site_index: int | None = None) -> ase.Atoms:
+    """Build H-MFI (aluminosilicate silicalite with one Bronsted site).
+
+    Starts from siliceous MFI and substitutes one Si with Al, placing a
+    compensating proton on the closest bridging oxygen. This is the
+    Tier-2 reference host whose H2O binding is benchmarked in Plessow
+    2024 (CCSD(T)/CBS) and Anderson 2025 (MACE).
+    """
+    return _substitute_al_and_protonate(build_siliceous_mfi(), t_site_index)
+
+
 def build_h_sapo34(t_site_index: int | None = None) -> ase.Atoms:
     """Build an H-SAPO-34 approximation (CHA topology, single Bronsted site).
 

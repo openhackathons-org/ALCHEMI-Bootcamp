@@ -186,7 +186,7 @@ cells.append(code(
     ase_to_atomic_data, atomic_data_to_ase,
     # Host builders
     build_siliceous_cha, build_siliceous_mfi,
-    build_h_cha, build_h_sapo34,
+    build_h_cha, build_h_mfi, build_h_sapo34,
     build_alpha_alumina_0001_slab, build_tio2_110_slab, build_zro2_m111_slab,
     # Adsorbate + slab helpers
     build_adsorbate, place_adsorbate, make_active_mask,
@@ -389,7 +389,7 @@ cells.append(code(
     # Zeolites (3-D bulk frameworks, no slab/vacuum)
     "H-CHA":       build_h_cha(),
     "H-SAPO-34":   build_h_sapo34(),
-    "H-MFI":       build_siliceous_mfi(),
+    "H-MFI":       build_h_mfi(),
     # Oxide slabs (vacuum along c-axis)
     "Al2O3(0001)": build_alpha_alumina_0001_slab(min_slab_size=8.0, min_vacuum_size=15.0),
     "TiO2(110)":   build_tio2_110_slab(min_slab_size=8.0, min_vacuum_size=15.0, supercell=(2, 2, 1)),
@@ -637,6 +637,162 @@ for name, opt in zip(HOST_NAMES, reply_clean.atoms):
         "E_host (eV)": round(E_HOST[name], 4),
     })
 pd.DataFrame(clean_rows)
+"""
+))
+
+
+# ---------------------------------------------------------------------------
+# Section 10: H2O placement across multiple starting orientations
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """---
+
+## H2O placement and starting orientations
+
+Per the brief's §9 watch-item: *don't overfit to one starting guess*. For each host we generate four independent starting configurations by rotating the H2O dipole around the placement site, then let MACE relax each. The per-host lowest-energy orientation is the one we report.
+
+Placement rules:
+
+- **Zeolite bulks (H-CHA, H-SAPO-34, H-MFI)** - H2O is placed near the Bronsted proton (O of H2O ~2.5 A from the framework H) to probe the acid-water interaction that Plessow/Fischer/Anderson all benchmark.
+- **Oxide slabs (Al2O3, TiO2, ZrO2)** - H2O is placed above the most-central top-surface metal atom at 2.4 A along the surface normal, using :func:`helpers.surfaces.place_adsorbate`.
+
+Orientations are 0, 90, 180, 270 degrees about the adsorbate's z-axis, applied to a base water with its dipole pointing up.
+"""
+))
+
+cells.append(code(
+    """ORIENTATIONS_DEG = [0, 90, 180, 270]
+
+
+def _rotate_about_z(atoms: ase.Atoms, deg: float) -> ase.Atoms:
+    out = atoms.copy()
+    if abs(deg) > 1e-6:
+        out.rotate(deg, "z", center=atoms.positions[0])  # rotate about the bonding O
+    return out
+
+
+def _find_bronsted_proton_index(atoms: ase.Atoms) -> int | None:
+    \"\"\"Return index of the Bronsted H (H closest to a framework O near Al).\"\"\"
+    symbols = atoms.get_chemical_symbols()
+    h_indices = [i for i, s in enumerate(symbols) if s == "H"]
+    return h_indices[0] if len(h_indices) == 1 else None
+
+
+def place_h2o_in_zeolite(host: ase.Atoms, orient_deg: float,
+                         o_h_distance: float = 2.5) -> ase.Atoms:
+    \"\"\"Place H2O with its oxygen pointing at the Bronsted proton.\"\"\"
+    h2o = build_adsorbate("H2O")
+    h2o = _rotate_about_z(h2o, orient_deg)
+    h_idx = _find_bronsted_proton_index(host)
+    if h_idx is None:
+        # No Bronsted H (pure siliceous): place at cell centre.
+        target = host.cell.array.sum(axis=0) / 2.0
+        direction = np.array([0.0, 0.0, 1.0])
+    else:
+        # Point from proton outward along the proton-to-cell-centre vector
+        cell_centre = host.cell.array.sum(axis=0) / 2.0
+        v = cell_centre - host.positions[h_idx]
+        direction = v / (np.linalg.norm(v) + 1e-12)
+        target = host.positions[h_idx] + o_h_distance * direction
+    # Translate H2O so the oxygen (atom 0) sits at *target*
+    h2o.translate(target - h2o.positions[0])
+    combined = host.copy() + h2o
+    return combined
+
+
+def place_h2o_on_slab(slab: ase.Atoms, orient_deg: float, height: float = 2.4) -> tuple[ase.Atoms, list[bool]]:
+    \"\"\"Place H2O above the central top-surface site of an oxide slab.\"\"\"
+    z = slab.positions[:, 2]
+    top_mask = z > (z.min() + 0.75 * (z.max() - z.min()))  # top 25%
+    top_positions = slab.positions[top_mask]
+    if len(top_positions) == 0:
+        raise ValueError("No atoms in top 25% of slab.")
+    site = find_central_site(top_positions, slab.cell.array)
+    h2o = build_adsorbate("H2O")
+    h2o = _rotate_about_z(h2o, orient_deg)
+    combined, mask = place_adsorbate(slab, h2o, site, height=height, frozen_fraction=0.5)
+    return combined, mask
+
+
+# Build 24 (host x orientation) configurations
+CONFIGS: dict[tuple[str, int], dict] = {}
+for name, atoms in HOSTS.items():
+    for deg in ORIENTATIONS_DEG:
+        if IS_SLAB[name]:
+            combined, mask = place_h2o_on_slab(HOST_RELAXED[name], deg)
+        else:
+            combined = place_h2o_in_zeolite(HOST_RELAXED[name], deg)
+            mask = None
+        CONFIGS[(name, deg)] = {"atoms": combined, "mask": mask}
+
+print(f"Built {len(CONFIGS)} host+H2O configurations")
+"""
+))
+
+cells.append(md(
+    """### Visualise the four H-CHA orientations (sanity check)
+
+A quick look at one host - H-CHA - in its four starting H2O orientations. The water oxygen sits ~2.5 A from the Bronsted proton; the hydrogens rotate around it.
+"""
+))
+
+cells.append(code(
+    """display_widgets_row(
+    [(f"{ORIENTATIONS_DEG[i]} deg", CONFIGS[("H-CHA", ORIENTATIONS_DEG[i])]["atoms"])
+     for i in range(4)],
+    width="230px", height="230px",
+)
+"""
+))
+
+
+# ---------------------------------------------------------------------------
+# Section 11: Host + H2O batch relaxation (24 structures in one call)
+# ---------------------------------------------------------------------------
+
+cells.append(md(
+    """## Host + H2O batch relaxation
+
+All 24 configurations submitted as a single BGR call. Caches as `host_h2o_batch.json`.
+"""
+))
+
+cells.append(code(
+    """batch_keys = list(CONFIGS.keys())
+batch_atoms_data = [
+    ase_to_atomic_data(
+        CONFIGS[k]["atoms"],
+        structure_id=f"{k[0].replace('(', '_').replace(')', '')}_orient{k[1]}",
+        active_mask=CONFIGS[k]["mask"],
+    )
+    for k in batch_keys
+]
+
+reply_h2o_batch = run_bgr_or_load_cache(
+    batch_atoms_data,
+    server_url=BGR_SERVER,
+    cache_dir=CACHE_DIR,
+    label="host_h2o_batch",
+    endpoint_live=BGR_LIVE,
+    cellopt=False,
+    opttol=OPTTOL,
+)
+
+h2o_rows = []
+E_HOST_H2O: dict[tuple[str, int], float] = {}
+for k, opt in zip(batch_keys, reply_h2o_batch.atoms):
+    E_HOST_H2O[k] = float(opt.energy)
+    fmax = float(np.max(np.linalg.norm(np.array(opt.forces).reshape(-1, 3), axis=1)))
+    h2o_rows.append({
+        "Host": k[0], "Orient (deg)": k[1],
+        "converged": opt.converged,
+        "n_steps": opt.num_optimization_steps,
+        "max |F| (eV/A)": round(fmax, 4),
+        "E_host+H2O (eV)": round(E_HOST_H2O[k], 4),
+    })
+h2o_df = pd.DataFrame(h2o_rows)
+h2o_df.pivot_table(index="Host", columns="Orient (deg)", values="E_host+H2O (eV)").round(3)
 """
 ))
 

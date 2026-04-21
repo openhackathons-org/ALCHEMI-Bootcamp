@@ -36,6 +36,7 @@ from .oxide_slabs import (
 )
 from .zeolites import (
     build_h_cha,
+    build_h_mfi,
     build_h_sapo34,
     build_siliceous_cha,
     build_siliceous_mfi,
@@ -116,6 +117,7 @@ __all__ = [
     "build_siliceous_cha",
     "build_siliceous_mfi",
     "build_h_cha",
+    "build_h_mfi",
     "build_h_sapo34",
     # throughput
     "measure_batch_throughput",
