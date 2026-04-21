@@ -391,10 +391,12 @@ The sweep caches its results in `cached_responses/water-sorbents/throughput_swee
 ))
 
 cells.append(code(
-    """# Doubling series; cap at 2^14 = 16384 to keep tutorial-added compute
-# under a few minutes on an A100. Raise the cap if you want to chase
-# the real ceiling.
-SIZES = [2 ** k for k in range(0, 15)]  # 1, 2, 4, ..., 16384
+    """# Doubling series; cap at 2^13 = 8192 - measured on an RTX PRO 6000
+# Blackwell (ws-loc) this already puts the per-call wall time at ~14 s
+# with throughput near 580 struct/s (plateau / GPU-compute regime).
+# Raise the cap if you want to chase a higher-memory card's real
+# ceiling; lower it if you want a faster tutorial run.
+SIZES = [2 ** k for k in range(0, 14)]  # 1, 2, 4, ..., 8192
 
 throughput_cache = os.path.join(CACHE_DIR, "throughput_sweep.json")
 results = sweep_batch_throughput(
