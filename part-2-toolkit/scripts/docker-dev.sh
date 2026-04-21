@@ -4,7 +4,18 @@ set -euo pipefail
 TUTORIAL_DIR="/tmp/alchemi-playbook-part2"
 IMAGE="alchemi-playbook-part2"
 CONTAINER="alchemi-playbook-part2"
-PORT="${PORT:-8890}"
+PORT="${PORT:-8889}"
+
+detect_port() {
+    local url port
+    url=$(docker logs "$CONTAINER" 2>&1 \
+        | grep -oE 'http://127\.0\.0\.1:[0-9]+/lab\?token=[a-z0-9]+' \
+        | tail -1) || true
+    if [ -n "$url" ]; then
+        port=$(echo "$url" | grep -oE ':[0-9]+' | tr -d ':')
+        echo "JUPYTER_PORT=${port}"
+    fi
+}
 
 cmd_start() {
     if [ ! -d "$TUTORIAL_DIR" ]; then
@@ -25,6 +36,7 @@ cmd_start() {
     echo "Container started."
     sleep 3
     cmd_status
+    detect_port
 }
 
 cmd_rebuild() {
@@ -40,6 +52,7 @@ cmd_rebuild() {
     echo "Container rebuilt and started."
     sleep 3
     cmd_status
+    detect_port
 }
 
 cmd_restart() {

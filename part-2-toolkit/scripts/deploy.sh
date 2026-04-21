@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-LOCAL_PORT="${LOCAL_PORT:-8890}"
-REMOTE_PORT="${REMOTE_PORT:-8890}"
+LOCAL_PORT="${LOCAL_PORT:-8889}"
+REMOTE_PORT="${REMOTE_PORT:-8889}"
 STATE_FILE="/tmp/alchemi-playbook-part2-deploy.env"
 REMOTE_SCRIPT="/tmp/docker-dev-part2.sh"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -20,16 +20,17 @@ Commands:
   stop                                  Close tunnel and stop container
 
 Environment variables:
-  LOCAL_PORT    Local port for Jupyter (default: 8890)
-  REMOTE_PORT   Remote port for Jupyter (default: 8890)
+  LOCAL_PORT    Local port for Jupyter (default: 8889)
+  REMOTE_PORT   Remote port for Jupyter (default: 8889)
 EOF
     exit 1
 }
 
 save_state() {
     cat > "$STATE_FILE" <<EOF
-LOGIN_HOST=$1
-COMPUTE_NODE=$2
+LOGIN_HOST=${LOGIN_HOST}
+COMPUTE_NODE=${COMPUTE_NODE}
+REMOTE_PORT=${REMOTE_PORT}
 EOF
 }
 
@@ -44,6 +45,16 @@ load_state() {
 
 remote_exec() {
     ssh -J "$LOGIN_HOST" "$COMPUTE_NODE" "$@"
+}
+
+update_port_from_output() {
+    local output="$1"
+    local actual_port
+    actual_port=$(echo "$output" | grep '^JUPYTER_PORT=' | tail -1 | cut -d= -f2) || true
+    if [ -n "$actual_port" ] && [ "$actual_port" != "$REMOTE_PORT" ]; then
+        echo "Note: Jupyter started on port ${actual_port} (requested ${REMOTE_PORT})"
+        REMOTE_PORT="$actual_port"
+    fi
 }
 
 open_tunnel() {
@@ -78,6 +89,7 @@ copy_files() {
         --exclude='.git' \
         --exclude='.claude' \
         --exclude='outputs' \
+        --exclude='logs' \
         --exclude='__pycache__' \
         --exclude='.ipynb_checkpoints' \
         --exclude='.DS_Store' \
@@ -91,7 +103,6 @@ cmd_setup() {
     [ -z "${1:-}" ] || [ -z "${2:-}" ] && usage
     LOGIN_HOST="$1"
     COMPUTE_NODE="$2"
-    save_state "$LOGIN_HOST" "$COMPUTE_NODE"
 
     copy_files
 
@@ -99,7 +110,12 @@ cmd_setup() {
     scp -o ProxyJump="$LOGIN_HOST" "$SCRIPT_DIR/docker-dev.sh" "${COMPUTE_NODE}:${REMOTE_SCRIPT}"
 
     echo "Building and starting container on ${COMPUTE_NODE}..."
-    remote_exec "PORT=${REMOTE_PORT} bash ${REMOTE_SCRIPT}"
+    local output
+    output=$(remote_exec "PORT=${REMOTE_PORT} bash ${REMOTE_SCRIPT}")
+    echo "$output"
+    update_port_from_output "$output"
+
+    save_state
 
     echo "Opening SSH tunnel..."
     open_tunnel
@@ -113,7 +129,17 @@ cmd_restart() {
     echo "Syncing local changes to ${COMPUTE_NODE}..."
     copy_files
     echo "Rebuilding container on ${COMPUTE_NODE}..."
-    remote_exec "PORT=${REMOTE_PORT} bash ${REMOTE_SCRIPT} rebuild"
+    local output old_port
+    old_port="$REMOTE_PORT"
+    output=$(remote_exec "PORT=${REMOTE_PORT} bash ${REMOTE_SCRIPT} rebuild")
+    echo "$output"
+    update_port_from_output "$output"
+
+    if [ "$REMOTE_PORT" != "$old_port" ]; then
+        save_state
+        echo "Reopening SSH tunnel for new port..."
+        open_tunnel
+    fi
 }
 
 cmd_status() {

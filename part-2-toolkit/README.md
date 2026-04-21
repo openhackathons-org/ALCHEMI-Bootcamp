@@ -25,7 +25,7 @@ Then deploy:
 scripts/deploy.sh setup <login-host> <compute-node>
 ```
 
-Access JupyterLab at `http://localhost:8890`.
+Access JupyterLab at `http://localhost:8889`.
 
 ## Management
 
