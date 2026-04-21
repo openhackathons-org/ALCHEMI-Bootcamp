@@ -143,14 +143,29 @@ class BGRRequest(BaseModel):
 
 
 class OptimizationResult(BGRAtomicData):
-    """Result of a single geometry optimisation."""
+    """Result of a single geometry optimisation.
+
+    BGR NIM 1.0.0 returns numeric fields (coord, cell, forces, stress) as
+    strings; pydantic's float/list[float] validation coerces them back to
+    floats automatically, so the client side sees plain Python floats.
+    """
 
     converged: bool
-    num_optimization_steps: int
+    optimizer_nsteps: int = Field(
+        default=0,
+        description="Number of optimiser steps taken. NIM 1.0.0 returns this "
+        "as 'optimizer_nsteps'; earlier prototypes called it "
+        "'num_optimization_steps'.",
+    )
     energy: float
     forces: List[float]
     stress: Optional[List[float]] = None
     charges: Optional[List[float]] = None
+
+    @property
+    def num_optimization_steps(self) -> int:
+        """Back-compat alias for older notebook code that used the long name."""
+        return self.optimizer_nsteps
 
 
 class BGRReply(BaseModel):
