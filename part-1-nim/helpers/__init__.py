@@ -40,6 +40,11 @@ from .zeolites import (
     build_siliceous_cha,
     build_siliceous_mfi,
 )
+from .throughput import (
+    measure_batch_throughput,
+    plot_throughput,
+    sweep_batch_throughput,
+)
 from .surfaces import (
     build_adsorbate,
     build_slab,
@@ -112,4 +117,8 @@ __all__ = [
     "build_siliceous_mfi",
     "build_h_cha",
     "build_h_sapo34",
+    # throughput
+    "measure_batch_throughput",
+    "sweep_batch_throughput",
+    "plot_throughput",
 ]
