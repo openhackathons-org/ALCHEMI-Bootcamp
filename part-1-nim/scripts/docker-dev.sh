@@ -6,18 +6,31 @@ IMAGE="alchemi-playbook-part1-jupyter"
 COMPOSE_PROJECT="alchemi-playbook-part1"
 
 load_env() {
+    # Preference order: existing NGC_API_KEY > .env next to compose > ~/.config/ngc/api_key
+    if [ -n "${NGC_API_KEY:-}" ]; then
+        return 0
+    fi
     if [ -f "$REPO_DIR/.env" ]; then
         set -a
         # shellcheck source=/dev/null
         source "$REPO_DIR/.env"
         set +a
     fi
+    if [ -z "${NGC_API_KEY:-}" ] && [ -f "$HOME/.config/ngc/api_key" ]; then
+        NGC_API_KEY="$(tr -d '\n' < "$HOME/.config/ngc/api_key")"
+        export NGC_API_KEY
+    fi
 }
 
 ngc_login() {
     load_env
     if [ -z "${NGC_API_KEY:-}" ]; then
-        echo "Error: NGC_API_KEY not set. Create .env with NGC_API_KEY=<key> in the repo."
+        cat <<'EOF' >&2
+Error: NGC_API_KEY not set. Provide one of:
+  - ~/.config/ngc/api_key  (one line, chmod 600)
+  - <repo>/.env            (NGC_API_KEY=<key>)
+  - environment variable NGC_API_KEY exported before running this script
+EOF
         exit 1
     fi
     echo "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
