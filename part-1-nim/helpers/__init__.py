@@ -52,6 +52,18 @@ from .metal_slabs import (
     build_pd111_slab,
     build_pd_bulk,
 )
+from .config_search import (
+    ADSORBATE_ORIENTATIONS,
+    ADSORBATE_REGISTRY,
+    Configuration,
+    build_co,
+    build_config_grid,
+    build_h2o,
+    build_methanol,
+    find_al2o3_0001_sites,
+    find_fcc_sites,
+    sites_for_host,
+)
 from .zeolites import (
     build_h_cha,
     build_h_mfi,
@@ -138,6 +150,17 @@ __all__ = [
     "build_pd_bulk",
     "build_cu111_slab",
     "build_pd111_slab",
+    # config_search
+    "Configuration",
+    "ADSORBATE_REGISTRY",
+    "ADSORBATE_ORIENTATIONS",
+    "build_co",
+    "build_h2o",
+    "build_methanol",
+    "find_fcc_sites",
+    "find_al2o3_0001_sites",
+    "sites_for_host",
+    "build_config_grid",
     # zeolites
     "build_siliceous_cha",
     "build_siliceous_mfi",
