@@ -83,6 +83,23 @@ def build_slab(
     if supercell != (1, 1, 1):
         atoms = atoms.repeat(supercell)
 
+    # pymatgen's SlabGenerator rounds min_slab_size up to an integer
+    # number of crystallographic c-repeats, leaving the slab floating in
+    # a box much taller than requested (observed: 25 A cell for 6 A Cu
+    # slab, 39 A cell for 12 A Al2O3 slab). Crop c to
+    # (actual slab thickness) + min_vacuum_size and recentre so there's
+    # vacuum/2 above and below the slab - makes the OVITO cell wireframe
+    # match the slab visually and cuts wasted compute in the vacuum
+    # region of each inference.
+    z = atoms.positions[:, 2]
+    slab_thickness = float(z.max() - z.min())
+    target_c = slab_thickness + float(min_vacuum_size)
+    shift = (min_vacuum_size / 2.0) - z.min()
+    atoms.translate([0.0, 0.0, shift])
+    new_cell = atoms.cell.array.copy()
+    new_cell[2] = [0.0, 0.0, target_c]
+    atoms.set_cell(new_cell)
+
     return atoms
 
 
