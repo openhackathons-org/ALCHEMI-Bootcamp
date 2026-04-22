@@ -27,11 +27,16 @@ from .models import (
     atomic_data_to_ase,
 )
 from .references import (
+    ADSORBML_REFERENCES,
+    MACE_MP0B3_OC157_MAD_EV,
+    MACE_MPA0_OC157_MAD_EV,
     REFERENCES,
     S24_SUBCATEGORY_MAD_MEV,
     SMALL_MOLECULE_REFERENCES,
+    AdsorbMLReference,
     AdsorptionReference,
     SmallMoleculeReference,
+    get_adsorbml_reference,
     get_mad_meV,
     get_reference,
     get_small_molecule_reference,
@@ -174,10 +179,15 @@ __all__ = [
     # references
     "AdsorptionReference",
     "SmallMoleculeReference",
+    "AdsorbMLReference",
     "REFERENCES",
     "S24_SUBCATEGORY_MAD_MEV",
     "SMALL_MOLECULE_REFERENCES",
+    "ADSORBML_REFERENCES",
+    "MACE_MPA0_OC157_MAD_EV",
+    "MACE_MP0B3_OC157_MAD_EV",
     "get_reference",
     "get_mad_meV",
     "get_small_molecule_reference",
+    "get_adsorbml_reference",
 ]
