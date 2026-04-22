@@ -69,13 +69,6 @@ from .config_search import (
     find_fcc_sites,
     sites_for_host,
 )
-from .zeolites import (
-    build_h_cha,
-    build_h_mfi,
-    build_h_sapo34,
-    build_siliceous_cha,
-    build_siliceous_mfi,
-)
 from .throughput import (
     measure_batch_throughput,
     plot_throughput,
@@ -166,12 +159,6 @@ __all__ = [
     "find_al2o3_0001_sites",
     "sites_for_host",
     "build_config_grid",
-    # zeolites
-    "build_siliceous_cha",
-    "build_siliceous_mfi",
-    "build_h_cha",
-    "build_h_mfi",
-    "build_h_sapo34",
     # throughput
     "measure_batch_throughput",
     "sweep_batch_throughput",
