@@ -29,9 +29,12 @@ from .models import (
 from .references import (
     REFERENCES,
     S24_SUBCATEGORY_MAD_MEV,
+    SMALL_MOLECULE_REFERENCES,
     AdsorptionReference,
+    SmallMoleculeReference,
     get_mad_meV,
     get_reference,
+    get_small_molecule_reference,
 )
 from .oxide_slabs import (
     build_alpha_alumina_0001_slab,
@@ -40,6 +43,14 @@ from .oxide_slabs import (
     build_rutile_tio2_bulk,
     build_tio2_110_slab,
     build_zro2_m111_slab,
+)
+from .metal_slabs import (
+    LATTICE_A_CU,
+    LATTICE_A_PD,
+    build_cu111_slab,
+    build_cu_bulk,
+    build_pd111_slab,
+    build_pd_bulk,
 )
 from .zeolites import (
     build_h_cha,
@@ -120,6 +131,13 @@ __all__ = [
     "build_alpha_alumina_0001_slab",
     "build_tio2_110_slab",
     "build_zro2_m111_slab",
+    # metal_slabs
+    "LATTICE_A_CU",
+    "LATTICE_A_PD",
+    "build_cu_bulk",
+    "build_pd_bulk",
+    "build_cu111_slab",
+    "build_pd111_slab",
     # zeolites
     "build_siliceous_cha",
     "build_siliceous_mfi",
@@ -132,8 +150,11 @@ __all__ = [
     "plot_throughput",
     # references
     "AdsorptionReference",
+    "SmallMoleculeReference",
     "REFERENCES",
     "S24_SUBCATEGORY_MAD_MEV",
+    "SMALL_MOLECULE_REFERENCES",
     "get_reference",
     "get_mad_meV",
+    "get_small_molecule_reference",
 ]
