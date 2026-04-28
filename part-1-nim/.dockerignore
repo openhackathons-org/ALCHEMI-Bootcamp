@@ -11,3 +11,5 @@ outputs/
 matplotlib-*/
 tmp*/
 docker-compose.override.yml
+.Trash-*
+logs/
