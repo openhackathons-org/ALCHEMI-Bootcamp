@@ -37,7 +37,9 @@ def compute_msd(snapshots, cells, n_atoms_total, ref_cell=None):
     )
 
 
-def compute_com_msd(snapshots, cells, masses, atoms_per_mol, ref_cell=None):
+def compute_com_msd(
+    snapshots, cells, masses, atoms_per_mol, ref_cell=None, subtract_system_com=True
+):
     """Molecular-COM MSD with affine cell deformation removed.
 
     Each frame's atoms are collapsed to per-molecule mass-weighted COMs
@@ -46,6 +48,14 @@ def compute_com_msd(snapshots, cells, masses, atoms_per_mol, ref_cell=None):
     intramolecular vibration (C-H stretches, torsions) and molecular
     rotation (atoms moving around a pinned COM) from the signal so only
     inter-molecular translational drift contributes.
+
+    ``subtract_system_com=True`` (default) additionally subtracts the
+    per-frame mass-weighted system COM from each molecular COM before
+    accumulating, removing whole-system rigid translation in the lab
+    frame. Under anisotropic NPT this lab-COM motion couples to the cell
+    expansion and inflates per-molecule MSD even when molecules are
+    individually pinned to their lattice sites. Affine cell deformation
+    alone is handled regardless (fractional pinning => zero MSD).
 
     For a stable crystal this plateaus within ~few hundred fs at
     ~0.01-0.1 A^2; a linearly growing COM MSD is the signature of genuine
@@ -56,18 +66,27 @@ def compute_com_msd(snapshots, cells, masses, atoms_per_mol, ref_cell=None):
         ref_cell = torch.stack(list(cells)).mean(dim=0)
     n_atoms = snapshots[0].shape[0]
     n_mol = n_atoms // atoms_per_mol
+    mol_mass = masses.view(n_mol, atoms_per_mol)
+    mol_total_mass = mol_mass.sum(dim=-1)
+    system_total_mass = mol_total_mass.sum()
 
     com_series = []
     for snap, cell in zip(snapshots, cells):
         cell_inv = torch.linalg.inv(cell)
         mol_pos = snap.view(n_mol, atoms_per_mol, 3)
-        mol_mass = masses.view(n_mol, atoms_per_mol)
         ref = mol_pos[:, 0:1, :]
         dr_frac = (mol_pos - ref) @ cell_inv
         dr_frac = dr_frac - torch.round(dr_frac)
         mol_unwrapped = ref + dr_frac @ cell
-        total = mol_mass.sum(dim=-1, keepdim=True)
-        com = (mol_mass.unsqueeze(-1) * mol_unwrapped).sum(dim=1) / total
+        com = (mol_mass.unsqueeze(-1) * mol_unwrapped).sum(
+            dim=1
+        ) / mol_total_mass.unsqueeze(-1)
+        if subtract_system_com:
+            # Lab-frame system COM (from raw atom positions). Using the sum of
+            # per-mol unwrapped COMs would inherit per-molecule atom-0 PBC
+            # wraps and corrupt every molecule's MSD via the subtraction.
+            sys_com_lab = (masses.unsqueeze(-1) * snap).sum(dim=0) / system_total_mass
+            com = com - sys_com_lab
         com_series.append(com)
 
     cumulative_df = torch.zeros(n_mol, 3, device=snapshots[0].device)
@@ -244,24 +263,6 @@ def compute_rACF(snapshots, cells, masses, atoms_per_mol, tail_frac=0.2):
     return tail_means
 
 
-def compute_S0(positions, masses, atoms_per_mol, cell):
-    """Mass-weighted orientational order parameter (largest eigenvalue of Q).
-
-    ``Q = <(3 n n^T - I_3) / 2>`` is averaged over the long-axis (smallest-I)
-    eigenvector of each molecule. Largest eigenvalue of Q -> 1 for aligned
-    crystals, -> 0 for isotropic melts.
-    """
-    axes = _mol_inertia_eigvecs(positions, masses, atoms_per_mol, cell)
-    long_axes = axes[:, 0, :]  # smallest eigenvalue = long axis
-    n_mol = long_axes.shape[0]
-    eye3 = torch.eye(3, device=positions.device, dtype=positions.dtype)
-    Q = torch.zeros(3, 3, device=positions.device, dtype=positions.dtype)
-    for n in long_axes:
-        Q += (3 * torch.outer(n, n) - eye3) / 2
-    Q /= n_mol
-    return torch.linalg.eigvalsh(Q)[-1].item()
-
-
 def compute_mol_axes(positions, cell, masses, atoms_per_mol):
     """Principal inertia axes per molecule, sorted by eigenvalue ascending.
 
@@ -273,12 +274,14 @@ def compute_mol_axes(positions, cell, masses, atoms_per_mol):
 
 
 def compute_rotational_acf(axes_per_frame, ref_idx=0):
-    """Second-rank rotational ACF per molecular axis.
+    """Per-molecule, per-axis second-rank rotational ACF.
 
-    ``C_k(t) = < P_2(v_k(t) . v_k(ref)) >_mol`` where ``P_2(x) = (3 x^2 - 1) / 2``
+    ``C_k(t)[m] = P_2(v_k(t)[m] . v_k(ref)[m])`` where ``P_2(x) = (3 x^2 - 1) / 2``
     makes this sign-flip-invariant (inertia eigenvectors have no fixed sign).
     Paper reference: Yoneya & Harada -- the tail of this ACF is the rotational
-    order parameter S0 used to classify plastic crystals.
+    order parameter S0 used to classify plastic crystals. The molecule axis is
+    preserved so callers can inspect spatial heterogeneity; take
+    ``acf.mean(axis=1)`` for the legacy cross-molecule aggregate.
 
     Args:
         axes_per_frame: list of ``[n_mol, 3, 3]`` tensors (one per frame,
@@ -286,39 +289,82 @@ def compute_rotational_acf(axes_per_frame, ref_idx=0):
         ref_idx: frame index to use as the rotational reference.
 
     Returns:
-        ``np.ndarray [n_frames, 3]`` with one ACF curve per molecular axis
-        (sorted: long, short, normal for planar elongated molecules).
+        ``np.ndarray [n_frames, n_mol, 3]`` -- one ACF curve per (molecule, axis).
     """
     ref = axes_per_frame[ref_idx]  # [n_mol, 3, 3]
     n_frames = len(axes_per_frame)
-    acf = torch.zeros(n_frames, 3, device=ref.device, dtype=ref.dtype)
+    n_mol = ref.shape[0]
+    acf = torch.zeros(n_frames, n_mol, 3, device=ref.device, dtype=ref.dtype)
     for i, axes in enumerate(axes_per_frame):
         dot = (axes * ref).sum(dim=-1)  # [n_mol, 3]
-        P2 = 0.5 * (3.0 * dot**2 - 1.0)  # [n_mol, 3]
-        acf[i] = P2.mean(dim=0)
+        acf[i] = 0.5 * (3.0 * dot**2 - 1.0)
     return acf.cpu().numpy()
 
 
 def compute_S0_tail(acf, tail_frac=0.2):
-    """Paper-aligned S0: mean of rotational-ACF tails across 3 molecular axes.
+    """Per-molecule rotational order parameter S0 (Yoneya-Harada).
 
-    Phase classification (with diffusion coefficient D, per Yoneya-Harada):
+    Phase classification (with diffusion coefficient D):
 
       * D ~ 0, S0 -> 1        : ordered crystal (no translation, no rotation)
       * D ~ 0, 0 < S0 < 1     : plastic crystal (no translation, hindered rotation)
       * D >> 0, S0 -> 0       : liquid (free translation and rotation)
 
     Args:
-        acf: ``[n_frames, 3]`` rotational ACF from :func:`compute_rotational_acf`.
+        acf: ``[n_frames, n_mol, 3]`` per-mol rotational ACF from
+            :func:`compute_rotational_acf`.
         tail_frac: trailing fraction of frames to average as the "tail".
 
     Returns:
-        ``(S0_mean, S0_per_axis)`` -- scalar plus per-axis tail values for
-        diagnosing anisotropic hindered rotation.
+        ``(s0_per_mol [n_mol], s0_per_mol_per_axis [n_mol, 3])`` -- per-molecule
+        scalar (mean over the 3 inertia axes) plus the unaveraged per-axis
+        tail values. For the system-wide aggregate scalar take
+        ``s0_per_mol.mean()``; for the legacy ``[3]`` per-axis aggregate take
+        ``s0_per_mol_per_axis.mean(axis=0)``.
     """
     n_tail = max(1, int(len(acf) * tail_frac))
-    tails = acf[-n_tail:].mean(axis=0)  # [3]
-    return float(tails.mean()), tails
+    tail = acf[-n_tail:].mean(axis=0)  # [n_mol, 3]
+    return tail.mean(axis=1), tail
+
+
+def compute_S0_from_frames(
+    frames, atoms_per_mol, ref_idx=0, tail_frac=0.2, atom_slice=None
+):
+    """Paper-aligned per-molecule rotational S0 for a sequence of Batch frames.
+
+    Chains :func:`compute_mol_axes` -> :func:`compute_rotational_acf` ->
+    :func:`compute_S0_tail` so callers don't re-implement the pipeline.
+    ``frames`` is any iterable of single-graph Batch objects (as produced
+    by :func:`load_zarr_trajectory` or :func:`load_warmup_trajectory`);
+    masses are read from the first frame.
+
+    ``atom_slice`` optionally restricts the computation to a contiguous
+    subset of atoms (e.g. ``slice(0, n_half)`` for the crystal half of an
+    SLC system). The slice length must be a multiple of ``atoms_per_mol``.
+
+    Returns ``(s0_per_mol [n_mol], s0_per_mol_per_axis [n_mol, 3], acf
+    [n_frames, n_mol, 3])`` -- the ACF is returned alongside the summary so
+    callers that want to plot it (e.g. warmup-diagnostics S0-evolution
+    figure) don't need a second pass. For the legacy aggregate scalar take
+    ``s0_per_mol.mean()``.
+    """
+    n = len(frames)
+    if n < 2:
+        return np.array([]), np.zeros((0, 3)), np.zeros((n, 0, 3))
+    masses = frames[0].atomic_masses.cpu()
+    if atom_slice is not None:
+        masses = masses[atom_slice]
+        assert masses.shape[0] % atoms_per_mol == 0, (
+            f"atom_slice length {masses.shape[0]} not a multiple of "
+            f"atoms_per_mol={atoms_per_mol}"
+        )
+    axes = []
+    for b in frames:
+        pos = b.positions if atom_slice is None else b.positions[atom_slice]
+        axes.append(compute_mol_axes(pos, b.cell.squeeze(), masses, atoms_per_mol))
+    acf = compute_rotational_acf(axes, ref_idx=ref_idx)
+    s0_per_mol, s0_per_mol_per_axis = compute_S0_tail(acf, tail_frac=tail_frac)
+    return s0_per_mol, s0_per_mol_per_axis, acf
 
 
 def min_pbc_distance(positions, cell, chunk_size=500):

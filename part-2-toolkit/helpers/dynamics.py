@@ -17,9 +17,20 @@ def batch_to_ase(batch):
 
 
 def pressure_scalar(ctx):
-    """LoggingHook custom_scalar: mean diagonal pressure per graph (eV/A^3)."""
-    stress = ctx.batch.stress  # [B, 3, 3]
-    return -stress.diagonal(dim1=-2, dim2=-1).mean(dim=-1)
+    """LoggingHook custom_scalar: instantaneous scalar pressure per graph (eV/A^3).
+
+    P = Tr(stress)/3 + 2*KE/(3V), matching nvalchemiops.compute_scalar_pressure
+    applied to ``(kinetic_tensor + stress*V)/V``. nvalchemi stress is
+    compression-positive (``stress = -(1/V) dE/d(strain)``; see
+    ``nvalchemi/models/_utils.py``), so no sign flip is applied.
+    """
+    batch = ctx.batch
+    stress_trace = batch.stress.diagonal(dim1=-2, dim2=-1).mean(dim=-1)
+    V = torch.linalg.det(batch.cell).abs().view(-1)
+    ke_per_atom = 0.5 * batch.atomic_masses * (batch.velocities**2).sum(dim=-1)
+    ke_per_graph = torch.zeros(batch.num_graphs, device=V.device, dtype=V.dtype)
+    ke_per_graph.scatter_add_(0, batch.batch_idx, ke_per_atom.to(V.dtype))
+    return stress_trace + (2.0 / 3.0) * ke_per_graph / V
 
 
 def volume_scalar(ctx):
@@ -42,15 +53,9 @@ DYNAMICS_SCALARS = {
 }
 
 
-def compute_density_per_graph(batch):
+def compute_density(batch):
     """Per-graph densities in g/cm^3. Returns ``list[float]`` of length ``num_graphs``."""
     vol = torch.linalg.det(batch.cell).abs()
     mass = torch.zeros(batch.num_graphs, device=vol.device)
     mass.scatter_add_(0, batch.batch_idx, batch.atomic_masses)
     return (mass * AMU_OVER_A3_TO_G_CM3 / vol).tolist()
-
-
-def compute_density(batch):
-    """Scalar density (g/cm^3) for a single-graph Batch."""
-    vol = torch.linalg.det(batch.cell).abs().item()
-    return batch.atomic_masses.sum().item() * AMU_OVER_A3_TO_G_CM3 / vol

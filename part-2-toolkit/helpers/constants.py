@@ -10,10 +10,22 @@ P_1ATM = 101325.0 / 1.602176634e11  # 1 atm in eV/A^3
 
 MAX_FORCE_CLAMP = 50.0  # eV/A; default cap used by make_safety_hooks
 
+
 # Fused warmup pipeline: FIRE -> NVT -> NPT. Status codes match the graph
-# status encoding emitted by SnapshotHook / LoggingHook.
-WARMUP_STAGE_NAMES = ("fire", "nvt_200k", "npt_200k")
-STATUS_BY_STAGE = {"fire": 0, "nvt_200k": 1, "npt_200k": 2}
+# status encoding emitted by SnapshotHook / LoggingHook. Stage names are
+# parameterised by the warmup target temperature (default 200 K) so that
+# warmup runs at different solid-phase temperatures sit side-by-side on
+# disk via `nvt_<T>k` / `npt_<T>k` artefact stems (see `T_WARMUP_TAG` in
+# the warmup driver, parallel to `DT_TAG`).
+def warmup_stage_names(t_warmup: float = 200.0) -> tuple[str, str, str]:
+    tag = f"{int(t_warmup)}k"
+    return ("fire", f"nvt_{tag}", f"npt_{tag}")
+
+
+def status_by_stage(t_warmup: float = 200.0) -> dict[str, int]:
+    tag = f"{int(t_warmup)}k"
+    return {"fire": 0, f"nvt_{tag}": 1, f"npt_{tag}": 2}
+
 
 # Plot styling used by shade_stages(), keyed by status code.
 STAGE_COLORS = {0: "#fff4e6", 1: "#e6f4ff", 2: "#e8f5e9"}

@@ -120,6 +120,33 @@ class StatusTransitionLogger:
         self._prev = list(status)
 
 
+class ResetEwaldEnergiesBufHook:
+    """Workaround for ``EwaldModelWrapper._energies_buf`` autograd-retention leak.
+
+    Nulls ``ewald._energies_buf`` before every forward pass so the
+    ``scatter_add_`` inside ``EwaldModelWrapper.forward`` allocates a fresh
+    buffer instead of chaining an autograd version chain onto a persistent
+    one. Without this, per-step wall time grows linearly over long MD runs
+    (~0.7 ms/step per step; ~20x slowdown over 20k steps) because the
+    version counter pins the previous step's Warp backward tape. Resetting
+    only ``_energies_buf`` is sufficient -- other Ewald caches
+    (``_cached_alpha``, ``_cached_k_vectors``, ``_cached_cell``,
+    ``_null_shifts``) do not retain autograd state. See
+    ``../nvalchemi-toolkit/ewald-energies-buf-leak/`` for the investigation
+    and the one-line upstream fix under review; drop this hook once the
+    upstream PR lands.
+    """
+
+    stage = DynamicsStage.BEFORE_COMPUTE
+
+    def __init__(self, ewald):
+        self.ewald = ewald
+        self.frequency = 1
+
+    def __call__(self, ctx, stage_):
+        self.ewald._energies_buf = None
+
+
 def stdout_writer(step, rows):
     """Print log rows to stdout for Jupyter cell output."""
     for row in rows:
