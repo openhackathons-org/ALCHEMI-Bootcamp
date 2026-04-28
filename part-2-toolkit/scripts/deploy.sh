@@ -90,10 +90,12 @@ copy_files() {
         --exclude='.claude' \
         --exclude='outputs' \
         --exclude='logs' \
+        --exclude='assets' \
         --exclude='__pycache__' \
         --exclude='.ipynb_checkpoints' \
         --exclude='.DS_Store' \
         --exclude='scripts' \
+        --exclude='*-with_outputs.ipynb' \
         -cf - . \
         | ssh -J "$LOGIN_HOST" "$COMPUTE_NODE" \
             "mkdir -p ${remote_dir} && tar -C ${remote_dir} -xf -"

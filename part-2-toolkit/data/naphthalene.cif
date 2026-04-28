@@ -1,227 +1,94 @@
-#------------------------------------------------------------------------------
-#$Date: 2025-08-19 13:01:59 +0300 (Tue, 19 Aug 2025) $
-#$Revision: 301802 $
-#$URL: file:///home/coder/svn-repositories/_RELOADED_COD/cod-reloaded/cif/2/10/06/2100603.cif $
-#------------------------------------------------------------------------------
+#######################################################################
 #
-# This file is available in the Crystallography Open Database (COD),
-# http://www.crystallography.net/. The original data for this entry
-# were provided by IUCr Journals, http://journals.iucr.org/.
+# This file contains crystal structure data downloaded from the
+# Cambridge Structural Database (CSD) hosted by the Cambridge
+# Crystallographic Data Centre (CCDC).
 #
-# The file may be used within the scientific community so long as
-# proper attribution is given to the journal article from which the
-# data were obtained.
+# Full information about CCDC data access policies and citation
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1
 #
-data_2100603
+# Audit and citation data items may have been added by the CCDC.
+# Please retain this information to preserve the provenance of
+# this file and to allow appropriate attribution of the data.
+#
+#######################################################################
+
+data_NAPHTA10
+_audit_block_doi                 10.5517/ccdc.csd.cc19v64h
+#This CIF has been generated from an entry in the Cambridge Structural Database
+_database_code_depnum_ccdc_archive 'CCDC 1216816'
 loop_
-_publ_author_name
-'F. P. A. Fabbiani'
-'D. R. Allan'
-'S. Parsons'
-'C. R. Pulham'
-_publ_contact_author_email       F.P.A.Fabbiani@ed.ac.uk
-_publ_contact_author_name        'Francesca P. A. Fabbiani'
-_publ_section_title
+_citation_id
+_citation_doi
+_citation_year
+1 10.1107/S0567740882008358 1982
+_audit_update_record
 ;
- Exploration of the high-pressure behaviour of polycyclic aromatic
- hydrocarbons: naphthalene, phenanthrene and pyrene
+2018-06-25 deposited with the CCDC.	2026-04-22 downloaded from the CCDC.
 ;
-_journal_coeditor_code           BS5035
-_journal_date_accepted           2006-07-11
-_journal_date_recd_electronic    2006-04-30
-_journal_issue                   5
-_journal_name_full               'Acta Crystallographica Section B'
-_journal_page_first              826
-_journal_page_last               842
-_journal_paper_category          FA
-_journal_paper_doi               10.1107/S0108768106026814
-_journal_volume                  62
-_journal_year                    2006
+_database_code_CSD               NAPHTA10
+_audit_creation_method           'Created from the CSD'
+_database_code_NBS               549183
 _chemical_formula_moiety         'C10 H8'
-_chemical_formula_sum            'C10 H8'
-_chemical_formula_weight         128.16
-_chemical_name_common            naphthalene
-_space_group_IT_number           14
+_chemical_name_systematic        Naphthalene
+_chemical_absolute_configuration unk
+_diffrn_ambient_temperature      239
+_exptl_crystal_density_diffrn    1.198
+#These two values have been output from a single CSD field.
+_refine_ls_R_factor_gt           0.035
+_refine_ls_wR_factor_gt          0.035
+_diffrn_radiation_probe          x-ray
 _symmetry_cell_setting           monoclinic
-_symmetry_space_group_name_Hall  '-P 2yab'
-_symmetry_space_group_name_H-M   'P 1 21/a 1'
-_atom_sites_solution_hydrogens   geom
-_atom_sites_solution_primary     'known atomic coordinates'
-_atom_sites_solution_secondary   difmap
-_audit_creation_method           SHELXL-97
-_cell_angle_alpha                90.00
-_cell_angle_beta                 123.59(2)
-_cell_angle_gamma                90.00
-_cell_formula_units_Z            2
-_cell_length_a                   8.0348(15)
-_cell_length_b                   5.8899(8)
-_cell_length_c                   8.565(3)
-_cell_measurement_reflns_used    289
-_cell_measurement_temperature    298(2)
-_cell_measurement_theta_max      25.72
-_cell_measurement_theta_min      4.45
-_cell_volume                     337.65(16)
-_computing_cell_refinement       'Bruker SMART'
-_computing_data_collection       'Bruker SMART'
-_computing_data_reduction        'Bruker SAINT'
-_computing_molecular_graphics    'Bruker SHELXTL'
-_computing_publication_material  'Bruker SHELXTL, XCIF'
-_computing_structure_refinement  'SHELXL-97 (Sheldrick, 1997)'
-_computing_structure_solution    'SHELXS-97 (Sheldrick, 1990)'
-_diffrn_ambient_temperature      298(2)
-_diffrn_measured_fraction_theta_full 0.323
-_diffrn_measured_fraction_theta_max 0.323
-_diffrn_measurement_device_type  'Bruker SMART'
-_diffrn_measurement_method       'omega scans'
-_diffrn_radiation_monochromator  graphite
-_diffrn_radiation_source         'fine-focus sealed tube'
-_diffrn_radiation_type           MoK\a
-_diffrn_radiation_wavelength     0.71073
-_diffrn_reflns_av_R_equivalents  0.0463
-_diffrn_reflns_av_sigmaI/netI    0.0282
-_diffrn_reflns_limit_h_max       9
-_diffrn_reflns_limit_h_min       -9
-_diffrn_reflns_limit_k_max       7
-_diffrn_reflns_limit_k_min       -7
-_diffrn_reflns_limit_l_max       6
-_diffrn_reflns_limit_l_min       -6
-_diffrn_reflns_number            1115
-_diffrn_reflns_theta_full        25.80
-_diffrn_reflns_theta_max         25.796
-_diffrn_reflns_theta_min         3.043
-_exptl_absorpt_coefficient_mu    0.071
-_exptl_absorpt_correction_T_max  0.99
-_exptl_absorpt_correction_T_min  0.79
-_exptl_absorpt_correction_type   multi-scan
-_exptl_absorpt_process_details   'based on symmetry-related measuraments'
-_exptl_crystal_colour            colourless
-_exptl_crystal_density_diffrn    1.261
-_exptl_crystal_density_method    'not measured'
-_exptl_crystal_description       block
-_exptl_crystal_F_000             136
-_exptl_crystal_size_max          0.25
-_exptl_crystal_size_mid          0.20
-_exptl_crystal_size_min          0.15
-_refine_diff_density_max         0.112
-_refine_diff_density_min         -0.150
-_refine_ls_extinction_method     none
-_refine_ls_goodness_of_fit_ref   1.225
-_refine_ls_hydrogen_treatment    noref
-_refine_ls_matrix_type           full
-_refine_ls_number_parameters     12
-_refine_ls_number_reflns         208
-_refine_ls_number_restraints     2
-_refine_ls_restrained_S_all      1.220
-_refine_ls_R_factor_all          0.0999
-_refine_ls_R_factor_gt           0.0707
-_refine_ls_shift/su_max          0.000
-_refine_ls_shift/su_mean         0.000
-_refine_ls_structure_factor_coef Fsqd
-_refine_ls_weighting_details
-'calc w=1/[\s^2^(Fo^2^)+(0.0688P)^2^+0.3068P] where P=(Fo^2^+2Fc^2^)/3'
-_refine_ls_weighting_scheme      calc
-_refine_ls_wR_factor_gt          0.1578
-_refine_ls_wR_factor_ref         0.1807
-_reflns_number_gt                141
-_reflns_number_total             208
-_reflns_threshold_expression     >2sigma(I)
-_cod_data_source_file            bs5035.cif
-_cod_data_source_block           naphthalene_0.4_GPa
-_cod_depositor_comments
-;
-The following automatic conversions were performed:
-'_symmetry_cell_setting' value 'Monoclinic' changed to 'monoclinic'
-according to '/home/saulius/struct/CIF-dictionaries/cif_core.dic'
-dictionary named 'cif_core.dic' version 2.4.1 from 2010-06-29.
-
-Automatic conversion script
-Id: cif_fix_enum 1527 2010-12-29 10:47:43Z saulius 
-
-The following automatic conversions were performed:
-
-'_symmetry_cell_setting' value 'Monoclinic' changed to 'monoclinic'
-according to /home/saulius/struct/CIF-dictionaries/cif_core.dic
-dictionary named 'cif_core.dic' version 2.4.1 from 2010-06-29.
-
-Automatic conversion script
-Id: cif_fix_values 1715 2011-07-08 13:25:40Z adriana 
-;
-_cod_original_sg_symbol_H-M      P2(1)/a
-_cod_database_code               2100603
-_cod_database_fobs_code          2100603
+_symmetry_space_group_name_H-M   'P 21/a'
+_symmetry_Int_Tables_number      14
+_space_group_name_Hall           '-P 2yab'
 loop_
+_symmetry_equiv_pos_site_id
 _symmetry_equiv_pos_as_xyz
-'x, y, z'
-'-x+1/2, y+1/2, -z'
-'-x, -y, -z'
-'x-1/2, -y-1/2, z'
+1 x,y,z
+2 1/2-x,1/2+y,-z
+3 -x,-y,-z
+4 1/2+x,1/2-y,z
+_cell_length_a                   8.2128(22)
+_cell_length_b                   5.9727(13)
+_cell_length_c                   8.6745(18)
+_cell_angle_alpha                90
+_cell_angle_beta                 123.388(18)
+_cell_angle_gamma                90
+_cell_volume                     355.282
+_cell_formula_units_Z            2
 loop_
-_atom_site_type_symbol
 _atom_site_label
+_atom_site_type_symbol
 _atom_site_fract_x
 _atom_site_fract_y
 _atom_site_fract_z
-_atom_site_U_iso_or_equiv
-_atom_site_adp_type
-_atom_site_calc_flag
-_atom_site_refinement_flags
-_atom_site_occupancy
-C C1 0.0868(7) 0.0188(6) 0.3316(9) 0.0560(19) Uiso d G 1
-H H1 0.1314 0.0596 0.4537 0.067 Uiso calc R 1
-C C2 0.1158(6) 0.1641(5) 0.2229(9) 0.0417(16) Uiso d G 1
-H H2 0.1805 0.3020 0.2723 0.050 Uiso calc R 1
-C C3 0.0474(7) 0.1048(5) 0.0353(9) 0.0324(14) Uiso d GD 1
-C C4 0.0746(8) 0.2518(7) -0.0807(10) 0.0350(15) Uiso d G 1
-H H4 0.1374 0.3911 -0.0337 0.042 Uiso calc R 1
-C C5 -0.0102(9) -0.1921(6) 0.2591(11) 0.0466(19) Uiso d GD 1
-H H5 -0.0299 -0.2895 0.3330 0.056 Uiso calc R 1
+C1 C 0.08380 0.01760 0.32630
+C2 C 0.11460 0.16070 0.22160
+C3 C 0.04820 0.10390 0.03640
+C4 C 0.07620 0.24890 -0.07670
+C5 C -0.01160 -0.18840 0.25430
+H1 H 0.12510 0.04980 0.44400
+H2 H 0.17780 0.30140 0.26710
+H3 H 0.13810 0.38560 -0.02890
+H4 H -0.02170 -0.28090 0.33340
+
 loop_
-_atom_type_symbol
-_atom_type_description
-_atom_type_scat_dispersion_real
-_atom_type_scat_dispersion_imag
-_atom_type_scat_source
-C C 0.0033 0.0016 'International Tables Vol C Tables 4.2.6.8 and 6.1.1.4'
-H H 0.0000 0.0000 'International Tables Vol C Tables 4.2.6.8 and 6.1.1.4'
-loop_
-_geom_angle_atom_site_label_1
-_geom_angle_atom_site_label_2
-_geom_angle_atom_site_label_3
-_geom_angle_site_symmetry_1
-_geom_angle
-C2 C1 C5 . 120.5
-C2 C1 H1 . 119.7
-C5 C1 H1 . 119.7
-C1 C2 C3 . 120.4
-C1 C2 H2 . 119.8
-C3 C2 H2 . 119.8
-C3 C3 C4 3 119.5(5)
-C3 C3 C2 3 118.8(5)
-C4 C3 C2 . 121.7
-C5 C4 C3 3 121.1(5)
-C5 C4 H4 3 119.4
-C3 C4 H4 . 119.4
-C4 C5 C1 3 119.6(2)
-C4 C5 H5 3 120.2
-C1 C5 H5 . 120.2
-loop_
-_geom_bond_atom_site_label_1
-_geom_bond_atom_site_label_2
-_geom_bond_site_symmetry_2
-_geom_bond_distance
-C1 C2 . 1.3757
-C1 C5 . 1.4146
-C1 H1 . 0.9300
-C2 C3 . 1.4248
-C2 H2 . 0.9300
-C3 C3 3 1.400(7)
-C3 C4 . 1.4224
-C4 C5 3 1.361(14)
-C4 H4 . 0.9300
-C5 C4 3 1.361(14)
-C5 H5 . 0.9300
-loop_
-_cod_related_entry_id
-_cod_related_entry_database
-_cod_related_entry_code
-1 PubChem 931
+_atom_site_aniso_label
+_atom_site_aniso_U_11
+_atom_site_aniso_U_22
+_atom_site_aniso_U_33
+_atom_site_aniso_U_12
+_atom_site_aniso_U_13
+_atom_site_aniso_U_23
+C1 0.0471(7) 0.0551(8) 0.0355(5) 0.0037(5) 0.0237(5) -0.0002(5)
+C2 0.0372(6) 0.0372(6) 0.0382(6) -0.0032(4) 0.0192(4) -0.0073(4)
+C3 0.0254(5) 0.0251(5) 0.0360(5) 0.0002(3) 0.0176(4) -0.0010(4)
+C4 0.0354(6) 0.0287(5) 0.0490(7) -0.0007(4) 0.0257(5) 0.0039(4)
+C5 0.0468(6) 0.0472(7) 0.0474(6) 0.0044(5) 0.0316(5) 0.0122(5)
+H1 0.0630(72) ? ? ? ? ?
+H2 0.0411(47) ? ? ? ? ?
+H4 0.0443(50) ? ? ? ? ?
+H5 0.0642(76) ? ? ? ? ?
+
+#END
