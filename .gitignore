@@ -1,4 +1,8 @@
-outputs/
+**/outputs/
+**/logs/
+# Cache CSVs shipped to students for FAST_DEMO progress-replay
+!part-2-toolkit/assets/*/logs/
+!part-2-toolkit/assets/*/logs/**
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
@@ -11,4 +15,4 @@ CLAUDE.md
 matplotlib-*/
 tmp*/
 docker-compose.override.yml
-monitoring/grafana/data/
+**/monitoring/grafana/data/
