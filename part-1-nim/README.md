@@ -14,6 +14,22 @@
 
 Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks attendees through a complete computational catalyst screening workflow: from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
 
+## Tutorial Preview
+
+By the end of the workshop, you will have screened three rutile (110) catalysts (IrO₂, RuO₂, TiO₂) against the Sabatier ideal for the four-step oxygen-evolution mechanism, producing comparisons like these:
+
+![OER binding-energy ladder vs. ideal catalyst](assets/figures/oer_material_comparison.png)
+
+*Free-energy ladder for each material against the ideal-catalyst reference (1.23 eV per electrochemical step). Dashed segments mark deviations from ideality at each intermediate.*
+
+![Lowest adsorption energy per (Material, Adsorbate)](assets/figures/eads_barchart.png)
+
+*Lowest adsorption energy on each rutile (110) surface for OH\*, O\*, and OOH\* intermediates. Bar labels report the (tilt, site) combination producing the strongest binding for each material.*
+
+![3-D adsorption-energy space vs. ideal target](assets/figures/oer_3d_scatter.png)
+
+*Materials plotted in adsorption-energy space against the CHE ideal-catalyst target (gold star). Distance-to-target in the legend gives a single descriptor for ranking.*
+
 ## Docker Deployment
 
 ### Prerequisites
@@ -47,7 +63,7 @@ Then from your local machine, deploy the full stack:
 ./scripts/deploy.sh setup <login-host> <compute-node>
 ```
 
-Access JupyterLab at `http://localhost:8888` and Grafana at `http://localhost:3000` (admin/admin).
+Access JupyterLab at `http://localhost:8891` and Grafana at `http://localhost:3000` (admin/admin).
 
 ### Management
 
