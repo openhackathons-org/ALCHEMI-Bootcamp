@@ -14,22 +14,6 @@
 
 Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks attendees through a complete computational catalyst screening workflow: from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
 
-## Tutorial Preview
-
-By the end of the workshop, you will have screened three rutile (110) catalysts (IrO₂, RuO₂, TiO₂) against the Sabatier ideal for the four-step oxygen-evolution mechanism, producing comparisons like these:
-
-![OER binding-energy ladder vs. ideal catalyst](assets/figures/oer_material_comparison.png)
-
-*Free-energy ladder for each material against the ideal-catalyst reference (1.23 eV per electrochemical step). Dashed segments mark deviations from ideality at each intermediate.*
-
-![Lowest adsorption energy per (Material, Adsorbate)](assets/figures/eads_barchart.png)
-
-*Lowest adsorption energy on each rutile (110) surface for OH\*, O\*, and OOH\* intermediates. Bar labels report the (tilt, site) combination producing the strongest binding for each material.*
-
-![3-D adsorption-energy space vs. ideal target](assets/figures/oer_3d_scatter.png)
-
-*Materials plotted in adsorption-energy space against the CHE ideal-catalyst target (gold star). Distance-to-target in the legend gives a single descriptor for ranking.*
-
 ## Docker Deployment
 
 ### Prerequisites
@@ -93,6 +77,23 @@ Prometheus scrapes BGR metrics at `/v1/metrics`. View them in Grafana at `localh
 ## FAST_DEMO Mode
 
 The notebook defaults to `FAST_DEMO = False` — it will call a **live BGR endpoint**. Set `FAST_DEMO = True` in the control panel cell to use pre-cached JSON responses in `cached_responses/oer-catalyst-screening/` for fully offline operation. This is recommended for workshop environments without GPU access.
+
+## Tutorial Preview
+
+By the end of the workshop, you will have screened three rutile (110) catalysts (IrO₂, RuO₂, TiO₂) against the Sabatier ideal for the four-step oxygen-evolution mechanism, producing comparisons like these:
+
+<table>
+  <tr>
+    <td align="center"><img src="assets/figures/oer_material_comparison.png" alt="OER binding-energy ladder vs. ideal catalyst" width="100%"/></td>
+    <td align="center"><img src="assets/figures/eads_barchart.png" alt="Lowest adsorption energy per (Material, Adsorbate)" width="100%"/></td>
+    <td align="center"><img src="assets/figures/oer_3d_scatter.png" alt="3-D adsorption-energy space vs. ideal target" width="100%"/></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><i>Free-energy ladder vs. the ideal-catalyst reference (1.23 eV per electrochemical step).</i></sub></td>
+    <td align="center"><sub><i>Lowest adsorption energy per (material, adsorbate); labels show the (tilt, site) of the best configuration.</i></sub></td>
+    <td align="center"><sub><i>Materials in adsorption-energy space against the CHE ideal target (gold star); legend reports distance-to-target.</i></sub></td>
+  </tr>
+</table>
 
 ## References
 
