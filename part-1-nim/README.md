@@ -8,57 +8,38 @@
 
 ---
 
-# OER Catalyst Screening with NVIDIA ALCHEMI
+# Part 1: OER Catalyst Screening with NVIDIA ALCHEMI
 
 **75-minute interactive workshop** — screen oxide catalyst surfaces for oxygen-evolution activity using GPU-accelerated machine-learning interatomic potentials.
 
-Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks attendees through a complete computational catalyst screening workflow: from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
+Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks you through a complete computational catalyst screening workflow — from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
 
-## Docker Deployment
-
-### Prerequisites
+## Prerequisites
 
 | Requirement | Details |
 |-------------|---------|
 | NGC API key | Get one at [build.nvidia.com](https://build.nvidia.com) |
-| Docker + Compose | `docker compose` (v2 plugin) — used to build and run the container environment |
+| Docker | Docker Engine with NVIDIA GPU support (`nvidia-container-toolkit`) and the `docker compose` v2 plugin |
 | GPU | NVIDIA GPU (tested: A100, H100, B200, L40S, RTX 6000 Ada) |
 
-### Setup
+## Quick Start
 
-Configure your NGC API key locally:
+Configure your NGC API key:
 
 ```bash
 cp .env.example .env
 # Edit .env and set NGC_API_KEY=<your-key>
 ```
 
-SSH into your login host and allocate a GPU node (see `./start` for an example SLURM script):
+Build and launch the full stack (BGR NIM + JupyterLab + Prometheus + Grafana):
 
 ```bash
-ssh <login-host>
-./start
-# Note the compute node hostname (e.g., dgx-node-42)
+docker compose up
 ```
 
-Then from your local machine, deploy the full stack:
+Open the JupyterLab URL printed in the terminal (`http://localhost:8891/lab?token=...`) and run `alchemi-oer-catalyst-screening.ipynb` top to bottom. Grafana is also available at `http://localhost:3000` (admin/admin) for live BGR metrics.
 
-```bash
-./scripts/deploy.sh setup <login-host> <compute-node>
-```
-
-Access JupyterLab at `http://localhost:8891` and Grafana at `http://localhost:3000` (admin/admin).
-
-### Management
-
-```bash
-./scripts/deploy.sh status       # Jupyter URL, BGR health, Grafana
-./scripts/deploy.sh restart      # Sync local changes, restart stack
-./scripts/deploy.sh pull-changes # Sync remote Jupyter edits to local
-./scripts/deploy.sh stop         # Tear down stack, close tunnels
-```
-
-### BGR NIM Configuration
+## BGR NIM Configuration
 
 The Docker Compose stack configures the BGR NIM with:
 
@@ -70,13 +51,29 @@ The Docker Compose stack configures the BGR NIM with:
 | Dispersion corrections | `ALCHEMI_NIM_DFT3_ENABLED` | `true` (DFT-D3(BJ)) |
 | Shared memory | `--shm-size` | `8g` |
 
-### Monitoring
-
-Prometheus scrapes BGR metrics at `/v1/metrics`. View them in Grafana at `localhost:3000` (datasource auto-provisioned). The BGR status endpoint is also available at `localhost:8000/v1/status`.
+Prometheus scrapes BGR metrics at `localhost:8000/v1/metrics`; the BGR readiness endpoint is at `localhost:8000/v1/health/ready`.
 
 ## FAST_DEMO Mode
 
-The notebook defaults to `FAST_DEMO = False` — it will call a **live BGR endpoint**. Set `FAST_DEMO = True` in the control panel cell to use pre-cached JSON responses in `cached_responses/oer-catalyst-screening/` for fully offline operation. This is recommended for workshop environments without GPU access.
+The notebook defaults to `FAST_DEMO = False` and calls a **live BGR endpoint**. Set `FAST_DEMO = True` in the control-panel cell to replay pre-cached JSON responses from `cached_responses/oer-catalyst-screening/` instead. This is recommended for workshop environments without GPU access.
+
+## What's inside the notebook
+
+The notebook is organised in 11 sections:
+
+1. **Environment setup** — control panel and library imports
+2. **Endpoint connectivity** — verify the BGR NIM is reachable; inspect health and metadata
+3. **The Oxygen Evolution Reaction** — review the four-step OER mechanism and thermodynamic framework
+4. **Oxide catalyst surfaces** — build rutile bulks, optimise lattice parameters, cleave (110) slabs
+5. **Clean slab + gas-phase references** — relax pristine slabs and isolated adsorbate molecules
+6. **Adsorbate placement** — position H₂O, OH, O, OOH at catalytically active CUS sites on each slab
+7. **Batched geometry relaxation** — submit 30+ slab–adsorbate structures to the BGR NIM in one async batch
+8. **Relaxation quality control** — classify outcomes (converged, migrated, dissociated, desorbed) and visualise surface displacement
+9. **Adsorption energies** — compute ΔE_ads for each intermediate and inspect metal–adsorbate bond lengths
+10. **Screening results + material ranking** — 3-D adsorption-energy scatter, energy ladders, and ranking by proximity to the ideal OER catalyst
+11. **Extensions + scaling** — multi-site sampling, larger material libraries, refinements
+
+The notebook ends with *Discussion* and *References* sections that interpret results, compare to literature, and discuss limitations of the structural-screening approach.
 
 ## Tutorial Preview
 
@@ -107,4 +104,4 @@ By the end of the workshop, you will have screened three rutile (110) catalysts 
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Apache 2.0 — see the top-level [LICENSE](../LICENSE).
