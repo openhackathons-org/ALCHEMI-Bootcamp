@@ -6,7 +6,9 @@ import ase
 import ase.io
 import numpy as np
 from pydantic import (
+    AliasChoices,
     BaseModel,
+    ConfigDict,
     Field,
     NonNegativeFloat,
     NonNegativeInt,
@@ -145,8 +147,12 @@ class BGRRequest(BaseModel):
 class OptimizationResult(BGRAtomicData):
     """Result of a single geometry optimisation."""
 
+    model_config = ConfigDict(populate_by_name=True)
+
     converged: bool
-    num_optimization_steps: int
+    optimizer_nsteps: int = Field(
+        validation_alias=AliasChoices("optimizer_nsteps", "num_optimization_steps"),
+    )
     energy: float
     forces: List[float]
     stress: Optional[List[float]] = None
