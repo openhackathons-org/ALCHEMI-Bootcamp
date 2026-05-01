@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-JUPYTER_LOCAL_PORT="${JUPYTER_LOCAL_PORT:-8888}"
+JUPYTER_LOCAL_PORT="${JUPYTER_LOCAL_PORT:-8891}"
 GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3000}"
 REMOTE_REPO_DIR="/tmp/alchemi-playbook-part1"
 STATE_FILE="/tmp/alchemi-playbook-part1-deploy.env"
@@ -21,7 +21,7 @@ Commands:
   stop                                  Close tunnels and stop stack
 
 Environment variables:
-  JUPYTER_LOCAL_PORT    Local Jupyter port  (default: 8888)
+  JUPYTER_LOCAL_PORT    Local Jupyter port  (default: 8891)
   GRAFANA_LOCAL_PORT    Local Grafana port  (default: 3000)
 EOF
     exit 1
@@ -52,13 +52,13 @@ open_tunnels() {
     ssh -f -N \
         -o ExitOnForwardFailure=yes \
         -J "$LOGIN_HOST" \
-        -L "${JUPYTER_LOCAL_PORT}:localhost:8888" \
+        -L "${JUPYTER_LOCAL_PORT}:localhost:8891" \
         -L "${GRAFANA_LOCAL_PORT}:localhost:3000" \
         "$COMPUTE_NODE"
     sleep 1
     if lsof -ti:"${JUPYTER_LOCAL_PORT}" > /dev/null 2>&1; then
         echo "Tunnels open:"
-        echo "  Jupyter:  localhost:${JUPYTER_LOCAL_PORT} -> ${COMPUTE_NODE}:8888"
+        echo "  Jupyter:  localhost:${JUPYTER_LOCAL_PORT} -> ${COMPUTE_NODE}:8891"
         echo "  Grafana:  localhost:${GRAFANA_LOCAL_PORT} -> ${COMPUTE_NODE}:3000"
     else
         echo "Failed to open SSH tunnels."
@@ -136,6 +136,8 @@ cmd_restart() {
     copy_repo
     echo "Rebuilding stack on ${COMPUTE_NODE}..."
     remote_exec "bash ${REMOTE_SCRIPT} rebuild"
+    echo "Reopening SSH tunnels..."
+    open_tunnels
 }
 
 cmd_status() {

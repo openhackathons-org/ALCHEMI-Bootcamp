@@ -610,7 +610,7 @@ def classify_relaxation(
 
     return {
         "converged": converged,
-        "n_steps": int(relaxed_result.num_optimization_steps),
+        "n_steps": int(relaxed_result.optimizer_nsteps),
         "energy": float(relaxed_result.energy),
         "max_force": max_force,
         "adsorbate_height": adsorbate_height,
