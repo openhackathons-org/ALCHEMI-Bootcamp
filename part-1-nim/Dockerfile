@@ -16,7 +16,7 @@ RUN pip install jupyterlab jupyterlab-vim
 COPY . .
 
 ENV BGR_SERVER=http://localhost:8000
-EXPOSE 8888
+EXPOSE 8891
 
 CMD ["conda", "run", "--no-capture-output", "-n", "alchemi-playbook", \
-     "jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--allow-root"]
+     "jupyter", "lab", "--ip=0.0.0.0", "--port=8891", "--no-browser", "--allow-root"]
