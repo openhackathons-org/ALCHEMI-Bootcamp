@@ -1,12 +1,15 @@
 """Visualisation utilities using OVITO Python API and matplotlib."""
 
 from pathlib import Path
+from typing import Literal
 
 import ase
 import ase.data
 import pandas as pd
 
 from .constants import AMU_TO_G, ANGSTROM3_TO_CM3
+
+RendererName = Literal["tachyon", "visrtx", "anari", "ospray", "opengl"]
 
 
 def _clean_atoms_for_ovito(atoms: ase.Atoms) -> ase.Atoms:
@@ -22,13 +25,49 @@ def _clean_atoms_for_ovito(atoms: ase.Atoms) -> ase.Atoms:
     return clean
 
 
+def _make_renderer(
+    renderer: RendererName,
+    samples_per_pixel: int,
+):
+    """Build a configured OVITO final-frame renderer."""
+    renderer_key = renderer.lower()
+    if renderer_key in {"visrtx", "anari"}:
+        from ovito.vis import AnariRenderer
+
+        r = AnariRenderer()
+        r.samples_per_pixel = int(samples_per_pixel)
+        r.denoising_enabled = True
+        return r
+    if renderer_key == "ospray":
+        from ovito.vis import OSPRayRenderer
+
+        r = OSPRayRenderer()
+        r.samples_per_pixel = int(samples_per_pixel)
+        r.denoising_enabled = True
+        return r
+    if renderer_key == "opengl":
+        from ovito.vis import OpenGLRenderer
+
+        return OpenGLRenderer()
+    if renderer_key == "tachyon":
+        from ovito.vis import TachyonRenderer
+
+        return TachyonRenderer()
+    raise ValueError(
+        "renderer must be one of 'tachyon', 'visrtx', 'anari', 'ospray', or 'opengl'"
+    )
+
+
 def render_structure_ovito(
     atoms: ase.Atoms,
     output_path: str = "structure.png",
     size: tuple[int, int] = (800, 600),
     background: tuple[float, float, float] = (1.0, 1.0, 1.0),
+    renderer: RendererName = "tachyon",
+    samples_per_pixel: int = 64,
+    show_cell: bool = True,
 ) -> str:
-    """Render an ASE Atoms object to a PNG via OVITO's TachyonRenderer.
+    """Render an ASE Atoms object to a PNG via OVITO.
 
     Parameters
     ----------
@@ -39,32 +78,43 @@ def render_structure_ovito(
         RGB background colour.  Use (1, 1, 1) for white (default) or
         (0.15, 0.15, 0.15) for dark charcoal (better for light-coloured
         atoms such as hydrogen).
+    renderer : {"tachyon", "visrtx", "anari", "ospray", "opengl"}
+        Final-frame renderer.  "visrtx" and "anari" use OVITO's
+        AnariRenderer, which is the Python API for NVIDIA VisRTX.
+    samples_per_pixel : int
+        Ray-tracing samples per pixel for VisRTX/ANARI and OSPRay.
+    show_cell : bool
+        If False, hide the simulation-cell wireframe.
 
     Returns the path to the rendered image.
     """
     from ovito.io.ase import ase_to_ovito
-    from ovito.vis import TachyonRenderer, Viewport
+    from ovito.vis import Viewport
     from ovito.pipeline import StaticSource, Pipeline
 
     clean = _clean_atoms_for_ovito(atoms)
 
     data = ase_to_ovito(clean)
+    if not show_cell and data.cell_ is not None:
+        data.cell_.vis.enabled = False
+
     pipeline = Pipeline(source=StaticSource(data=data))
     pipeline.add_to_scene()
 
     vp = Viewport(type=Viewport.Type.Perspective)
-    vp.zoom_all()
+    vp.zoom_all(size=size)
 
-    renderer = TachyonRenderer()
+    ovito_renderer = _make_renderer(renderer, samples_per_pixel=samples_per_pixel)
     Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    vp.render_image(
-        filename=output_path,
-        size=size,
-        renderer=renderer,
-        background=background,
-    )
-
-    pipeline.remove_from_scene()
+    try:
+        vp.render_image(
+            filename=output_path,
+            size=size,
+            renderer=ovito_renderer,
+            background=background,
+        )
+    finally:
+        pipeline.remove_from_scene()
     return output_path
 
 
@@ -100,13 +150,10 @@ def create_interactive_view(
     try:
         import ipywidgets
         from ovito.io.ase import ase_to_ovito
-        from ovito.vis import Viewport
         from ovito.pipeline import StaticSource, Pipeline
         from ovito.gui import create_ipywidget
     except ImportError:
         return None
-
-    from ovito import scene
 
     clean = _clean_atoms_for_ovito(atoms)
     data = ase_to_ovito(clean)
@@ -120,17 +167,12 @@ def create_interactive_view(
     if not show_cell and data.cell_ is not None:
         data.cell_.vis.enabled = False
 
-    # Clear previous pipelines so widgets don't overlap
-    while scene.pipelines:
-        scene.pipelines[-1].remove_from_scene()
-
     pipeline = Pipeline(source=StaticSource(data=data))
-    pipeline.add_to_scene()
 
-    vp = Viewport(type=Viewport.Type.Perspective)
-    vp.zoom_all()
-
-    widget = create_ipywidget(vp, layout=ipywidgets.Layout(width=width, height=height))
+    widget = create_ipywidget(
+        pipeline,
+        layout=ipywidgets.Layout(width=width, height=height),
+    )
     return widget
 
 

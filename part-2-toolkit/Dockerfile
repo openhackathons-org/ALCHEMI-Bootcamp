@@ -8,7 +8,9 @@ RUN uv venv --seed --python 3.12 /opt/venv
 ENV VIRTUAL_ENV=/opt/venv UV_PROJECT_ENVIRONMENT=/opt/venv PATH="/opt/venv/bin:$PATH"
 
 WORKDIR /workspace
-RUN uv pip install "nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git"
+ARG NVALCHEMI_TOOLKIT_REF=7fe7756bd1b13580a619cff39b69742145d416e1
+ENV NVALCHEMI_TOOLKIT_REF=${NVALCHEMI_TOOLKIT_REF}
+RUN uv pip install "nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@${NVALCHEMI_TOOLKIT_REF}"
 RUN uv pip install torch --reinstall --index-url https://download.pytorch.org/whl/cu130
 RUN uv pip install jupyterlab jupyterlab-vim packmol matplotlib
 ENV LD_LIBRARY_PATH="/opt/venv/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH}"

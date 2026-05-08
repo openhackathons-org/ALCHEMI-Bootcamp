@@ -4,17 +4,26 @@ Hands-on tutorials for GPU-accelerated computational chemistry with NVIDIA ALCHE
 
 ## Tutorials
 
-### [Part 1: Atmospheric Water Harvesting with ALCHEMI NIMs](part-1-nim/)
+### [Part 1: Catalyst Adsorption Configuration Search with ALCHEMI NIMs](part-1-nim/)
 
-Screen six inorganic sorbent frameworks (zeolites, alumina, titania, zirconia) for H₂O adsorption strength using the ALCHEMI BGR NIM and the MACE-MPA-0 foundation model with DFT-D3(BJ) dispersion. Validates against published DFT/CC benchmarks, flags the one host that lacks reference data. Full Docker Compose stack with JupyterLab, Prometheus, and Grafana monitoring.
+Run an AdsorbML-style configuration search for molecular adsorption on catalyst surfaces using the ALCHEMI Batch Geometry Relaxation (BGR) NIM with MACE-MPA-0 and DFT-D3(BJ) dispersion. The tutorial compares single-starting-point and batched configuration-search protocols for CO, H2O, and CH3OH on Cu(111), Pd(111), and alpha-Al2O3(0001), while explicitly separating contextual literature checkpoints from strict apples-to-apples validation data. Full Docker Compose stack with JupyterLab, Prometheus, and Grafana monitoring.
 
 **Requirements**: NGC API key, NVIDIA GPU, Docker Compose
 
 ### [Part 2: ALCHEMI Toolkit Sandbox](part-2-toolkit/)
 
-Interactive Jupyter environment for exploring the ALCHEMI Toolkit Python library. Single Docker container, no API key or enterprise licence needed.
+Interactive Jupyter environment for exploring the ALCHEMI Toolkit Python library
+and the planned toolkit backend for the same AdsorbML adsorption panel used in
+Part 1. Single Docker container, no API key or enterprise licence needed.
 
 **Requirements**: NVIDIA GPU, Docker
+
+### [Shared Adsorption Tutorial Contract](shared/adsorption_tutorial/)
+
+Backend-neutral scientific contract for the reusable adsorption workflow:
+canonical host/adsorbate panel, required result schema, BGR-vs-toolkit adapter
+boundary, and expert fact-checking gates. Part 1 and the future Part 2 toolkit
+adsorption notebook should stay synchronized through this contract.
 
 ## HPC Quick Start
 

@@ -1,4 +1,4 @@
-"""ALCHEMI NIM water-sorbent tutorial — helper modules."""
+"""ALCHEMI NIM AdsorbML configuration-search tutorial helper modules."""
 
 from .api_client import (
     async_run_bgr,
@@ -8,6 +8,16 @@ from .api_client import (
     run_bgr_or_load_cache,
 )
 from .cache import cache_exists, load_cache, save_cache
+from .relaxation_backends import (
+    BackendName,
+    BackendUnavailableError,
+    BgrNimBackend,
+    RelaxationBackendConfig,
+    ToolkitBackend,
+    ToolkitD3BJConfig,
+    check_toolkit_native_api,
+    get_relaxation_backend,
+)
 from .constants import (
     AMU_TO_G,
     ANGSTROM3_TO_CM3,
@@ -26,20 +36,38 @@ from .models import (
     ase_to_atomic_data,
     atomic_data_to_ase,
 )
+from .analysis import (
+    ADSORPTION_ENERGY_FORMULA,
+    FinalSiteAnalysis,
+    ValidationResult,
+    build_pair_results_table,
+    classify_final_site,
+    compute_adsorption_energy_ev,
+    reference_site_matches,
+    strict_parity_subset,
+    summarize_pair_validation,
+)
 from .references import (
     ADSORBML_REFERENCES,
+    ACTIVE_ADSORBML_PAIRS,
     MACE_MP0B3_OC157_MAD_EV,
     MACE_MPA0_OC157_MAD_EV,
+    OPTIONAL_ADSORBML_CONTEXT_PAIRS,
+    REFERENCE_PUBLICATIONS,
     REFERENCES,
     S24_SUBCATEGORY_MAD_MEV,
     SMALL_MOLECULE_REFERENCES,
     AdsorbMLReference,
     AdsorptionReference,
+    ReferencePublication,
     SmallMoleculeReference,
     get_adsorbml_reference,
     get_mad_meV,
     get_reference,
     get_small_molecule_reference,
+    active_adsorbml_references,
+    optional_adsorbml_context_references,
+    strict_adsorbml_references,
 )
 from .oxide_slabs import (
     build_alpha_alumina_0001_slab,
@@ -65,6 +93,7 @@ from .config_search import (
     build_config_grid,
     build_h2o,
     build_methanol,
+    build_nh3,
     find_al2o3_0001_sites,
     find_fcc_sites,
     sites_for_host,
@@ -99,6 +128,15 @@ __all__ = [
     "run_bgr_or_load_cache",
     "async_run_bgr",
     "async_run_bgr_or_load_cache",
+    # relaxation_backends
+    "BackendName",
+    "BackendUnavailableError",
+    "BgrNimBackend",
+    "ToolkitBackend",
+    "ToolkitD3BJConfig",
+    "RelaxationBackendConfig",
+    "check_toolkit_native_api",
+    "get_relaxation_backend",
     # cache
     "save_cache",
     "load_cache",
@@ -119,6 +157,16 @@ __all__ = [
     "OptimizationResult",
     "ase_to_atomic_data",
     "atomic_data_to_ase",
+    # analysis
+    "ADSORPTION_ENERGY_FORMULA",
+    "FinalSiteAnalysis",
+    "ValidationResult",
+    "compute_adsorption_energy_ev",
+    "classify_final_site",
+    "build_pair_results_table",
+    "summarize_pair_validation",
+    "reference_site_matches",
+    "strict_parity_subset",
     # surfaces
     "build_slab",
     "make_active_mask",
@@ -155,6 +203,7 @@ __all__ = [
     "build_co",
     "build_h2o",
     "build_methanol",
+    "build_nh3",
     "find_fcc_sites",
     "find_al2o3_0001_sites",
     "sites_for_host",
@@ -167,14 +216,21 @@ __all__ = [
     "AdsorptionReference",
     "SmallMoleculeReference",
     "AdsorbMLReference",
+    "ReferencePublication",
     "REFERENCES",
+    "REFERENCE_PUBLICATIONS",
     "S24_SUBCATEGORY_MAD_MEV",
     "SMALL_MOLECULE_REFERENCES",
     "ADSORBML_REFERENCES",
+    "ACTIVE_ADSORBML_PAIRS",
+    "OPTIONAL_ADSORBML_CONTEXT_PAIRS",
     "MACE_MPA0_OC157_MAD_EV",
     "MACE_MP0B3_OC157_MAD_EV",
     "get_reference",
     "get_mad_meV",
     "get_small_molecule_reference",
     "get_adsorbml_reference",
+    "active_adsorbml_references",
+    "optional_adsorbml_context_references",
+    "strict_adsorbml_references",
 ]

@@ -6,8 +6,8 @@ BGR ``run_bgr`` call, measure wall-clock time, and report structures/sec
 and atoms/sec throughput. Sweep N across a doubling series until the
 NIM refuses the batch or throughput plateaus, then plot the curve.
 
-Results are pickled to ``cached_responses/water-sorbents/throughput_sweep.json``
-so ``FAST_DEMO`` replays reproduce the figure without calling the NIM.
+Results are pickled under ``cached_responses/adsorption-search/`` so
+``FAST_DEMO`` replays reproduce the figure without calling the NIM.
 """
 
 from __future__ import annotations
@@ -23,7 +23,6 @@ from .models import ase_to_atomic_data
 
 if TYPE_CHECKING:
     import ase
-    import matplotlib.axes
 
 
 # ---------------------------------------------------------------------------
@@ -97,9 +96,10 @@ def sweep_batch_throughput(
 ) -> list[dict]:
     """Run ``measure_batch_throughput`` for each size in ``sizes``.
 
-    If the cache file at ``cache_path`` exists it is loaded and returned
-    unchanged (FAST_DEMO mode). Otherwise, if ``endpoint_live`` is True,
-    the sweep runs live and results are persisted to ``cache_path``.
+    If the endpoint is not live and the cache file at ``cache_path``
+    exists, it is loaded and returned unchanged (FAST_DEMO mode).
+    Otherwise, if ``endpoint_live`` is True, the sweep runs live and
+    results are persisted to ``cache_path``.
 
     Parameters
     ----------
@@ -118,7 +118,7 @@ def sweep_batch_throughput(
         finding an OOM ceiling). If False, continue through all sizes.
     """
     cache_path = Path(cache_path)
-    if cache_path.is_file():
+    if not endpoint_live and cache_path.is_file():
         print(f"  Loading cached throughput sweep: {cache_path}")
         return json.loads(cache_path.read_text())
 

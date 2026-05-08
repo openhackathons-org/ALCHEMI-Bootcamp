@@ -1,0 +1,63 @@
+version: 1
+active_panel:
+  hosts:
+    - name: "Cu(111)"
+      class: "fcc metal"
+      facet: "(111)"
+      slab_layers: 4
+      surface_sites_per_cell: 9
+      default_supercell: [3, 3, 1]
+      vacuum_A: 15.0
+      backend_builders:
+        nim_helper: "helpers.build_cu111_slab"
+        toolkit_helper: null
+    - name: "Pd(111)"
+      class: "fcc metal"
+      facet: "(111)"
+      slab_layers: 4
+      surface_sites_per_cell: 9
+      default_supercell: [3, 3, 1]
+      vacuum_A: 15.0
+      backend_builders:
+        nim_helper: "helpers.build_pd111_slab"
+        toolkit_helper: null
+    - name: "Al2O3(0001)"
+      class: "oxide support"
+      facet: "alpha-Al2O3(0001)"
+      slab_layers: null
+      surface_sites_per_cell: null
+      default_supercell: [1, 1, 1]
+      vacuum_A: 15.0
+      backend_builders:
+        nim_helper: "helpers.build_alpha_alumina_0001_slab"
+        toolkit_helper: null
+  adsorbates:
+    - name: "CO"
+      active: true
+      orientations: ["C-down", "O-down"]
+    - name: "H2O"
+      active: true
+      orientations: ["O-down", "H-down", "flat"]
+    - name: "CH3OH"
+      active: true
+      orientations: ["O-down", "methyl-down"]
+    - name: "NH3"
+      active: false
+      role: "optional first-binding context only"
+      orientations: ["N-down", "H-down", "flat"]
+shared_reference_manifest: "../../part-1-nim/references/manifest.yml"
+required_analysis_schema:
+  - backend
+  - host
+  - adsorbate
+  - label
+  - start_site
+  - start_orientation
+  - final_site
+  - E_bind_eV
+  - converged
+  - max_force_eV_A
+  - geometry_status
+  - reliable_for_minimum
+  - reference_scope
+  - validation_status

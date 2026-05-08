@@ -87,8 +87,8 @@ def run_md_or_load_cache(
     endpoint_live: bool,
     timeout: int = 1800,  # 30 minutes
 ) -> BMDReply:
-    """Run MD if cache is missing and endpoint is live; otherwise load cache."""
-    if cache_exists(cache_dir, label):
+    """Run MD when endpoint is live; replay cache only when it is not."""
+    if not endpoint_live and cache_exists(cache_dir, label):
         print(f"  Loading cached response: {label}")
         return load_cache(cache_dir, label, BMDReply)
 
@@ -115,8 +115,8 @@ def run_bgr_or_load_cache(
     opttol: float | None = None,
     timeout: int = 1800,  # 30 minutes
 ) -> BGRReply:
-    """Run BGR if cache is missing and endpoint is live; otherwise load cache."""
-    if cache_exists(cache_dir, label):
+    """Run BGR when endpoint is live; replay cache only when it is not."""
+    if not endpoint_live and cache_exists(cache_dir, label):
         print(f"  Loading cached response: {label}")
         return load_cache(cache_dir, label, BGRReply)
 
@@ -191,7 +191,7 @@ async def async_run_md_or_load_cache(
     timeout: int = 1800,
 ) -> BMDReply:
     """Async equivalent of ``run_md_or_load_cache``."""
-    if cache_exists(cache_dir, label):
+    if not endpoint_live and cache_exists(cache_dir, label):
         print(f"  Loading cached response: {label}")
         return load_cache(cache_dir, label, BMDReply)
 
@@ -243,7 +243,7 @@ async def async_run_bgr_or_load_cache(
     timeout: int = 1800,
 ) -> BGRReply:
     """Async equivalent of ``run_bgr_or_load_cache``."""
-    if cache_exists(cache_dir, label):
+    if not endpoint_live and cache_exists(cache_dir, label):
         print(f"  Loading cached response: {label}")
         return load_cache(cache_dir, label, BGRReply)
 

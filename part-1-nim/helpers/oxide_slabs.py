@@ -1,7 +1,7 @@
-"""Oxide bulk and slab builders for the AWH water-sorbent tutorial.
+"""Oxide bulk and slab builders for the AdsorbML tutorial.
 
-Provides bulk cells and (Miller-indexed) slab constructions for the three
-ionic-class hosts in the S24 validation panel of Batatia 2024:
+The current AdsorbML panel uses alpha-Al2O3(0001). TiO2 and ZrO2 builders
+are retained for archived tutorial branches and tests:
 
 * alpha-Al2O3 (corundum, space group R-3c, #167) - (0001) surface
 * TiO2 rutile (P4_2/mnm, #136) - (110) surface
@@ -113,7 +113,7 @@ def build_monoclinic_zro2_bulk() -> pymatgen.core.Structure:
 def build_alpha_alumina_0001_slab(
     min_slab_size: float = 8.0,
     min_vacuum_size: float = 15.0,
-    supercell: tuple[int, int, int] = (1, 1, 1),
+    supercell: tuple[int, int, int] = (2, 2, 1),
 ) -> ase.Atoms:
     """Build an alpha-Al2O3 (0001) slab.
 

@@ -18,8 +18,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from .surfaces import build_slab
-
 if TYPE_CHECKING:
     import ase
     import pymatgen.core
@@ -78,13 +76,19 @@ def build_cu111_slab(
     surface and the one referenced in OC20 and in classical CO/Cu(111)
     surface-science literature (Bagus & Pacchioni 1989).
     """
-    return build_slab(
-        build_cu_bulk(),
-        miller_index=(1, 1, 1),
-        min_slab_size=min_slab_size,
-        min_vacuum_size=min_vacuum_size,
-        supercell=supercell,
+    del min_slab_size  # API compatibility; this builder intentionally uses 4 layers.
+    from ase.build import fcc111
+
+    nx, ny, nz = supercell
+    atoms = fcc111(
+        "Cu",
+        size=(nx, ny, 4 * nz),
+        a=LATTICE_A_CU,
+        vacuum=min_vacuum_size / 2.0,
+        periodic=True,
     )
+    atoms.pbc = [True, True, True]
+    return atoms
 
 
 def build_pd111_slab(
@@ -97,10 +101,16 @@ def build_pd111_slab(
     Canonical hydrogenation catalyst; CO binds at fcc-hollow at low coverage
     per Hammer-Morikawa-Norskov 1996 (PRL 76, 2141).
     """
-    return build_slab(
-        build_pd_bulk(),
-        miller_index=(1, 1, 1),
-        min_slab_size=min_slab_size,
-        min_vacuum_size=min_vacuum_size,
-        supercell=supercell,
+    del min_slab_size  # API compatibility; this builder intentionally uses 4 layers.
+    from ase.build import fcc111
+
+    nx, ny, nz = supercell
+    atoms = fcc111(
+        "Pd",
+        size=(nx, ny, 4 * nz),
+        a=LATTICE_A_PD,
+        vacuum=min_vacuum_size / 2.0,
+        periodic=True,
     )
+    atoms.pbc = [True, True, True]
+    return atoms

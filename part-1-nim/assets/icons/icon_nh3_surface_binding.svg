@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="300" viewBox="0 0 420 300" role="img">
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, Helvetica, sans-serif; fill: #F4F7F5; letter-spacing: 0; }
+      .subtitle { font: 400 21px Arial, Helvetica, sans-serif; fill: #B8C2BF; letter-spacing: 0; }
+      .label { font: 700 17px Arial, Helvetica, sans-serif; fill: #F4F7F5; letter-spacing: 0; }
+      .small { font: 400 13px Arial, Helvetica, sans-serif; fill: #B8C2BF; letter-spacing: 0; }
+      .tiny { font: 400 11px Arial, Helvetica, sans-serif; fill: #B8C2BF; letter-spacing: 0; }
+    </style>
+  </defs>
+  <rect width="420" height="300" rx="0" fill="#111417"/>
+  <rect x="18" y="18" width="384" height="264" rx="10" fill="#1F2328" stroke="#76B900" stroke-width="2"/>
+  <text x="34" y="55" class="label">NH3 binding motif</text>
+<circle cx="96.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="130.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="164.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="198.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="232.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="266.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="113.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="147.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="181.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="215.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="249.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="283.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="205" cy="105" r="13" fill="#60A5FA" stroke="#F4F7F5" stroke-width="2"/>
+<circle cx="178" cy="84" r="8" fill="#E5E7EB" stroke="#F4F7F5" stroke-width="2"/>
+<circle cx="232" cy="84" r="8" fill="#E5E7EB" stroke="#F4F7F5" stroke-width="2"/>
+<circle cx="205" cy="72" r="8" fill="#E5E7EB" stroke="#F4F7F5" stroke-width="2"/>
+<line x1="205" y1="105" x2="178" y2="84" stroke="#E5E7EB" stroke-width="3"/>
+<line x1="205" y1="105" x2="232" y2="84" stroke="#E5E7EB" stroke-width="3"/>
+<line x1="205" y1="105" x2="205" y2="72" stroke="#E5E7EB" stroke-width="3"/>
+<path d="M156 138 C190 125, 220 125, 254 138" fill="none" stroke="#76B900" stroke-width="4"/>
+<text x="154" y="128" class="tiny">N-lone-pair binding</text>
+  <text x="34" y="258" class="small">Surface binding context, not N2 dissociation kinetics</text>
+</svg>

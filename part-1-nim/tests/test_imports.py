@@ -56,6 +56,15 @@ class TestHelperImports:
             run_bgr_or_load_cache,
         )
 
+    def test_relaxation_backend_exports(self):
+        from helpers.relaxation_backends import (  # noqa: F401
+            BackendUnavailableError,
+            RelaxationBackendConfig,
+            ToolkitD3BJConfig,
+            check_toolkit_native_api,
+            get_relaxation_backend,
+        )
+
     def test_visualization(self):
         from helpers.visualization import (  # noqa: F401
             display_inline,
@@ -75,7 +84,10 @@ class TestHelperImports:
     def test_package_init_exports(self):
         from helpers import (  # noqa: F401
             BGRAtomicData,
+            ADSORPTION_ENERGY_FORMULA,
             check_endpoint,
+            compute_adsorption_energy_ev,
+            get_relaxation_backend,
             run_bgr_or_load_cache,
             structure_summary_table,
             build_slab,

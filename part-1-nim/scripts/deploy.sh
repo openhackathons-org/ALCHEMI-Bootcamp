@@ -128,7 +128,8 @@ copy_repo_rsync() {
     rsync -az --delete \
         -e "$ssh_cmd" \
         --exclude='.env' --exclude='.claude/' \
-        --exclude='outputs/' --exclude='__pycache__/' --exclude='.pytest_cache/' \
+        --exclude='cached_responses/' --exclude='outputs/' \
+        --exclude='__pycache__/' --exclude='.pytest_cache/' \
         --exclude='.ruff_cache/' --exclude='.ipynb_checkpoints/' --exclude='.DS_Store' \
         --exclude='matplotlib-*/' --exclude='tmp*/' \
         --exclude='docker-compose.override.yml' \

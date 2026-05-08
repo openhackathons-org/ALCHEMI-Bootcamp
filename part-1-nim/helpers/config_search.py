@@ -7,7 +7,7 @@ systematic grid:
     Al-top, O-top, bridge, hollow (for alpha-Al2O3).
   - **Orientations**: rotations about the surface normal + molecule-
     dependent tilts (C-down / O-down for CO, O-down / H-down for H2O,
-    O-down / methyl-down for CH3OH).
+    O-down / methyl-down for CH3OH, N-down / H-down for NH3).
   - **Heights**: initial z-displacement along the surface normal.
 
 Returns a list of (label, ase.Atoms, active_mask) tuples ready to feed
@@ -36,6 +36,45 @@ if TYPE_CHECKING:
 # ---------------------------------------------------------------------------
 # Adsorbate builders (canonical geometries via ASE)
 # ---------------------------------------------------------------------------
+
+
+def _maximin_anchor_direction(atoms: ase.Atoms, anchor_idx: int) -> np.ndarray:
+    """Return a direction that makes *anchor_idx* an exposed lowest atom.
+
+    Methanol's ASE geometry is not pre-oriented for surface adsorption.  For
+    O-down starts, simply aligning the C-O bond along z leaves the hydroxyl H
+    closer to the surface than O.  A deterministic Fibonacci-sphere search is
+    cheap for these small molecules and picks a surface normal for which the
+    anchored atom is genuinely the lowest atom.
+    """
+    rel = atoms.positions - atoms.positions[anchor_idx]
+    rel = np.delete(rel, anchor_idx, axis=0)
+    golden = np.pi * (3.0 - np.sqrt(5.0))
+    best_score = -np.inf
+    best = np.array([0.0, 0.0, 1.0])
+    for i in range(512):
+        z = 1.0 - 2.0 * (i + 0.5) / 512
+        radius = np.sqrt(max(0.0, 1.0 - z * z))
+        theta = golden * i
+        direction = np.array([np.cos(theta) * radius, np.sin(theta) * radius, z])
+        score = float(np.min(rel @ direction))
+        if score > best_score:
+            best_score = score
+            best = direction
+    if best_score <= 1e-6:
+        raise ValueError(
+            "Requested anchor atom is not an exposed atom for this molecular geometry."
+        )
+    return best
+
+
+def _orient_anchor_lowest(atoms: ase.Atoms, anchor_idx: int) -> ase.Atoms:
+    """Translate and rotate a molecule so *anchor_idx* is lowest at z = 0."""
+    atoms.translate(-atoms.positions[anchor_idx])
+    direction = _maximin_anchor_direction(atoms, anchor_idx)
+    atoms.rotate(direction, (0.0, 0.0, 1.0), center=(0.0, 0.0, 0.0))
+    atoms.positions[anchor_idx] = [0.0, 0.0, 0.0]
+    return atoms
 
 
 def build_co(orient: str = "C-down") -> ase.Atoms:
@@ -67,12 +106,20 @@ def build_h2o(orient: str = "O-down") -> ase.Atoms:
     # ASE ships H2O with O at ~(0, 0, 0.119); put O at the origin.
     m.translate(-m.positions[0])
     if orient == "O-down":
+        h_idx = [i for i, s in enumerate(m.get_chemical_symbols()) if s == "H"]
+        if h_idx and np.mean(m.positions[h_idx, 2]) < 0.0:
+            m.rotate(180, "x", center=(0, 0, 0))
         return m
     if orient == "H-down":
-        m.rotate(180, "x", center=(0, 0, 0))
+        h_idx = [i for i, s in enumerate(m.get_chemical_symbols()) if s == "H"]
+        if h_idx and np.mean(m.positions[h_idx, 2]) > 0.0:
+            m.rotate(180, "x", center=(0, 0, 0))
         return m
     if orient == "flat":
-        m.rotate(90, "x", center=(0, 0, 0))
+        # The ASE water geometry lies in a vertical plane after O-centering.
+        # Rotate that plane into xy so no atom is deliberately closest to
+        # the surface before relaxation.
+        m.rotate(90, "y", center=(0, 0, 0))
         return m
     raise ValueError(f"H2O orient must be O-down / H-down / flat, got {orient!r}")
 
@@ -90,28 +137,62 @@ def build_methanol(orient: str = "O-down") -> ase.Atoms:
     o_idx = symbols.index("O")
     c_idx = symbols.index("C")
     if orient == "O-down":
-        m.translate(-m.positions[o_idx])
-        # default orientation from ASE has CH3 already above O, leave it
-        return m
+        return _orient_anchor_lowest(m, o_idx)
     if orient == "methyl-down":
         m.translate(-m.positions[c_idx])
-        m.rotate(180, "x", center=(0, 0, 0))
+        # Point the C-O bond away from the surface.  The methyl H atoms, not
+        # the tetrahedral carbon center, are the closest atoms in this decoy
+        # orientation.
+        m.rotate(m.positions[o_idx] - m.positions[c_idx], (0, 0, 1), center=(0, 0, 0))
         return m
     raise ValueError(
         f"methanol orient must be O-down / methyl-down, got {orient!r}"
     )
 
 
+def build_nh3(orient: str = "N-down") -> ase.Atoms:
+    """Ammonia (NH3) from ase.build.molecule, oriented for placement.
+
+    orient = 'N-down' -> nitrogen lone-pair donor points toward surface
+    orient = 'H-down' -> one or more hydrogens point toward surface
+    orient = 'flat'   -> N-H pyramid axis roughly parallel to surface
+    """
+    from ase.build import molecule
+
+    m = molecule("NH3")
+    symbols = m.get_chemical_symbols()
+    n_idx = symbols.index("N")
+    h_idx = [i for i, s in enumerate(symbols) if s == "H"]
+    m.translate(-m.positions[n_idx])
+    if orient == "N-down":
+        # ASE's NH3 has the H triangle below N; invert so N is the contact atom.
+        m.rotate(180, "x", center=(0, 0, 0))
+        return m
+    if orient == "H-down":
+        # Keep ASE's H triangle closest to the surface.
+        return m
+    if orient == "flat":
+        # Put the N -> H-centroid vector roughly parallel to the surface.
+        if h_idx:
+            axis = m.positions[h_idx].mean(axis=0) - m.positions[n_idx]
+            if np.linalg.norm(axis) > 1e-12:
+                m.rotate(90, "y", center=(0, 0, 0))
+        return m
+    raise ValueError(f"NH3 orient must be N-down / H-down / flat, got {orient!r}")
+
+
 ADSORBATE_REGISTRY: dict[str, Callable[[str], "ase.Atoms"]] = {
     "CO": build_co,
     "H2O": build_h2o,
     "CH3OH": build_methanol,
+    "NH3": build_nh3,
 }
 
 ADSORBATE_ORIENTATIONS: dict[str, list[str]] = {
     "CO": ["C-down", "O-down"],
     "H2O": ["O-down", "H-down", "flat"],
     "CH3OH": ["O-down", "methyl-down"],
+    "NH3": ["N-down", "H-down", "flat"],
 }
 
 
@@ -127,6 +208,144 @@ def _top_layer_positions(slab: ase.Atoms, top_fraction: float = 0.25) -> np.ndar
     return slab.positions[z >= cut]
 
 
+def _xy_delta_minimum_image(
+    p_xy: np.ndarray,
+    q_xy: np.ndarray,
+    cell: np.ndarray,
+) -> np.ndarray:
+    delta = np.asarray(p_xy, dtype=float) - np.asarray(q_xy, dtype=float)
+    basis = np.vstack([cell[0, :2], cell[1, :2]]).T
+    try:
+        frac = np.linalg.solve(basis, delta)
+    except np.linalg.LinAlgError:
+        return delta
+    frac -= np.round(frac)
+    return basis @ frac
+
+
+def _wrap_xy_into_cell(xy: np.ndarray, cell: np.ndarray) -> np.ndarray:
+    basis = np.vstack([cell[0, :2], cell[1, :2]]).T
+    frac = np.linalg.solve(basis, np.asarray(xy, dtype=float))
+    frac -= np.floor(frac)
+    return basis @ frac
+
+
+def _unique_periodic_positions(
+    positions: list[np.ndarray],
+    cell: np.ndarray,
+    tol_A: float = 0.25,
+) -> list[np.ndarray]:
+    unique: list[np.ndarray] = []
+    for position in positions:
+        wrapped = position.copy()
+        wrapped[:2] = _wrap_xy_into_cell(wrapped[:2], cell)
+        if not any(
+            np.linalg.norm(_xy_delta_minimum_image(wrapped[:2], other[:2], cell))
+            < tol_A
+            for other in unique
+        ):
+            unique.append(wrapped)
+    return unique
+
+
+def _z_layers(positions: np.ndarray, tol_A: float = 0.6) -> list[np.ndarray]:
+    if len(positions) == 0:
+        return []
+    ordered = sorted(positions, key=lambda p: float(p[2]), reverse=True)
+    layers: list[list[np.ndarray]] = []
+    layer_ref_z: list[float] = []
+    for position in ordered:
+        z = float(position[2])
+        if not layers or abs(z - layer_ref_z[-1]) > tol_A:
+            layers.append([position])
+            layer_ref_z.append(z)
+        else:
+            layers[-1].append(position)
+    return [np.asarray(layer, dtype=float) for layer in layers]
+
+
+def fcc111_site_candidates(slab: ase.Atoms) -> dict[str, list[np.ndarray]]:
+    """Enumerate all periodic top/bridge/fcc/hcp candidates in an fcc(111) cell.
+
+    hcp hollows are identified by a second-layer atom below the hollow xy
+    position. fcc hollows are the complementary threefold hollows.
+    """
+    cell = slab.cell.array
+    layers = _z_layers(np.asarray(slab.positions, dtype=float))
+    if len(layers) < 2 or len(layers[0]) < 3:
+        raise ValueError("Need at least two fcc(111) layers for site enumeration.")
+
+    top = layers[0]
+    second = layers[1]
+    top_z = float(np.max(top[:, 2]))
+    shifts = [
+        ia * cell[0, :2] + ib * cell[1, :2]
+        for ia in (-1, 0, 1)
+        for ib in (-1, 0, 1)
+    ]
+    images = [(idx, atom[:2] + shift) for idx, atom in enumerate(top) for shift in shifts]
+
+    distances: list[float] = []
+    for idx, atom in enumerate(top):
+        for image_idx, image_xy in images:
+            d = float(np.linalg.norm(image_xy - atom[:2]))
+            if (image_idx != idx or d > 1e-6) and d > 1e-6:
+                distances.append(d)
+    if not distances:
+        raise ValueError("Cannot determine fcc(111) in-plane nearest-neighbour distance.")
+    nn = min(distances)
+    neighbour_cut = nn * 1.15
+
+    bridge_candidates: list[np.ndarray] = []
+    hollow_candidates: list[np.ndarray] = []
+    for atom in top:
+        neighbours = [
+            image_xy
+            for _, image_xy in images
+            if 1e-6 < float(np.linalg.norm(image_xy - atom[:2])) < neighbour_cut
+        ]
+        for neighbour_xy in neighbours:
+            bridge_candidates.append(np.array([
+                0.5 * (atom[0] + neighbour_xy[0]),
+                0.5 * (atom[1] + neighbour_xy[1]),
+                top_z,
+            ]))
+        for i, first_xy in enumerate(neighbours):
+            for second_xy in neighbours[i + 1:]:
+                if float(np.linalg.norm(first_xy - second_xy)) < neighbour_cut:
+                    hollow_candidates.append(np.array([
+                        (atom[0] + first_xy[0] + second_xy[0]) / 3.0,
+                        (atom[1] + first_xy[1] + second_xy[1]) / 3.0,
+                        top_z,
+                    ]))
+
+    top_candidates = _unique_periodic_positions(
+        [np.array([p[0], p[1], top_z]) for p in top],
+        cell,
+    )
+    bridge_candidates = _unique_periodic_positions(bridge_candidates, cell)
+    hollow_candidates = _unique_periodic_positions(hollow_candidates, cell)
+
+    fcc_candidates: list[np.ndarray] = []
+    hcp_candidates: list[np.ndarray] = []
+    for hollow in hollow_candidates:
+        second_layer_distance = min(
+            float(np.linalg.norm(_xy_delta_minimum_image(hollow[:2], atom[:2], cell)))
+            for atom in second
+        )
+        if second_layer_distance < nn * 0.3:
+            hcp_candidates.append(hollow)
+        else:
+            fcc_candidates.append(hollow)
+
+    return {
+        "top": top_candidates,
+        "bridge": bridge_candidates,
+        "fcc": fcc_candidates,
+        "hcp": hcp_candidates,
+    }
+
+
 def find_fcc_sites(slab: ase.Atoms) -> dict[str, list[np.ndarray]]:
     """Return representative {top, bridge, fcc, hcp} sites for an fcc(111) slab.
 
@@ -136,34 +355,10 @@ def find_fcc_sites(slab: ase.Atoms) -> dict[str, list[np.ndarray]]:
     ~12 starting configurations AdsorbML prescribes without bloating
     the batch.
     """
-    top_pos = _top_layer_positions(slab, top_fraction=0.15)
-    if len(top_pos) < 3:
-        raise ValueError("Slab top layer has fewer than 3 atoms; cannot enumerate sites.")
-
-    # Central-most top atom -> top site
-    central_idx = int(np.argmin(
-        np.linalg.norm(top_pos[:, :2] - (slab.cell.array[0, :2] + slab.cell.array[1, :2]) / 2, axis=1)
-    ))
-    top_site = top_pos[central_idx].copy()
-
-    # Distances from the central top atom to every other top-layer atom
-    d = np.linalg.norm(top_pos - top_site, axis=1)
-    d[central_idx] = np.inf
-    nearest3 = np.argsort(d)[:3]
-    neighbours = top_pos[nearest3]
-
-    # Bridge = midpoint of central <-> nearest neighbour
-    bridge_site = (top_site + neighbours[0]) / 2.0
-    # fcc hollow = centroid of three nearest neighbours (no second-layer atom directly below)
-    fcc_site = neighbours.mean(axis=0)
-    # hcp hollow = centroid of central + two nearest neighbours (second-layer atom directly below)
-    hcp_site = (top_site + neighbours[0] + neighbours[1]) / 3.0
-
+    site_map = fcc111_site_candidates(slab)
     return {
-        "top": [top_site],
-        "bridge": [bridge_site],
-        "fcc": [fcc_site],
-        "hcp": [hcp_site],
+        name: [find_central_site(np.asarray(positions), slab.cell.array)]
+        for name, positions in site_map.items()
     }
 
 
@@ -263,9 +458,9 @@ def build_config_grid(
 
     The four axes multiply: for an fcc metal with 4 sites, 3 rotations,
     1 height, and adsorbate-specific orientations (2 for CO, 3 for H2O,
-    2 for CH3OH), you get 4*3*1*{2 or 3 or 2} = 24, 36, 24 configs per
-    pair. Filters let the notebook scale down to ~12 for runtime or up
-    to ~40 for accuracy.
+    2 for CH3OH, 3 for NH3), you get 4*3*1*{2 or 3 or 2 or 3}
+    configs per pair. Filters let the notebook scale down to ~12 for
+    runtime or up to ~40 for accuracy.
     """
     if adsorbate_name not in ADSORBATE_REGISTRY:
         raise ValueError(f"Unknown adsorbate: {adsorbate_name}")

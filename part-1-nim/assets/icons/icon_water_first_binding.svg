@@ -1,0 +1,34 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="300" viewBox="0 0 420 300" role="img">
+  <defs>
+    <style>
+      .title { font: 700 42px Arial, Helvetica, sans-serif; fill: #F4F7F5; letter-spacing: 0; }
+      .subtitle { font: 400 21px Arial, Helvetica, sans-serif; fill: #B8C2BF; letter-spacing: 0; }
+      .label { font: 700 17px Arial, Helvetica, sans-serif; fill: #F4F7F5; letter-spacing: 0; }
+      .small { font: 400 13px Arial, Helvetica, sans-serif; fill: #B8C2BF; letter-spacing: 0; }
+      .tiny { font: 400 11px Arial, Helvetica, sans-serif; fill: #B8C2BF; letter-spacing: 0; }
+    </style>
+  </defs>
+  <rect width="420" height="300" rx="0" fill="#111417"/>
+  <rect x="18" y="18" width="384" height="264" rx="10" fill="#1F2328" stroke="#76B900" stroke-width="2"/>
+  <text x="34" y="55" class="label">Water sorption motif</text>
+<circle cx="96.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="130.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="164.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="198.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="232.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="266.0" cy="180" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="113.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="147.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="181.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="215.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="249.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="283.0" cy="208" r="11" fill="#4B5563" stroke="#1F2328" stroke-width="2"/>
+<circle cx="205" cy="112" r="14" fill="#EF4444" stroke="#F4F7F5" stroke-width="2"/>
+<circle cx="180" cy="92" r="8" fill="#E5E7EB" stroke="#F4F7F5" stroke-width="2"/>
+<circle cx="230" cy="92" r="8" fill="#E5E7EB" stroke="#F4F7F5" stroke-width="2"/>
+<line x1="205" y1="112" x2="180" y2="92" stroke="#E5E7EB" stroke-width="3"/>
+<line x1="205" y1="112" x2="230" y2="92" stroke="#E5E7EB" stroke-width="3"/>
+<path d="M130 150 C165 132, 245 132, 280 150" fill="none" stroke="#5DADEC" stroke-width="4"/>
+<text x="118" y="132" class="tiny">first binding step only</text>
+  <text x="34" y="258" class="small">H2O binding is not a full pore-filling model</text>
+</svg>

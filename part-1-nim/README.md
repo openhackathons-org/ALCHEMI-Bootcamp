@@ -1,16 +1,21 @@
 <p align="center">
-  <img src="assets/nvidia-logo.png" alt="NVIDIA" height="55"/>
+  <img src="assets/images/logos/nvidia-logo.png" alt="NVIDIA" height="55"/>
 </p>
 
 ---
 
-# Atmospheric Water Harvesting — MACE-MP-0 Screening with NVIDIA ALCHEMI
+# Catalyst Adsorption Configuration Search with NVIDIA ALCHEMI
 
-**Interactive Jupyter tutorial** — screen six inorganic sorbent frameworks (zeolite chabazite, SAPO-34, MFI silicalite, α-Al₂O₃, rutile TiO₂, monoclinic ZrO₂) for H₂O adsorption strength using GPU-accelerated machine-learning interatomic potentials.
+**Interactive Jupyter tutorial.** This notebook demonstrates an AdsorbML-style configuration search for molecular adsorption on catalyst surfaces. The scientific task is deliberately narrow: generate several plausible starting geometries for an adsorbate on a surface, relax them with the NVIDIA ALCHEMI Batch Geometry Relaxation (BGR) NIM, and compare the lowest-energy relaxed structures with literature or Open Catalyst reference context.
 
-Built on the **NVIDIA ALCHEMI Batch Geometry Relaxation (BGR) NIM** running the **MACE-MPA-0** foundation model with DFT-D3(BJ) dispersion corrections, the notebook walks learners through a scientifically honest discovery workflow: validate against published DFT benchmarks (Batatia 2024 S24, Plessow 2024 CCSD(T)/CBS for H-MFI, Fischer 2015 CP2K for H-SAPO-34), then extend to a host without published reference data (ZrO₂) and state the uncertainty explicitly.
+The active panel is CO, H2O, and CH3OH on Cu(111), Pd(111), and alpha-Al2O3(0001). These systems are useful because they expose the central methodological issue in adsorption screening: a single chemically reasonable starting geometry can relax into a local minimum, while a batched configuration search can reveal a lower-energy site.
 
-Beyond the science, the notebook doubles as a hands-on introduction to the ALCHEMI NIM: wire protocol, batch relaxation, active-mask constraints, `FAST_DEMO` cached replay, and Prometheus/Grafana observability.
+The notebook uses the **MACE-MPA-0** foundation model with **DFT-D3(BJ)** dispersion through the BGR NIM. Quantitative claims are intentionally scoped. Published model-level errors provide an uncertainty envelope, but strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are pinned in the reference manifest, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
+
+Archived context:
+
+- The earlier atmospheric-water-harvesting pivot materials are under `_archive/awh-pivot-sources/`.
+- The earlier OER catalyst-screening tutorial is under `_archive/oer-catalyst-screening/`.
 
 ## Docker Deployment
 
@@ -19,8 +24,8 @@ Beyond the science, the notebook doubles as a hands-on introduction to the ALCHE
 | Requirement | Details |
 |-------------|---------|
 | NGC API key | Get one at [build.nvidia.com](https://build.nvidia.com) |
-| Docker + Compose | `docker compose` (v2 plugin) — used to build and run the container environment |
-| GPU | NVIDIA GPU (tested: A100, H100, B200, L40S, RTX 6000 Ada) |
+| Docker + Compose | `docker compose` v2 plugin |
+| GPU | NVIDIA GPU; the full panel is intended for a data-center GPU such as A100/H100/B200 or comparable workstation hardware |
 
 ### Setup
 
@@ -31,17 +36,18 @@ cp .env.example .env
 # Edit .env and set NGC_API_KEY=<your-key>
 ```
 
-SSH into your login host and allocate a GPU node (see `./start` for an example SLURM script):
+SSH into your login host and allocate a GPU node from the repository root:
 
 ```bash
 ssh <login-host>
 ./start
-# Note the compute node hostname (e.g., dgx-node-42)
+# Note the compute node hostname, for example dgx-node-42.
 ```
 
-Then from your local machine, deploy the full stack:
+Then deploy the full Part 1 stack:
 
 ```bash
+cd part-1-nim
 ./scripts/deploy.sh setup <login-host> <compute-node>
 ```
 
@@ -56,57 +62,61 @@ Access JupyterLab at `http://localhost:8888` and Grafana at `http://localhost:30
 ./scripts/deploy.sh stop         # Tear down stack, close tunnels
 ```
 
-### BGR NIM Configuration
+## BGR NIM Configuration
 
 The Docker Compose stack configures the BGR NIM with:
 
 | Setting | Variable | Value |
 |---------|----------|-------|
-| Model | `ALCHEMI_NIM_MODEL_TYPE` | `mace` (MACE-MPA-0) |
+| Model family | `ALCHEMI_NIM_MODEL_TYPE` | `mace` |
 | Boundary conditions | `ALCHEMI_NIM_PBC` | `true` |
 | Optimizer preset | `ALCHEMI_NIM_BGR_OPTIMIZER_PRESET` | `materials` |
-| Dispersion corrections | `ALCHEMI_NIM_DFT3_ENABLED` | `true` (DFT-D3(BJ)) |
+| Dispersion corrections | `ALCHEMI_NIM_DFT3_ENABLED` | `true` |
 | Shared memory | `--shm-size` | `8g` |
 
-The notebook queries the NIM's runtime metadata in cell 5 and prints the deployed model version + checkpoint — do not hard-code assumptions.
+The notebook queries the NIM runtime metadata before the scientific workflow. Do not hard-code the deployed checkpoint or service metadata in the prose.
 
-### Monitoring
+## Runtime Modes
 
-Prometheus scrapes BGR metrics at `/v1/metrics`. View them in Grafana at `localhost:3000` (datasource auto-provisioned). The BGR status endpoint is also available at `localhost:8000/v1/status`.
+`SMALL_PANEL_MODE = True` runs a one-pair smoke case suitable for debugging notebook mechanics. `SMALL_PANEL_MODE = False` runs the full AdsorbML panel.
 
-## FAST_DEMO Mode
+`USE_CACHED_RESPONSES = True` replays cached BGR responses once cache fixtures have been created. `USE_CACHED_RESPONSES = False` calls the live BGR endpoint.
 
-The notebook defaults to `FAST_DEMO = False` — it will call a **live BGR endpoint**. Set `FAST_DEMO = True` in the control panel cell to use pre-cached JSON responses in `cached_responses/water-sorbents/` for fully offline operation. Recommended for workshop environments without GPU access.
+`BACKEND = "bgr_nim"` runs the NIM/cache route. `BACKEND = "toolkit"` runs the
+native Toolkit route through `AtomicData`, `Batch.from_data_list`,
+`MACEWrapper`, `PipelineModelWrapper`, and `FIRE2`. Toolkit selection is not a
+fallback: if the native package/API, checkpoint, or explicit D3(BJ) parity
+configuration is missing, the notebook fails before any BGR call is attempted.
 
-## Scope and caveats
+## Scientific Scope
 
-MACE-MP-0 has known limitations that the tutorial explicitly surfaces at the points where they matter:
+The tutorial is about adsorption configuration search, not a complete catalyst-discovery workflow. The calculations report electronic adsorption energies for isolated adsorbates at low coverage. They do not compute activation barriers, electrochemical free energies, explicit solvent effects, coverage-dependent lateral interactions, temperature/entropy corrections, or magnetic/open-shell chemistry.
 
-- **12 Å receptive field** — no long-range dispersion beyond that cutoff.
-- **No explicit spin** — every system in the panel is closed-shell singlet (no magnetic 3d transition metals, no reducible cations, no f electrons).
-- **MPtrj training-set gaps** — the training data contains no gas-phase molecules, no surface slabs, and no MOFs (which is why MOF-based AWH champions are deliberately out of scope).
-- **No free energy / entropy** — E_ads reported here is electronic-energy-only. Thermal and configurational corrections require MD + thermodynamic integration (out of tutorial scope).
+The reusable backend-neutral science contract lives in
+[`../shared/adsorption_tutorial`](../shared/adsorption_tutorial/). Part 1 is the
+BGR NIM implementation of that contract; the toolkit implementation should emit
+the same result schema before the two versions are compared.
 
-The notebook validates against published DFT/CC reference data wherever available:
+The reference layer is deliberately conservative:
 
-- Tier 1 (H-CHA, α-Al₂O₃, TiO₂) — direct S24 PBE-D3(BJ) checkpoints from Batatia 2024.
-- Tier 2 (H-MFI) — CCSD(T)/CBS from Plessow 2024; independent MACE benchmark in Anderson 2025.
-- Tier 3 (H-SAPO-34) — CP2K PBE-D3 from Fischer 2015.
-- Tier 4 (ZrO₂) — no published reference; flagged as candidate for DFT/experimental follow-up with MAD-derived uncertainty band.
+- `context` rows support interpretation and plotting.
+- `near-strict` rows may support limited quantitative comparison when only minor modeling details differ.
+- `strict` rows require an exact manifest-backed match to the tutorial's slab, adsorbate, coverage, functional, dispersion, frozen-layer convention, and sign convention.
 
-## References
+## References To Verify
 
-1. Batatia, I. *et al.* "A foundation model for atomistic materials chemistry." arXiv:2401.00096v3 (2024).
-2. Plessow, P. N. "Ab initio calculations on the adsorption of water in zeolites." *J. Phys. Chem. C* (2024).
-3. Anderson, A. *et al.* "MACE-MP-0 for zeolite/water systems." *Phys. Chem. Chem. Phys.* (2025).
-4. Fischer, M. "Structure and water adsorption of AlPO-based chabazite and SAPO-34: a DFT study." *J. Phys. Chem. C* (2015).
-5. Furukawa, H. *et al.* "Water adsorption in porous metal-organic frameworks and related materials." *J. Am. Chem. Soc.* **136**, 4369–4381 (2014).
-6. Kim, H. *et al.* "Water harvesting from air with metal-organic frameworks powered by natural sunlight." *Science* **356**, 430–434 (2017).
-7. Grimme, S. *et al.* "Effect of the damping function in dispersion corrected density functional theory." *J. Comput. Chem.* **32**, 1456–1465 (2011).
-8. Stukowski, A. "Visualization and analysis of atomistic simulation data with OVITO." *Model. Simul. Mater. Sci. Eng.* **18**, 015012 (2010).
+Primary references currently used by the notebook or plan:
 
-> The previous iteration of this tutorial (OER catalyst screening on rutile oxides) has been archived under [`_archive/oer-catalyst-screening/`](_archive/oer-catalyst-screening/) and remains runnable by copying the files back to the tutorial root.
+1. Batatia, I. et al. "A foundation model for atomistic materials chemistry." arXiv:2401.00096.
+2. Lan, J. et al. "AdsorbML: a leap in efficiency for adsorption energy calculations using generalizable machine learning potentials." *npj Computational Materials* 9, 172 (2023).
+3. Chanussot, L. et al. "Open Catalyst 2020 (OC20) Dataset and Community Challenges." *ACS Catalysis* 11, 6059 (2021).
+4. Tran, R. et al. "The Open Catalyst 2022 (OC22) Dataset and Challenges for Oxide Electrocatalysts." *ACS Catalysis* 13, 3066 (2023).
+5. Hammer, B., Morikawa, Y. and Norskov, J. K. "CO chemisorption at metal surfaces and overlayers." *Physical Review Letters* 76, 2141 (1996).
+6. Grimme, S. et al. "Effect of the damping function in dispersion corrected density functional theory." *Journal of Computational Chemistry* 32, 1456 (2011).
+7. Stukowski, A. "Visualization and analysis of atomistic simulation data with OVITO." *Modelling and Simulation in Materials Science and Engineering* 18, 015012 (2010).
+
+See `references/manual_checks.md` and `references/manifest.yml` for the verification state before promoting any contextual number into strict validation.
 
 ## License
 
-Apache 2.0 — see [LICENSE](../LICENSE).
+Apache 2.0 -- see [LICENSE](../LICENSE).
