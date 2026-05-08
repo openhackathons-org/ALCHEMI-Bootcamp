@@ -1,4 +1,5 @@
 **/outputs/
+**/cached_responses/
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
@@ -12,3 +13,5 @@ matplotlib-*/
 tmp*/
 docker-compose.override.yml
 **/monitoring/grafana/data/
+part-1-nim/assets/images/plots/
+part-1-nim/references/pdfs/*.pdf
