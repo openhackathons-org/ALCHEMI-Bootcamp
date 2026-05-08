@@ -10,6 +10,8 @@ not pair-specific validation figures.
   catalyst adsorption configuration search as the central tutorial motif.
 - `v0_core/02_catalyst_discovery_workflow.png`:
   many adsorption candidates batched through GPU relaxation and ranked.
+- `v0_core/discovery_funnel.png`:
+  general chemical-discovery funnel from broad chemical space through narrowing, candidate structures, accelerated simulation, ranked outputs, and DFT/experiment validation.
 - `v0_core/workflow_adsorbml_bgr.png`:
   current notebook batching figure with a central GPU connected to independent adsorption panels.
 - `v0_core/phenomenon_local_minima.png`:
