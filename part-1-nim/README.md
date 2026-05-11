@@ -14,53 +14,13 @@
 
 Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MACE-MP-0** foundation model, this notebook walks attendees through a complete computational catalyst screening workflow: from bulk crystal construction through adsorption energy ranking — at 10,000× the speed of conventional DFT.
 
-## Docker Deployment
+## Deployment
 
-### Prerequisites
-
-| Requirement | Details |
-|-------------|---------|
-| NGC API key | Get one at [build.nvidia.com](https://build.nvidia.com) |
-| Docker + Compose | `docker compose` (v2 plugin) — used to build and run the container environment |
-| GPU | NVIDIA GPU (tested: A100, H100, B200, L40S, RTX 6000 Ada) |
-
-### Setup
-
-Configure your NGC API key locally:
-
-```bash
-cp .env.example .env
-# Edit .env and set NGC_API_KEY=<your-key>
-```
-
-SSH into your login host and allocate a GPU node (see `./start` for an example SLURM script):
-
-```bash
-ssh <login-host>
-./start
-# Note the compute node hostname (e.g., dgx-node-42)
-```
-
-Then from your local machine, deploy the full stack:
-
-```bash
-./scripts/deploy.sh setup <login-host> <compute-node>
-```
-
-Access JupyterLab at `http://localhost:8891` and Grafana at `http://localhost:3000` (admin/admin).
-
-### Management
-
-```bash
-./scripts/deploy.sh status       # Jupyter URL, BGR health, Grafana
-./scripts/deploy.sh restart      # Sync local changes, restart stack
-./scripts/deploy.sh pull-changes # Sync remote Jupyter edits to local
-./scripts/deploy.sh stop         # Tear down stack, close tunnels
-```
+The unified compose stack at the repo root (`dev/`) runs this notebook, Part 2, the BGR NIM sidecar, Prometheus, and Grafana. See [`dev/README.md`](../README.md) for setup, port table, and HPC instructions.
 
 ### BGR NIM Configuration
 
-The Docker Compose stack configures the BGR NIM with:
+The compose stack configures the BGR NIM with:
 
 | Setting | Variable | Value |
 |---------|----------|-------|
