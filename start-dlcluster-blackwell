@@ -1,0 +1,10 @@
+#!/bin/bash
+# Allocate an interactive GB200 Blackwell session on dlcluster.
+# Mirrors `dev/start` but targets the gb200nvl4 partition (aarch64, 4xGB200/node).
+srun \
+    --job-name=alchemi-playbook \
+    --time=8:00:00 \
+    --partition=gb200nvl4 \
+    --account=blackwell \
+    --gres=gpu:4 \
+    --pty $SHELL

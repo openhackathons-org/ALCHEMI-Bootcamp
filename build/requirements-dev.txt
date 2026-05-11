@@ -1,0 +1,6 @@
+# Developer-only extras layered on top of requirements.txt.
+# Used in the dev/ worktree image (ARG INSTALL_DEV=true) and the host venv.
+
+nvalchemi-toolkit-ops[torch] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git
+pytest>=8.0
+ruff>=0.4

@@ -1,0 +1,20 @@
+#!/bin/bash
+# Allocate an interactive GH200 (Grace+Hopper, aarch64) session on computelab.
+# Targets computelab's gh200-480gb 1-GPU `lego-cg1-qs-*` pool (~9 idle nodes
+# typically), the only aarch64 + datacenter-GPU shape with reliably-bookable
+# capacity. The 4-GPU shapes (utskinnyjoe-dvt-*, both gh200-120gb:4 and
+# gh200-480gb:4) are persistently `drained$` and reject jobs; computelab's
+# b200/b300/gb100 are all x86_64 (no aarch64 + Blackwell exists), so this
+# is the closest arch-match to dlcluster's GB200 setup.
+#
+# Single-GPU only: enough for warmup (1 graph) and melt (1 graph). The
+# 4-GPU `slc_multi_gpu.sh` sweep cannot run as-is here -- either run the
+# 5 SLC temperatures sequentially in one allocation by passing
+# `--temps 250 300 350 400 450` one at a time, or fall back to an x86_64
+# B200 node (separate Dockerfile build needed; computelab's umbriel-b200
+# 8-GPU pools have plenty of capacity).
+srun \
+    --job-name=alchemi-playbook \
+    --time=8:00:00 \
+    --gres=gpu:gh200-480gb:1 \
+    --pty $SHELL
