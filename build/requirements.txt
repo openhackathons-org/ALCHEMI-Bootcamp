@@ -1,0 +1,27 @@
+# Unified runtime dependencies for the ALCHEMI Playbook (Parts 1 + 2).
+#
+# ovito is installed via conda (see dev/environment.yml) so its bundled
+# Qt6 / glib / fontconfig runtime ships with the conda env instead of via
+# apt-get system libs. See dev/Dockerfile and dev/README.md for the
+# full install sequence.
+
+# Toolkit (Part 2 core; pulls in ase as a transitive)
+nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git
+
+# Part 1 scientific stack
+pymatgen>=2024.1.1
+pydantic>=2.0
+requests>=2.31
+aiohttp>=3.9
+numpy>=1.24
+pandas>=2.0
+matplotlib>=3.7
+
+# Jupyter / interactive
+ipykernel
+ipywidgets>=8.0
+jupyterlab
+jupyterlab-vim
+
+# Part 2 packing
+packmol

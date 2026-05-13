@@ -1,6 +1,10 @@
 services:
   bgr:
     image: nvcr.io/nim/nvidia/alchemi-bgr:1.0.0
+    container_name: alchemi-playbook-bgr
+    # OVITO ships only x86_64 builds on conda.ovito.org; the entire stack
+    # must therefore run on an x86_64 host. See ../README.md.
+    platform: linux/amd64
     network_mode: host
     shm_size: 8g
     environment:
@@ -14,7 +18,7 @@ services:
         reservations:
           devices:
             - driver: nvidia
-              count: 1
+              count: all
               capabilities: [gpu]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/v1/health/ready"]
@@ -25,25 +29,43 @@ services:
 
   jupyter:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: build/Dockerfile
+    image: alchemi-playbook:latest
+    container_name: alchemi-playbook-jupyter
+    platform: linux/amd64
     network_mode: host
+    shm_size: 8g
     environment:
       - BGR_SERVER=http://localhost:8000
+    # Selective bind-mounts. Students see only tutorial content under
+    # /workspace; build/, start-*, and dotfiles stay hidden.
     volumes:
-      - .:/workspace
+      - ../part-1-nim:/workspace/part-1-nim
+      - ../part-2-toolkit:/workspace/part-2-toolkit
+      - ../README.md:/workspace/README.md:ro
+      - ../LICENSE:/workspace/LICENSE:ro
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
     depends_on:
       bgr:
         condition: service_healthy
 
   prometheus:
     image: prom/prometheus:latest
+    container_name: alchemi-playbook-prometheus
     network_mode: host
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
     image: grafana/grafana:latest
+    container_name: alchemi-playbook-grafana
     network_mode: host
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
