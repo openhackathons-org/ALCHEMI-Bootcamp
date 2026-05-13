@@ -41,6 +41,8 @@ Both parts run from a single unified Docker container alongside the BGR NIM serv
 ```bash
 cd build
 cp .env.example .env       # then edit .env and set NGC_API_KEY
+set -a; source .env; set +a
+echo "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
 docker compose up          # builds the unified image and starts all services
 ```
 
