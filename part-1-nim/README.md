@@ -16,7 +16,7 @@ Built on the **NVIDIA ALCHEMI BGR (Batch Geometry Relaxation) NIM** and the **MA
 
 ## Deployment
 
-The unified compose stack at the repo root (`dev/`) runs this notebook, Part 2, the BGR NIM sidecar, Prometheus, and Grafana. See [`dev/README.md`](../README.md) for setup, port table, and HPC instructions.
+The unified compose stack at the repo root runs this notebook, Part 2, the BGR NIM sidecar, Prometheus, and Grafana. See [the repo README](../README.md) for setup and port table.
 
 ### BGR NIM Configuration
 
