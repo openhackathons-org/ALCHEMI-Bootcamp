@@ -1,0 +1,30 @@
+# Build context is the dev/ root; this file controls what gets sent to
+# the Docker daemon for the unified image build.
+.git
+.claude/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.DS_Store
+matplotlib-*/
+tmp*/
+.Trash-*
+
+# Per-part transient/local artefacts (compose bind-mounts still expose them
+# at runtime; this keeps them out of the baked image only).
+part-1-nim/outputs/
+part-2-toolkit/outputs/
+part-2-toolkit/logs/
+part-2-toolkit/assets/
+
+# Generated notebooks (regenerated on-demand)
+*-with_outputs.ipynb
+
+# Sibling worktree
+main/
+
+# SLURM allocation scripts — host-side only, not needed in the image
+start-*

@@ -1,0 +1,8 @@
+name: alchemi-playbook
+channels:
+  - https://conda.ovito.org
+  - conda-forge
+dependencies:
+  - python=3.12
+  - ovito=3.15.0
+  - uv
