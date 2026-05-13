@@ -5,7 +5,9 @@ services:
     # OVITO ships only x86_64 builds on conda.ovito.org; the entire stack
     # must therefore run on an x86_64 host. See ../README.md.
     platform: linux/amd64
-    network_mode: host
+    networks: [alchemi-net]
+    ports:
+      - "8000:8000"
     shm_size: 8g
     environment:
       - NGC_API_KEY=${NGC_API_KEY}
@@ -34,10 +36,12 @@ services:
     image: alchemi-playbook:latest
     container_name: alchemi-playbook-jupyter
     platform: linux/amd64
-    network_mode: host
+    networks: [alchemi-net]
+    ports:
+      - "8888:8888"
     shm_size: 8g
     environment:
-      - BGR_SERVER=http://localhost:8000
+      - BGR_SERVER=http://alchemi-playbook-bgr:8000
     # Selective bind-mounts. Students see only tutorial content under
     # /workspace; build/, start-*, and dotfiles stay hidden.
     volumes:
@@ -59,15 +63,23 @@ services:
   prometheus:
     image: prom/prometheus:latest
     container_name: alchemi-playbook-prometheus
-    network_mode: host
+    networks: [alchemi-net]
+    ports:
+      - "9090:9090"
     volumes:
       - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
     image: grafana/grafana:latest
     container_name: alchemi-playbook-grafana
-    network_mode: host
+    networks: [alchemi-net]
+    ports:
+      - "3000:3000"
     environment:
       - GF_SECURITY_ADMIN_PASSWORD=admin
     volumes:
       - ./monitoring/grafana/datasources:/etc/grafana/provisioning/datasources:ro
+
+networks:
+  alchemi-net:
+    driver: bridge
