@@ -1,15 +1,15 @@
-# Part 2: ALCHEMI Toolkit Sandbox
+# Part 2: OLED Melting Point predictions with ALCHEMI Toolkit
 
-Interactive Jupyter environment for exploring the [NVIDIA ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) Python library. Walks through a melting-point validation of naphthalene using the Solid-Liquid Coexistence (SLC) pipeline with AIMNet2.
+Interactive Jupyter notebook that predicts the melting point of a molecular crystal using the [NVIDIA ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) Python library and the AIMNet2 neural network potential. Naphthalene serves as the model OLED-material system, walked through the Solid-Liquid Coexistence (SLC) pipeline end-to-end.
 
 ## Deployment
 
-This notebook runs from the unified compose stack at the repo root (`dev/`) alongside Part 1. See [`dev/README.md`](../README.md) for setup, port table, and HPC instructions.
+This notebook runs from the unified compose stack at the repo root alongside Part 1. See [the repo README](../README.md) for setup and port table.
 
 Part 2 is standalone — no NGC API key required. If you only want to run Part 2, skip the BGR sidecar:
 
 ```bash
-cd dev
+cd build
 docker compose up jupyter prometheus grafana
 ```
 
