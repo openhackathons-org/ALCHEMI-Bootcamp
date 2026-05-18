@@ -4,7 +4,19 @@ Date: 2026-05-18
 
 This is the current source-of-truth plan for the Part 1 tutorial. Older review
 reports remain useful audit history, but this file reflects the current
-Toolkit-first, D3-disabled workflow and the broader batching narrative.
+Toolkit-first, open-model, D3-disabled workflow and the broader batching
+narrative.
+
+## License Guardrail
+
+- Active tutorial execution uses MACE-MP/MACE-MPA checkpoints that the MACE
+  foundation-model registry lists under MIT.
+- MACE-MH-1 and the OC20 surface head are not used in the runnable NVIDIA
+  tutorial path because the model is ASL-listed. They can be mentioned only as
+  an optional user-side experiment, subject to that user's license review.
+- The bundled OC20Dense validation pack is source data for reproducibility, not
+  generated model output. Keep the full OC20Dense archives local-only; ship only
+  the slim validation subset used by the notebook.
 
 ## Goal
 
@@ -57,15 +69,16 @@ this notebook's helper modules, or the OC20Dense validation setup.
   `"latest-complete"` only when you want the newest live run that passes the
   required-file checks; the notebook does not silently load arbitrary timestamp
   folders.
-- Default surface-screen teaching model: `mh-1` with the explicit
-  `oc20_usemppbe` head through the ALCHEMI Toolkit.
+- Default surface-screen teaching model: open MACE checkpoint
+  `medium-mpa-0` through the ALCHEMI Toolkit.
 - Default full-grid adsorption batch size in the notebook control cell:
   `12` structures per Toolkit batch. The artifact runner keeps each six-start
   adsorbate/surface question together as the scientific unit, so the generated
   surface-screen artifacts use 36 adsorption batches of 6 structures each.
-- Batch-size calibration models: `medium-mpa-0` and
-  `mh-1 + oc20_usemppbe`, so readers can see that throughput and VRAM headroom
-  depend on the selected model as well as the chemistry.
+- Batch-size calibration models: open MACE checkpoints, currently framed as a
+  small-vs-large comparison plus the `medium-mpa-0` default, so readers can see
+  that throughput and VRAM headroom depend on the selected model as well as the
+  chemistry.
 - Default device: CUDA GPU on `ws-loc` or a comparable cluster/workstation GPU.
 - D3(BJ): available in Toolkit workflows, but disabled here to match the
   non-D3 OC20Dense reference convention.
@@ -103,11 +116,9 @@ this notebook's helper modules, or the OC20Dense validation setup.
    `Batch`, then a GPU calculation.
 
 5. **Calibrate adsorption batch size on real chemistry.**
-   A short H2O/TiO2(110) relaxation sweep compares the default
-   `medium-mpa-0` model with the surface-specialized
-   `mh-1 + oc20_usemppbe` option. The section reports structures/s, atoms/s,
-   and GPU memory so readers can see why batch size depends on both chemistry
-   and model choice.
+   A short H2O/TiO2(110) relaxation sweep compares open MACE checkpoints. The
+   section reports structures/s, atoms/s, and GPU memory so readers can see why
+   batch size depends on both chemistry and model choice.
 
 6. **Build scientific structures with established tools.**
    The notebook builds slabs, adsorbates, clean-slab references, and gas-phase
@@ -194,16 +205,15 @@ Current presentation notebook state:
 
 - Current active panel: 9 slabs x 4 adsorbates x 6 starts = 216 adsorption
   relaxations, plus 9 clean-slab and 4 gas-reference relaxations.
-- Teaching path: ALCHEMI Toolkit with the `mh-1` checkpoint and explicit
-  `oc20_usemppbe` head for the surface-screen adsorption chemistry, D3(BJ)
-  disabled.
+- Teaching path: ALCHEMI Toolkit with the open `medium-mpa-0` checkpoint for
+  the surface-screen adsorption chemistry, D3(BJ) disabled.
 - The surface, Miller-index, adsorbate, site-class, orientation, and starting
   height choices are visible in notebook cells. Surface construction is paced
   by family: Cu facets, rutile TiO2 facets, TiN facets, then panel assembly and
   counts. `helpers/surface_screen.py` is bookkeeping/statistics only; the
   scientific grid and ranking policy are visible in the notebook and recorded
   in runner metadata.
-- Validation path: `mh-1` with `oc20_usemppbe` for selected OC20Dense
+- Validation path: open MACE checkpoint `medium-mpa-0` for selected OC20Dense
   surface-chemistry checks, D3(BJ) disabled.
 - Read-only presentation execution means cached/precomputed outputs were loaded
   and checked, not recomputed. The latest read-only notebook run on `ws-loc`
@@ -238,14 +248,10 @@ Batching evidence:
   reserved GPU memory in the recorded batch metadata was about 5.62 GB above
   the already-loaded model/session state.
 - New notebook calibration section: H2O/TiO2(110), 27 starting structures, 75
-  atoms each, 31 active atoms each, 40 FIRE2 steps. With another Toolkit Python
-  process holding about 73 GB and leaving about 21.6 GB free, `medium-mpa-0`
-  plateaued around `8-24` structures per batch at `4.61-4.65 structures/s`
-  and about `345-349 atoms/s`; `mh-1 + oc20_usemppbe` plateaued around `8-24`
-  structures per batch at `3.02-3.06 structures/s` and about `227-229 atoms/s`.
-  The conservative free-memory recommendation picked batch 8 for
-  `medium-mpa-0` and batch 4 for `mh-1 + oc20_usemppbe` under that shared-GPU
-  state.
+  atoms each, 31 active atoms each, 40 FIRE2 steps. The current direction is to
+  compare open MACE checkpoints so the batch-size recommendation is tied to
+  both model size and available VRAM. Earlier MH-1 timings are historical only
+  and should not appear as active tutorial defaults.
 
 OC20Dense validation checks:
 
@@ -263,10 +269,12 @@ OC20Dense validation checks:
 - DFT trajectory arithmetic reproduces released adsorption-energy targets for
   the selected records; the 92-geometry NH3 ranking check has max DFT
   trajectory-target difference `0.00e+00 eV`.
-- Current selected fixed-geometry result: `mh-1` with
-  `TOOLKIT_HEAD=oc20_usemppbe` gives DFT-rank-1 anchored RMSE `0.0716 eV`,
-  MAE `0.0598 eV`, bias `-0.0458 eV`, Spearman `0.943`, and recovers the
-  released DFT rank-1 geometry as the MACE top geometry.
+- Current open-model fixed-geometry baseline: `medium-mpa-0` gives
+  DFT-rank-1 anchored RMSE `0.178 eV`, MAE `0.150 eV`, bias `-0.145 eV`,
+  Spearman `0.786`, and selects a structure only `0.0128 eV` above the released
+  DFT minimum in this 92-geometry NH3 slice. The stronger MH-1/OC20-head result
+  from earlier exploration is retained only as a license-gated note, not as the
+  active NVIDIA tutorial path.
 - Neutral-gas Eads subtraction is retained only as a reference-convention
   control. It is not the primary accuracy metric because it does not reproduce
   the OC20Dense DFT reference convention.
@@ -356,10 +364,12 @@ Latest production check on 2026-05-16:
 
 - Notebook-bridge edits were used for notebook cells, and the live notebook
   buffer was saved clean (`isDirty: false`).
-- Surface-screen artifacts were regenerated on `ws-loc` with `mh-1` and
-  `TOOLKIT_HEAD=oc20_usemppbe`, D3 disabled.
+- Surface-screen artifacts were previously regenerated on `ws-loc` with
+  MH-1/OC20-head, D3 disabled. Those results are now historical and should be
+  regenerated with the open-model default before publishing saved tutorial
+  outputs.
 - Output counts: 1093 files under
-  `outputs/precomputed/tutorial/surface_screen_v1_mh1_oc20_usemppbe_full/surface_screen/`,
+  `outputs/precomputed/tutorial/surface_screen_v1_mace_mpa0_full/surface_screen/`,
   including 229 trajectory files and 229 trajectory-log CSVs. That full
   surface-screen cache is not present in the current local checkout after the
   archive cleanup; regenerate it or promote one complete live run before using
@@ -426,8 +436,9 @@ These are intentional human-facing anchors, not cleanup leftovers:
 - NVIDIA/ALCHEMI is framed as an enabling layer that respects established
   atomistic tools, invites integration, and accelerates the bottleneck.
 - The default teaching path is consistently Toolkit-first. The surface-screen
-  adsorption chemistry uses `mh-1 + oc20_usemppbe`, D3 disabled; the batch-size
-  calibration keeps `medium-mpa-0` as a comparison point.
+  adsorption chemistry uses open MACE checkpoints, D3 disabled; the batch-size
+  calibration compares open model sizes so readers can choose a batch size for
+  their model and GPU.
 - Service/API variants are treated as separate routes that reuse the same
   scientific result schema.
 - Every plotted energy is labeled as `E_ads` or otherwise clearly tied to the

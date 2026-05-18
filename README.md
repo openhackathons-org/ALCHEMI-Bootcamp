@@ -12,7 +12,7 @@ tarball.
 
 ### [Part 1: Batched Atomistic Simulation with NVIDIA ALCHEMI](part-1-batched-adsorption/)
 
-Use adsorption configuration search to show how batched, GPU-native atomistic simulation changes the practical scale of exploratory computational chemistry. The tutorial uses established structure tools with the ALCHEMI Toolkit and a surface-chemistry MACE head to relax, rank, and inspect many candidate structures on a GPU before higher-fidelity validation. The worked panel compares single-starting-point and batched protocols for CO, H2O, NH3, and CH3OH across metal, oxide, and nitride surface facets, while explicitly separating contextual literature checkpoints from strict apples-to-apples validation data. DFT-D3(BJ) is available in Toolkit workflows, but the runnable notebook keeps D3 disabled to match the non-D3 OC20Dense reference convention used in the companion reproducibility check.
+Use adsorption configuration search to show how batched, GPU-native atomistic simulation changes the practical scale of exploratory computational chemistry. The tutorial uses established structure tools with the ALCHEMI Toolkit and open MACE checkpoints to relax, rank, and inspect many candidate structures on a GPU before higher-fidelity validation. The worked panel compares single-starting-point and batched protocols for CO, H2O, NH3, and CH3OH across metal, oxide, and nitride surface facets, while explicitly separating contextual literature checkpoints from strict apples-to-apples validation data. DFT-D3(BJ) is available in Toolkit workflows, but the runnable notebook keeps D3 disabled to match the non-D3 OC20Dense reference convention used in the companion reproducibility check.
 
 Open first: [`part-1-batched-adsorption/alchemi-mace-adsorption-search.ipynb`](part-1-batched-adsorption/alchemi-mace-adsorption-search.ipynb).
 
@@ -79,3 +79,9 @@ runtime caches, and rendered review candidates are ignored by git.
 ## License
 
 Apache 2.0 -- see [LICENSE](LICENSE).
+
+Part 1 also uses third-party model/data artifacts. The runnable tutorial path
+uses open MACE-MP/MACE-MPA checkpoints; MACE-MH-1 is license-gated and is not
+part of the NVIDIA tutorial execution path. The OC20Dense validation pack is a
+slim subset of released Open Catalyst validation data and should retain OC20
+attribution when redistributed.

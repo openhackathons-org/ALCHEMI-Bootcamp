@@ -2,6 +2,12 @@
 
 Date: 2026-05-15
 
+License status update, 2026-05-18: this sweep is retained as exploration
+history. MACE-MH-1 / `oc20_usemppbe` is not part of the runnable NVIDIA
+tutorial path because it is ASL-listed. Use the open MACE-MP/MACE-MPA rows for
+the shipped tutorial defaults; users may test MH-1 separately only if their
+license review permits it.
+
 ## Goal
 
 Select a MACE model for the tutorial validation section using a comparison that
@@ -161,15 +167,16 @@ Sources:
 
 ## Tutorial Recommendation
 
-Use one of two paths:
+Use the open-model path for the shipped tutorial:
 
-1. Conservative/simple default: keep `medium-mpa-0` for the tutorial runtime
-   path and present its `0.178 eV` DFT-rank-1 anchored RMSE as a compact
-   validation check. This stays close to the existing notebook setup.
-2. Stronger validation path: use `mh-1` with `TOOLKIT_HEAD=oc20_usemppbe` in
-   the validation section. This gives the best result found so far
-   (`0.0716 eV` RMSE) and cleanly recovers the DFT minimum, but the notebook
-   must explain the multi-head model/head choice explicitly.
+1. Keep `medium-mpa-0` for the tutorial runtime path and present its
+   `0.178 eV` DFT-rank-1 anchored RMSE as the compact validation check.
+2. Compare open MACE sizes in the batch-size calibration so readers see the
+   model-size/VRAM/throughput trade-off without moving to a license-gated
+   checkpoint.
+3. Mention the stronger MH-1 / OC20-head result only as optional follow-up for
+   users whose license review permits it; do not execute it in the NVIDIA
+   tutorial.
 
 Either way, keep the tutorial story as:
 

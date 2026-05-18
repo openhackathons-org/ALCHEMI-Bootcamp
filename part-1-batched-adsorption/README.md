@@ -10,7 +10,7 @@
 
 Adsorption configuration search is the worked example because it makes the combinatorial problem visible: surfaces, Miller indices, sites, orientations, heights, and local minima. The active panel is CO, H2O, NH3, and CH3OH on Cu(111), Cu(100), Cu(110), rutile TiO2(110), TiO2(100), TiO2(101), TiN(001), TiN(110), and TiN(210). The same throughput pattern is relevant to real discovery pipelines in catalysis, separations, water harvesting, OER materials, framework screening, and surface chemistry.
 
-NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers already use. ASE and pymatgen build structures; the surface-screen teaching path uses the `mh-1` checkpoint with the `oc20_usemppbe` head; ALCHEMI provides batching, GPU execution, optimizers, constraints, metadata, and reusable workflow building blocks. The batch-size calibration also compares `medium-mpa-0` so readers can see the accuracy/cost tradeoff. DFT-D3(BJ) is available in Toolkit workflows, but it is disabled here because the OC20Dense validation data follows the non-D3 OC20 convention. Quantitative claims are intentionally scoped. Published model-level MAD values are recorded for orientation, but they are not run-specific error bars. Strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are pinned in the reference manifest, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
+NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers already use. ASE and pymatgen build structures; the surface-screen teaching path uses open MACE checkpoints; ALCHEMI provides batching, GPU execution, optimizers, constraints, metadata, and reusable workflow building blocks. The batch-size calibration compares open MACE sizes so readers can see the accuracy/cost tradeoff. MACE-MH-1 with an OC20 surface head is a promising surface-specialized option, but it is license-gated and is not part of the runnable NVIDIA tutorial path. DFT-D3(BJ) is available in Toolkit workflows, but it is disabled here because the OC20Dense validation data follows the non-D3 OC20 convention. Quantitative claims are intentionally scoped. Published model-level MAD values are recorded for orientation, but they are not run-specific error bars. Strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are pinned in the reference manifest, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
 
 Current goal, flow, verification status, and presentation checklist:
 [`docs/current_tutorial_status_and_flow.md`](docs/current_tutorial_status_and_flow.md).
@@ -120,3 +120,15 @@ See `references/manual_checks.md` and `references/manifest.yml` for the verifica
 ## License
 
 Apache 2.0 -- see [LICENSE](../LICENSE).
+
+Model/data licensing notes for this tutorial:
+
+- Active MACE-MP/MACE-MPA tutorial checkpoints are used because the MACE
+  foundation-model registry lists those model families under MIT.
+- MACE-MH-1 is not used in the runnable NVIDIA tutorial path because it is
+  ASL-listed. It may be useful to test in a separate environment when license
+  review permits it.
+- The bundled OC20Dense validation pack is a slim subset of released Open
+  Catalyst validation data. OC20 is listed by the Open Catalyst terms as
+  Creative Commons Attribution 4.0; keep attribution in any redistributed
+  derivative tutorial package.

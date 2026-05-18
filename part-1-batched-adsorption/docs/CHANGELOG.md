@@ -7,6 +7,22 @@ keep this file short enough that a new agent can scan it first.
 
 ## 2026-05-18
 
+### License-Gated Model Cleanup
+
+- Removed MACE-MH-1 / `oc20_usemppbe` from the active runnable tutorial path
+  because the model is ASL-listed and this NVIDIA tutorial must use open MACE
+  checkpoints.
+- Switched active helper/script/cache defaults to open `medium-mpa-0` output
+  stems: `surface_screen_v1_mace_mpa0`,
+  `oc20dense_closed_shell_trajectory_mace_mpa0`, and
+  `oc20dense_nh3_92_fixed_geometry_mace_mpa0`.
+- Reframed MH-1 as an optional user-side model to test only when license review
+  permits. The open-model validation baseline remains `medium-mpa-0`; the batch
+  calibration should compare open MACE sizes such as small versus large.
+- Dependency review against `origin/dev`: no new Python/package dependency
+  manifests were added by this branch. The only dependency-file delta remains
+  deletion of the old `part-1-nim/environment.yml`.
+
 ### Bundled OC20Dense Validation Pack
 
 - Added `data/reference/oc20dense-validation-pack.tgz` as the tracked

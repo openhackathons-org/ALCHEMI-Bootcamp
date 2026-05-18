@@ -26,9 +26,9 @@ LIVE_RUN_ROOT = Path("outputs") / "live_runs"
 RUNTIME_CACHE_ROOT = Path("outputs") / "runtime_cache"
 LATEST_COMPLETE_RUN_ID = "latest-complete"
 
-TUTORIAL_SURFACE_SCREEN_STEM = "surface_screen_v1_mh1_oc20_usemppbe"
-ACCURACY_TRAJECTORY_STEM = "oc20dense_closed_shell_trajectory_mh1_oc20_usemppbe"
-ACCURACY_NH3_RANKING_STEM = "oc20dense_nh3_92_fixed_geometry_mh1_oc20_usemppbe"
+TUTORIAL_SURFACE_SCREEN_STEM = "surface_screen_v1_mace_mpa0"
+ACCURACY_TRAJECTORY_STEM = "oc20dense_closed_shell_trajectory_mace_mpa0"
+ACCURACY_NH3_RANKING_STEM = "oc20dense_nh3_92_fixed_geometry_mace_mpa0"
 
 SURFACE_SCREEN_REQUIRED_FILES = (
     "run_metadata.json",

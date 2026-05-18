@@ -95,7 +95,7 @@ class TestRunRegistry:
         assert roots.tutorial_output_dir == Path("outputs/precomputed/tutorial")
         assert roots.accuracy_output_dir == Path("outputs/precomputed/accuracy")
         assert roots.surface_screen_root == Path(
-            "outputs/precomputed/tutorial/surface_screen_v1_mh1_oc20_usemppbe_full/surface_screen"
+            "outputs/precomputed/tutorial/surface_screen_v1_mace_mpa0_full/surface_screen"
         )
 
     def test_resolve_explicit_live_run(self, tmp_path: Path):
@@ -120,7 +120,7 @@ class TestRunRegistry:
             / "live_runs"
             / "20260518-120000"
             / "tutorial"
-            / "surface_screen_v1_mh1_oc20_usemppbe_full"
+            / "surface_screen_v1_mace_mpa0_full"
             / "surface_screen"
         )
         incomplete.mkdir(parents=True)
@@ -130,7 +130,7 @@ class TestRunRegistry:
             / "live_runs"
             / "20260518-130000"
             / "tutorial"
-            / "surface_screen_v1_mh1_oc20_usemppbe_full"
+            / "surface_screen_v1_mace_mpa0_full"
             / "surface_screen"
         )
         self._write_required_files(complete, SURFACE_SCREEN_REQUIRED_FILES)

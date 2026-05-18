@@ -352,12 +352,12 @@ def _build_backend(args: argparse.Namespace, paths: dict[str, Path]):
             name="toolkit",
             cache_dir=str(paths["root"] / "toolkit_response_cache"),
             use_cached_responses=False,
-            toolkit_checkpoint=os.environ.get("TOOLKIT_CHECKPOINT", "mh-1"),
+            toolkit_checkpoint=os.environ.get("TOOLKIT_CHECKPOINT", "medium-mpa-0"),
             toolkit_device=device,
             toolkit_dtype=os.environ.get("TOOLKIT_DTYPE", "float32"),
             toolkit_enable_cueq=_env_bool("TOOLKIT_ENABLE_CUEQ", False),
             toolkit_compile_model=_env_bool("TOOLKIT_COMPILE_MODEL", False),
-            toolkit_head=os.environ.get("TOOLKIT_HEAD", "oc20_usemppbe") or None,
+            toolkit_head=os.environ.get("TOOLKIT_HEAD", "") or None,
             toolkit_dt=float(os.environ.get("TOOLKIT_DT", "0.01")),
             toolkit_n_steps=args.n_steps,
             toolkit_fmax=args.fmax,
@@ -1025,7 +1025,14 @@ def main() -> int:
                 clean_slab_atoms=relaxed_hosts[host],
                 e_clean_slab_ev=float(clean_by_host[host].energy),
                 e_gas_ads_ev=float(gas_by_adsorbate[adsorbate].energy),
-                execution_path="toolkit:mh-1:oc20_usemppbe",
+                execution_path=(
+                    f"toolkit:{os.environ.get('TOOLKIT_CHECKPOINT', 'medium-mpa-0')}"
+                    + (
+                        f":{os.environ.get('TOOLKIT_HEAD')}"
+                        if os.environ.get("TOOLKIT_HEAD")
+                        else ""
+                    )
+                ),
             )
             item_paths_by_label = {
                 str(item["label"]): _paths_for_item(paths, str(item["label"]), "adsorption")
@@ -1079,8 +1086,8 @@ def main() -> int:
         "grid_version": SURFACE_SCREEN_GRID_VERSION,
         "output_root": str(paths["root"]),
         "backend": "toolkit",
-        "toolkit_checkpoint": os.environ.get("TOOLKIT_CHECKPOINT", "mh-1"),
-        "toolkit_head": os.environ.get("TOOLKIT_HEAD", "oc20_usemppbe") or None,
+        "toolkit_checkpoint": os.environ.get("TOOLKIT_CHECKPOINT", "medium-mpa-0"),
+        "toolkit_head": os.environ.get("TOOLKIT_HEAD", "") or None,
         "toolkit_device": str(getattr(backend, "device", os.environ.get("TOOLKIT_DEVICE", "cuda"))),
         "toolkit_dtype": os.environ.get("TOOLKIT_DTYPE", "float32"),
         "toolkit_enable_cueq": _env_bool("TOOLKIT_ENABLE_CUEQ", False),

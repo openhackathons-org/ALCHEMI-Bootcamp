@@ -23,7 +23,7 @@ if TYPE_CHECKING:
     import ase
 
 
-SURFACE_SCREEN_OUTPUT_DIR_NAME = "surface_screen_v1_mh1_oc20_usemppbe"
+SURFACE_SCREEN_OUTPUT_DIR_NAME = "surface_screen_v1_mace_mpa0"
 SURFACE_SCREEN_GRID_VERSION = "surface-screen-v1-six-start-9x4"
 
 

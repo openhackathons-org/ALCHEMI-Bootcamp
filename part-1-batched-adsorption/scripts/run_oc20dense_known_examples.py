@@ -136,7 +136,7 @@ DEFAULT_OUTDIR = (
     / "outputs"
     / "precomputed"
     / "accuracy"
-    / "oc20dense_closed_shell_trajectory_mh1_oc20_usemppbe"
+    / "oc20dense_closed_shell_trajectory_mace_mpa0"
 )
 
 OFFICIAL_SOURCES = {

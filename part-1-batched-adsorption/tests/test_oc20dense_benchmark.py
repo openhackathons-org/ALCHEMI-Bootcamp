@@ -19,7 +19,7 @@ OC20DENSE_ROOT = (
     / "outputs"
     / "precomputed"
     / "accuracy"
-    / "oc20dense_closed_shell_trajectory_mh1_oc20_usemppbe"
+    / "oc20dense_closed_shell_trajectory_mace_mpa0"
 )
 
 
@@ -232,8 +232,8 @@ def test_oc20dense_model_specific_outputs_are_present():
     assert {row["system_id"] for row in per_config} == expected_systems
     assert {row["adsorbate"] for row in dft_final} == {"*OH2", "*NH3", "*N2"}
     assert {row["adsorbate"] for row in eads_summary} == {"*OH2", "*NH3", "*N2"}
-    assert all(row["toolkit_checkpoint"] == "mh-1" for row in per_config)
-    assert all(row["toolkit_head"] == "oc20_usemppbe" for row in per_config)
+    assert all(row["toolkit_checkpoint"] == "medium-mpa-0" for row in per_config)
+    assert all(row["toolkit_head"] in {"", "None", None} for row in per_config)
 
 
 def test_oc20dense_member_match_uses_exact_system_config_key():

@@ -92,11 +92,11 @@ def make_oc20dense_validation_context(
     model_label = f"{checkpoint} (head={head})" if head else checkpoint
     trajectory_root = (
         accuracy_output_dir
-        / "oc20dense_closed_shell_trajectory_mh1_oc20_usemppbe"
+        / "oc20dense_closed_shell_trajectory_mace_mpa0"
     )
     nh3_ranking_root = (
         accuracy_output_dir
-        / "oc20dense_nh3_92_fixed_geometry_mh1_oc20_usemppbe"
+        / "oc20dense_nh3_92_fixed_geometry_mace_mpa0"
     )
 
     # Keep the validation Toolkit path explicit and local to this section.
@@ -182,7 +182,7 @@ def find_oc20dense_source_root(tutorial_root: Path) -> Path:
         / "outputs"
         / "precomputed"
         / "accuracy"
-        / "oc20dense_closed_shell_trajectory_mh1_oc20_usemppbe",
+        / "oc20dense_closed_shell_trajectory_mace_mpa0",
         tutorial_root / "outputs" / "oc20dense_known_examples",
     ]
     return next(
@@ -1494,8 +1494,36 @@ def show_validation_model_tradeoff(
     display_fn,
     markdown_cls,
 ) -> dict[str, pd.DataFrame]:
-    """Display the measured validation cost/accuracy trade-off table."""
-    model_cost_sp = pd.DataFrame(
+    """Display the model-choice policy and the measured open-model baseline."""
+    model_policy = pd.DataFrame(
+        [
+            {
+                "model": "MACE-MP-0 small",
+                "tutorial use": "active calibration option",
+                "license note": "MIT-listed MACE-MP-0 family",
+                "why include it": "fast open baseline for batch-size and memory trade-off",
+            },
+            {
+                "model": "MACE-MP-0 large",
+                "tutorial use": "active calibration option",
+                "license note": "MIT-listed MACE-MP-0 family",
+                "why include it": "larger open checkpoint for throughput comparison",
+            },
+            {
+                "model": "MACE-MPA-0 medium",
+                "tutorial use": "active default",
+                "license note": "MIT-listed MACE-MPA-0 model",
+                "why include it": "more recent open materials baseline for validation and screen",
+            },
+            {
+                "model": "MACE-MH-1 / OC20 surface head",
+                "tutorial use": "not executed in this NVIDIA tutorial",
+                "license note": "ASL-listed model; use only if your license review permits",
+                "why include it": "surface-specialized option that users can test separately",
+            },
+        ]
+    )
+    open_model_baseline = pd.DataFrame(
         [
             {
                 "model": "MACE-MPA-0 medium",
@@ -1504,58 +1532,25 @@ def show_validation_model_tradeoff(
                 "wall time (s)": 14.90,
                 "energy evaluation (s)": 1.48,
                 "peak GPU alloc (GB)": 2.85,
-                "rank RMSE (eV)": 0.178,
+                "relative-energy RMSE (eV)": 0.178,
                 "DFT rank selected by MACE": 3,
-            },
-            {
-                "model": "MACE-MH-1 / OC20 surface head",
-                "workload": "92 NH3 fixed-geometry single-point energies",
-                "batch size": 12,
-                "wall time (s)": 15.54,
-                "energy evaluation (s)": 1.42,
-                "peak GPU alloc (GB)": 6.12,
-                "rank RMSE (eV)": 0.0716,
-                "DFT rank selected by MACE": 1,
-            },
-        ]
-    )
-    model_cost_relax = pd.DataFrame(
-        [
-            {
-                "model": "MACE-MPA-0 medium",
-                "workload": "H2O/NH3/N2 relaxation check",
-                "batch size": 3,
-                "wall time (s)": 10.79,
-                "relax time (s)": 5.11,
-                "peak GPU alloc (GB)": 0.57,
-                "converged": "3/3",
-                "trajectory frames": "198 each",
-            },
-            {
-                "model": "MACE-MH-1 / OC20 surface head",
-                "workload": "H2O/NH3/N2 relaxation check",
-                "batch size": 3,
-                "wall time (s)": 12.17,
-                "relax time (s)": 6.47,
-                "peak GPU alloc (GB)": 1.17,
-                "converged": "2/3",
-                "trajectory frames": "200 each",
             },
         ]
     )
 
-    display_fn(markdown_cls("#### Model choice is a cost/accuracy trade-off"))
-    display_fn(model_cost_sp)
-    display_fn(model_cost_relax)
+    display_fn(markdown_cls("#### Model choice is a license, cost, and accuracy trade-off"))
+    display_fn(model_policy)
+    display_fn(markdown_cls("#### Measured open-model baseline for this validation slice"))
+    display_fn(open_model_baseline)
     display_fn(
         markdown_cls(
-            "For this OC20Dense slice, the surface-specialized head gives the "
-            "stronger ranking check while using more GPU memory. That is the "
-            "point of measuring both accuracy and throughput before a larger "
-            "adsorption search."
+            "The active notebook uses open MACE checkpoints. The MH-1 surface "
+            "head is worth testing in environments where the ASL license is "
+            "acceptable, but it is intentionally outside the runnable NVIDIA "
+            "tutorial path."
         )
     )
     return {
-        "model_cost_sp": model_cost_sp,
-        "model_cost_relax": model_cost_relax,
+        "model_policy": model_policy,
+        "open_model_baseline": open_model_baseline,
     }
