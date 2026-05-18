@@ -43,14 +43,15 @@ this notebook's helper modules, or the OC20Dense validation setup.
   Exploratory live recomputes write under `outputs/live_runs/<timestamp>/` so
   presentation caches are not overwritten by accident.
 - Current GitHub-clean state: generated outputs, runtime/model caches, PDFs,
-  review-candidate images, and the local OC20Dense validation subset are not
-  bundled in the working tree. The archived local copy is under
-  `/home/nfedik/projects/tutorials-local-archive/part-1-batched-adsorption-20260518/`.
-  Restore the archived `data/reference/oc20dense/` tree or set
-  `OC20DENSE_FULL_DATA_ROOT` before running live OC20Dense validation.
+  and review-candidate images are not bundled in the working tree. The
+  OC20Dense validation source data is bundled as
+  `data/reference/oc20dense-validation-pack.tgz` so live validation can be
+  rerun without committing the expanded reference folder.
 - OC20Dense reference-data policy: the full OC20Dense archives/LMDB must remain
-  local-only outside the repo. A slim validation subset is useful for local
-  execution, but it is not part of the minimum GitHub upload.
+  local-only outside the repo. The bundled validation pack is the slim public
+  subset used here: full released DFT trajectories for the three replay cases,
+  all 92 NH3 DFT trajectories for the fixed-geometry ranking slice, clean-slab
+  references, and mapping/target files.
 - Saved-output loading is explicit. `SAVED_TUTORIAL_RUN_ID` and
   `SAVED_ACCURACY_RUN_ID` reopen one named live run. Set either value to
   `"latest-complete"` only when you want the newest live run that passes the

@@ -13,6 +13,7 @@ import time
 import io
 import importlib
 import pickle
+import tarfile
 from contextlib import redirect_stderr, redirect_stdout
 from argparse import Namespace
 from collections.abc import Callable, Sequence
@@ -247,6 +248,52 @@ def _reference_data_root(tutorial_root: Path) -> Path:
     return tutorial_root / "data" / "reference" / "oc20dense"
 
 
+def _validation_pack_path(tutorial_root: Path) -> Path:
+    return tutorial_root / "data" / "reference" / "oc20dense-validation-pack.tgz"
+
+
+def ensure_oc20dense_reference_data(tutorial_root: Path) -> Path:
+    """Return the OC20Dense reference folder, unpacking the bundled pack if needed."""
+    root = _reference_data_root(tutorial_root)
+    required = [
+        root / "mappings" / "oc20dense_mapping.pkl",
+        root / "mappings" / "oc20dense_targets.pkl",
+        root / "mappings" / "oc20dense_ref_energies.pkl",
+        root / "selected_trajectories" / "adslab",
+    ]
+    if all(path.exists() for path in required):
+        return root
+
+    pack = _validation_pack_path(tutorial_root)
+    if not pack.exists():
+        raise FileNotFoundError(
+            "OC20Dense validation data is missing. Expected either the expanded "
+            f"reference folder at `{root}` or the bundled validation pack at `{pack}`."
+        )
+
+    target_dir = root.parent
+    target_dir.mkdir(parents=True, exist_ok=True)
+    target_resolved = target_dir.resolve()
+    with tarfile.open(pack, mode="r:gz") as archive:
+        for member in archive.getmembers():
+            destination = (target_dir / member.name).resolve()
+            try:
+                destination.relative_to(target_resolved)
+            except ValueError as exc:
+                raise RuntimeError(
+                    f"Unsafe path in OC20Dense validation pack: {member.name}"
+                ) from exc
+        archive.extractall(target_dir)
+
+    missing = [path for path in required if not path.exists()]
+    if missing:
+        raise FileNotFoundError(
+            "OC20Dense validation pack was unpacked, but required files are still "
+            "missing: " + ", ".join(str(path) for path in missing)
+        )
+    return root
+
+
 def _read_pickle(path: Path):
     with path.open("rb") as handle:
         return pickle.load(handle)
@@ -286,7 +333,7 @@ def prepare_nh3_ranking_reference_source(
     table/structure scaffold locally from released DFT data.
     """
 
-    data_root = _reference_data_root(tutorial_root)
+    data_root = ensure_oc20dense_reference_data(tutorial_root)
     per_config_path = source_root / "tables" / "per_config_results.csv"
     if per_config_path.exists() and not force:
         existing = pd.read_csv(per_config_path)
@@ -558,7 +605,7 @@ def build_trajectory_stage_plan(
         selection_csv = write_exact_selection_csv(selection_csv, selection)
     system_args = [str(row["system_id"]) for row in selection]
     adsorbate_list = ", ".join(str(row["adsorbate"]) for row in selection)
-    data_root = _reference_data_root(tutorial_root)
+    data_root = ensure_oc20dense_reference_data(tutorial_root)
     archive = data_root / "raw_archives" / "oc20_dense_trajectories.tar.gz"
 
     return [
@@ -660,7 +707,7 @@ def build_nh3_ranking_stage_plan(
     dft_final_sp = _fresh_import("run_oc20dense_dft_final_single_points")
 
     system_args = [system_id]
-    data_root = _reference_data_root(tutorial_root)
+    data_root = ensure_oc20dense_reference_data(tutorial_root)
     archive = data_root / "raw_archives" / "oc20_dense_trajectories.tar.gz"
 
     return [

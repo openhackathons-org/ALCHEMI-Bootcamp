@@ -65,13 +65,13 @@ part of the minimum GitHub upload:
 - `outputs/precomputed/accuracy/` -- official saved OC20Dense validation outputs.
 - `outputs/live_runs/<run_id>/` -- interactive reruns. The notebook lists recent runs. It only selects the newest one when you explicitly set the run ID to `"latest-complete"`.
 - `outputs/runtime_cache/` -- model/kernel caches that are not scientific results.
-- `data/reference/oc20dense/` -- slim local OC20Dense source/reference subset used by the validation cells. Keep this local and gitignored; requests for other ids need a full local OC20Dense download/extract, roughly 40 GB.
+- `data/reference/oc20dense-validation-pack.tgz` -- bundled OC20Dense validation pack. It contains the full released DFT trajectories used by this notebook: the three replay cases and the 92 NH3 ranking geometries, plus the mapping/target files needed for reproducibility checks.
+- `data/reference/oc20dense/` -- expanded validation source folder created from the tarball when live validation runs. This expanded folder is local and gitignored.
 
-The local archive from the cleanup pass is
-`/home/nfedik/projects/tutorials-local-archive/part-1-batched-adsorption-20260518/`.
-Restore its `part-1-batched-adsorption/data/reference/oc20dense/` folder before
-running live OC20Dense validation in this workspace, or set
-`OC20DENSE_FULL_DATA_ROOT` to a full extracted OC20Dense tree.
+The validation pack is about 73 MB compressed and expands to about 278 MB. It
+is intentionally separate from saved output caches: it is source/reference data,
+not a precomputed result table. Requests for other OC20Dense ids still need a
+full local OC20Dense download/extract, roughly 40 GB.
 
 ## Scientific Scope
 

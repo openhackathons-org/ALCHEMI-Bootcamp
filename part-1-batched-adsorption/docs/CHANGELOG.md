@@ -7,6 +7,19 @@ keep this file short enough that a new agent can scan it first.
 
 ## 2026-05-18
 
+### Bundled OC20Dense Validation Pack
+
+- Added `data/reference/oc20dense-validation-pack.tgz` as the tracked
+  reference-data artifact for live validation. It contains the full DFT
+  trajectories used by the notebook widgets and checks: three closed-shell
+  replay trajectories, all 92 NH3 fixed-geometry ranking trajectories, clean
+  surface references, and OC20Dense mapping/target files.
+- Kept the expanded `data/reference/oc20dense/` folder gitignored. The
+  validation helper now unpacks the bundled tarball when live validation needs
+  the reference folder and it is not already present.
+- Updated run documentation to distinguish the validation source-data pack from
+  saved/precomputed output caches.
+
 ### GitHub-Clean Notebook Restructure
 
 - Restructured the post-validation half of the notebook so the surface-screen

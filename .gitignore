@@ -1,7 +1,9 @@
 **/outputs/
 **/cached_responses/
 **/_archive/runs/
-**/data/reference/
+**/data/reference/*
+!part-1-batched-adsorption/data/reference/
+!part-1-batched-adsorption/data/reference/oc20dense-validation-pack.tgz
 __pycache__/
 *.pyc
 .ipynb_checkpoints/
