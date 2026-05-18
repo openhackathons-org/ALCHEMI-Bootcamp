@@ -4,42 +4,44 @@ Hands-on tutorials for GPU-accelerated computational chemistry with NVIDIA ALCHE
 
 ## Tutorials
 
-### [Part 1: Catalyst Adsorption Configuration Search with ALCHEMI NIMs](part-1-nim/)
+### [Part 1: Batched Atomistic Simulation with NVIDIA ALCHEMI](part-1-batched-adsorption/)
 
-Run an AdsorbML-style configuration search for molecular adsorption on catalyst surfaces using the ALCHEMI Batch Geometry Relaxation (BGR) NIM with MACE-MPA-0 and DFT-D3(BJ) dispersion. The tutorial compares single-starting-point and batched configuration-search protocols for CO, H2O, and CH3OH on Cu(111), Pd(111), and alpha-Al2O3(0001), while explicitly separating contextual literature checkpoints from strict apples-to-apples validation data. Full Docker Compose stack with JupyterLab, Prometheus, and Grafana monitoring.
+Use adsorption configuration search to show how batched, GPU-native atomistic simulation changes the practical scale of exploratory computational chemistry. The tutorial uses established structure tools with the ALCHEMI Toolkit and a surface-chemistry MACE head to relax, rank, and inspect many candidate structures on a GPU before higher-fidelity validation. The worked panel compares single-starting-point and batched protocols for CO, H2O, NH3, and CH3OH across metal, oxide, and nitride surface facets, while explicitly separating contextual literature checkpoints from strict apples-to-apples validation data. DFT-D3(BJ) is available in Toolkit workflows, but the runnable notebook keeps D3 disabled to match the non-D3 OC20Dense reference convention used in the companion reproducibility check.
 
-**Requirements**: NGC API key, NVIDIA GPU, Docker Compose
+**Requirements**: NVIDIA GPU and the tutorial Toolkit environment.
 
 ### [Part 2: ALCHEMI Toolkit Sandbox](part-2-toolkit/)
 
-Interactive Jupyter environment for exploring the ALCHEMI Toolkit Python library
-and the planned toolkit backend for the same AdsorbML adsorption panel used in
-Part 1. Single Docker container, no API key or enterprise licence needed.
+Interactive Jupyter environment for exploring the ALCHEMI Toolkit Python
+library and related case-study material. The active AdsorbML adsorption
+implementation lives in Part 1. Single Docker container, no API key or
+enterprise licence needed.
 
 **Requirements**: NVIDIA GPU, Docker
 
 ### [Shared Adsorption Tutorial Contract](shared/adsorption_tutorial/)
 
-Backend-neutral scientific contract for the reusable adsorption workflow:
-canonical host/adsorbate panel, required result schema, BGR-vs-toolkit adapter
-boundary, and expert fact-checking gates. Part 1 and the future Part 2 toolkit
-adsorption notebook should stay synchronized through this contract.
+Scientific contract for the reusable adsorption workflow:
+canonical host/adsorbate panel, required result schema, backend adapter
+boundary, and expert fact-checking gates.
 
-## HPC Quick Start
+## GPU Quick Start
 
-Allocate a GPU node via SLURM:
-
-```bash
-./start
-```
-
-Then deploy your chosen tutorial:
+Start Jupyter from a Toolkit-capable GPU environment, then open the Part 1
+notebook:
 
 ```bash
-cd part-1-nim && scripts/deploy.sh setup <login-host> <compute-node>
-# or
-cd part-2-toolkit && scripts/deploy.sh setup <login-host> <compute-node>
+cd /home/nfedik/projects/tutorials
+source .venv-toolkit/bin/activate
+LD_LIBRARY_PATH="$PWD/.venv-toolkit/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}" \
+  jupyter lab --no-browser --ip=127.0.0.1 --port=8888
 ```
+
+On a cluster, allocate a GPU node first, then run the same Jupyter command from
+the repository root on that node.
+
+Part 2 may keep its own deployment utilities; Part 1 is currently the direct
+Toolkit notebook path.
 
 ## License
 

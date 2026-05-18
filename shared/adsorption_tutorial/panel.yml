@@ -1,4 +1,4 @@
-version: 1
+version: 2
 active_panel:
   hosts:
     - name: "Cu(111)"
@@ -8,44 +8,89 @@ active_panel:
       surface_sites_per_cell: 9
       default_supercell: [3, 3, 1]
       vacuum_A: 15.0
-      backend_builders:
-        nim_helper: "helpers.build_cu111_slab"
-        toolkit_helper: null
-    - name: "Pd(111)"
+      structure_helper: "helpers.build_cu111_slab"
+    - name: "Cu(100)"
       class: "fcc metal"
-      facet: "(111)"
+      facet: "(100)"
       slab_layers: 4
       surface_sites_per_cell: 9
       default_supercell: [3, 3, 1]
       vacuum_A: 15.0
-      backend_builders:
-        nim_helper: "helpers.build_pd111_slab"
-        toolkit_helper: null
-    - name: "Al2O3(0001)"
-      class: "oxide support"
-      facet: "alpha-Al2O3(0001)"
+      structure_helper: "helpers.build_cu100_slab"
+    - name: "Cu(110)"
+      class: "fcc metal"
+      facet: "(110)"
+      slab_layers: 4
+      surface_sites_per_cell: 9
+      default_supercell: [3, 3, 1]
+      vacuum_A: 15.0
+      structure_helper: "helpers.build_cu110_slab"
+    - name: "TiO2(110)"
+      class: "oxide"
+      facet: "rutile TiO2(110)"
       slab_layers: null
       surface_sites_per_cell: null
-      default_supercell: [1, 1, 1]
+      default_supercell: [2, 2, 1]
       vacuum_A: 15.0
-      backend_builders:
-        nim_helper: "helpers.build_alpha_alumina_0001_slab"
-        toolkit_helper: null
+      structure_helper: "helpers.build_tio2_110_slab"
+    - name: "TiO2(100)"
+      class: "oxide"
+      facet: "rutile TiO2(100)"
+      slab_layers: null
+      surface_sites_per_cell: null
+      default_supercell: [2, 2, 1]
+      vacuum_A: 15.0
+      structure_helper: "helpers.build_tio2_100_slab"
+    - name: "TiO2(101)"
+      class: "oxide"
+      facet: "rutile TiO2(101)"
+      slab_layers: null
+      surface_sites_per_cell: null
+      default_supercell: [2, 2, 1]
+      vacuum_A: 15.0
+      structure_helper: "helpers.build_tio2_101_slab"
+    - name: "TiN(001)"
+      class: "nitride ceramic"
+      facet: "rocksalt TiN(001)"
+      slab_layers: null
+      surface_sites_per_cell: null
+      default_supercell: [2, 2, 1]
+      vacuum_A: 15.0
+      structure_helper: "helpers.build_tin_001_slab"
+    - name: "TiN(110)"
+      class: "nitride ceramic"
+      facet: "rocksalt TiN(110)"
+      slab_layers: null
+      surface_sites_per_cell: null
+      default_supercell: [2, 2, 1]
+      vacuum_A: 15.0
+      structure_helper: "helpers.build_tin_110_slab"
+    - name: "TiN(210)"
+      class: "nitride ceramic"
+      facet: "rocksalt TiN(210)"
+      slab_layers: null
+      surface_sites_per_cell: null
+      default_supercell: [2, 2, 1]
+      vacuum_A: 15.0
+      structure_helper: "helpers.build_tin_210_slab"
   adsorbates:
     - name: "CO"
       active: true
       orientations: ["C-down", "O-down"]
     - name: "H2O"
       active: true
-      orientations: ["O-down", "H-down", "flat"]
+      orientations: ["O-down", "H-down"]
+    - name: "NH3"
+      active: true
+      orientations: ["N-down", "H-down"]
     - name: "CH3OH"
       active: true
       orientations: ["O-down", "methyl-down"]
-    - name: "NH3"
+    - name: "N2"
       active: false
-      role: "optional first-binding context only"
-      orientations: ["N-down", "H-down", "flat"]
-shared_reference_manifest: "../../part-1-nim/references/manifest.yml"
+      role: "OC20Dense closed-shell benchmark slice; not active panel"
+      orientations: ["dataset-provided"]
+shared_reference_manifest: "../../part-1-batched-adsorption/references/manifest.yml"
 required_analysis_schema:
   - backend
   - host
@@ -54,7 +99,8 @@ required_analysis_schema:
   - start_site
   - start_orientation
   - final_site
-  - E_bind_eV
+  - E_ads_eV
+  - E_bind_eV  # legacy alias
   - converged
   - max_force_eV_A
   - geometry_status

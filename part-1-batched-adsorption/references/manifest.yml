@@ -1,0 +1,216 @@
+# Reference evidence manifest for the ALCHEMI Toolkit batched adsorption tutorial.
+#
+# Status meanings:
+# - context: supports scientific interpretation, but not apples-to-apples parity.
+# - near-strict: close enough for limited quantitative comparison; remaining differences documented.
+# - strict: exact match to tutorial slab, adsorbate, coverage, functional, dispersion,
+#   frozen-layer convention, and sign convention.
+#
+# PDF/SI files should be stored under references/pdfs/ when licensing permits.
+# Fill sha256 after download.
+
+version: 1
+last_reviewed: 2026-05-11
+
+entries:
+  - key: mace_foundation_model
+    status: context
+    citation: "Batatia et al., A foundation model for atomistic materials chemistry"
+    doi: "10.48550/arXiv.2401.00096"
+    url: "https://arxiv.org/abs/2401.00096"
+    pdf: "references/pdfs/mace_foundation_model_arxiv_2401.00096.pdf"
+    sha256: "15665521b2cddef8ed7b4aa13cc789a50a56bf13cd1cc05d5ba3d500e1726682"
+    supports:
+      - "Model-level MACE-MPA-0 and MACE-MP-0 uncertainty discussion."
+      - "OC157 MAD values after exact table/version verification."
+    exact_location: "TODO: verify table and version; arXiv and journal versions may differ."
+    parity_requirements:
+      slab_facet: null
+      layers: null
+      supercell: null
+      coverage: null
+      functional: "PBE/PBE-D3 reference conventions to verify"
+      dispersion: "Active OC20Dense validation is non-D3; D3(BJ) remains an available Toolkit application setting."
+      frozen_layers: null
+      sign_convention: "Tutorial uses E_ads = E_slab+ads - E_clean_slab - E_gas_ads; negative exothermic."
+    manual_check: true
+    notes: "Do not cite a specific MAD in strict notebook language until the exact table and model version are recorded here."
+
+  - key: adsorbml_2023
+    status: context
+    citation: "Lan et al., AdsorbML: a leap in efficiency for adsorption energy calculations using generalizable machine learning potentials"
+    doi: "10.1038/s41524-023-01121-5"
+    url: "https://doi.org/10.1038/s41524-023-01121-5"
+    pdf: "references/pdfs/adsorbml_2023_npj.pdf"
+    sha256: "f84336cff70f1f6a511f1545bc6b00cad7f3cc6c4f893f6a0029b348d859ab52"
+    supports:
+      - "Configuration-search motivation."
+      - "Single-start and multi-start reliability claims after exact figure/table verification."
+    exact_location: "TODO: record exact figure/table/SI section for 50 percent and 87 percent reliability claims."
+    parity_requirements:
+      slab_facet: "various OC20/OC22 surfaces"
+      layers: "dataset-specific"
+      supercell: "dataset-specific"
+      coverage: "dataset-specific"
+      functional: "dataset-specific DFT"
+      dispersion: "dataset-specific"
+      frozen_layers: "dataset-specific"
+      sign_convention: "Must be mapped to tutorial sign convention."
+    manual_check: true
+    notes: "Use for methodology unless exact pair-level benchmark rows are extracted."
+
+  - key: oc20_dataset
+    status: context
+    citation: "Chanussot et al., Open Catalyst 2020 (OC20) Dataset and Community Challenges"
+    doi: "10.1021/acscatal.0c04525"
+    url: "https://doi.org/10.1021/acscatal.0c04525"
+    pdf: null
+    sha256: null
+    supports:
+      - "Metal-surface adsorption dataset context."
+      - "Potential source for strict Cu(111)/Pd(111) pair records."
+    exact_location: "TODO: record dataset record IDs for CO/H2O/CH3OH on Cu(111)/Pd(111)."
+    parity_requirements:
+      slab_facet: "Cu(111), Pd(111) records must match tutorial facets."
+      layers: "TODO"
+      supercell: "TODO"
+      coverage: "TODO"
+      functional: "TODO"
+      dispersion: "TODO"
+      frozen_layers: "TODO"
+      sign_convention: "TODO"
+    manual_check: true
+    notes: "No tutorial row should become strict until an exact OC20 record ID is stored. Official ACS PDF download returned HTTP 403 in this environment on the 2026-05-04 download attempt."
+
+  - key: oc22_dataset
+    status: context
+    citation: "Tran et al., The Open Catalyst 2022 (OC22) Dataset and Challenges for Oxide Electrocatalysts"
+    doi: "10.1021/acscatal.2c05426"
+    url: "https://doi.org/10.1021/acscatal.2c05426"
+    pdf: null
+    sha256: null
+    supports:
+      - "Oxide-surface adsorption dataset context."
+      - "Potential source for strict alpha-Al2O3(0001) pair records."
+    exact_location: "TODO: record dataset record IDs for CO/H2O/CH3OH on alpha-Al2O3(0001)."
+    parity_requirements:
+      slab_facet: "alpha-Al2O3(0001), exact termination required"
+      layers: "TODO"
+      supercell: "TODO"
+      coverage: "TODO"
+      functional: "TODO"
+      dispersion: "TODO"
+      frozen_layers: "TODO"
+      sign_convention: "TODO"
+    manual_check: true
+    notes: "Molecular adsorption must be separated from dissociative/hydroxylated-surface chemistry. Official ACS PDF download returned HTTP 403 in this environment on the 2026-05-04 download attempt."
+
+  - key: co_pd111_hammer_1996
+    status: context
+    citation: "Hammer, Morikawa, and Norskov, CO chemisorption at metal surfaces and overlayers"
+    doi: "10.1103/PhysRevLett.76.2141"
+    url: "https://doi.org/10.1103/PhysRevLett.76.2141"
+    pdf: null
+    sha256: null
+    supports:
+      - "CO/Pd(111) hollow-site qualitative reference."
+    exact_location: "TODO: record page/table and whether fcc vs hcp hollow is resolved."
+    parity_requirements:
+      slab_facet: "Pd(111)"
+      layers: "TODO"
+      supercell: "TODO"
+      coverage: "TODO"
+      functional: "historical GGA/DFT; exact functional to verify"
+      dispersion: "likely none; verify"
+      frozen_layers: "TODO"
+      sign_convention: "Map to tutorial negative-exothermic convention."
+    manual_check: true
+    notes: "Good site-preference context; not strict energy parity without modeling details. Official APS PDF download returned HTTP 403 in this environment on the 2026-05-04 download attempt."
+
+  - key: water_feibelman_2002
+    status: context
+    citation: "Feibelman, Partial dissociation of water on Ru(0001)"
+    doi: "10.1126/science.1065483"
+    url: "https://doi.org/10.1126/science.1065483"
+    pdf: null
+    sha256: null
+    supports:
+      - "Non-intuitive water adsorption motifs on metal surfaces."
+    exact_location: "TODO"
+    parity_requirements:
+      slab_facet: "Ru(0001), not Cu(111) or Pd(111)"
+      layers: null
+      supercell: null
+      coverage: "water bilayer/partial dissociation context"
+      functional: "TODO"
+      dispersion: "TODO"
+      frozen_layers: null
+      sign_convention: null
+    manual_check: true
+    notes: "Motivational context only. Replace with direct Cu/Pd single-water references for strict pair validation. Official Science PDF download returned HTTP 403 in this environment on the 2026-05-04 download attempt."
+
+  - key: methanol_cu_greeley_2002
+    status: context
+    citation: "Greeley and Mavrikakis, competitive paths for methanol decomposition or related methanol/Cu surface chemistry"
+    doi: "10.1006/jcat.2002.3586"
+    url: "https://doi.org/10.1006/jcat.2002.3586"
+    pdf: null
+    sha256: null
+    supports:
+      - "Methanol/Cu surface-chemistry context after exact title/table verification."
+    exact_location: "TODO: verify exact title, surface, and adsorption mode."
+    parity_requirements:
+      slab_facet: "TODO"
+      layers: "TODO"
+      supercell: "TODO"
+      coverage: "TODO"
+      functional: "TODO"
+      dispersion: "TODO"
+      frozen_layers: "TODO"
+      sign_convention: "TODO"
+    manual_check: true
+    notes: "Current DOI was found by search and must be manually checked before notebook citation."
+
+  - key: d3_bj_grimme_2011
+    status: context
+    citation: "Grimme et al., Effect of the damping function in dispersion corrected density functional theory"
+    doi: "10.1002/jcc.21759"
+    url: "https://doi.org/10.1002/jcc.21759"
+    pdf: null
+    sha256: null
+    supports:
+      - "DFT-D3(BJ) dispersion-method citation."
+    exact_location: "TODO"
+    parity_requirements:
+      slab_facet: null
+      layers: null
+      supercell: null
+      coverage: null
+      functional: null
+      dispersion: "D3(BJ)"
+      frozen_layers: null
+      sign_convention: null
+    manual_check: true
+    notes: "Method citation, not an adsorption reference."
+
+  - key: ovito_stukowski_2010
+    status: context
+    citation: "Stukowski, Visualization and analysis of atomistic simulation data with OVITO"
+    doi: "10.1088/0965-0393/18/1/015012"
+    url: "https://doi.org/10.1088/0965-0393/18/1/015012"
+    pdf: null
+    sha256: null
+    supports:
+      - "OVITO visualization citation."
+    exact_location: "TODO"
+    parity_requirements:
+      slab_facet: null
+      layers: null
+      supercell: null
+      coverage: null
+      functional: null
+      dispersion: null
+      frozen_layers: null
+      sign_convention: null
+    manual_check: true
+    notes: "Visualization-tool citation. Official IOP PDF URL returned HTML rather than a PDF in this environment on the 2026-05-04 download attempt; manual download/check still required."

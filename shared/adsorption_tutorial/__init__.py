@@ -1,4 +1,4 @@
-"""Shared adsorption tutorial contract for BGR NIM and toolkit backends."""
+"""Shared adsorption tutorial contract for the Toolkit adsorption workflow."""
 
 from .contract import (
     ACTIVE_ADSORBATES,
