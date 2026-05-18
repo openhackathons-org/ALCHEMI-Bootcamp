@@ -15,6 +15,23 @@ NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers 
 Current goal, flow, verification status, and presentation checklist:
 [`docs/current_tutorial_status_and_flow.md`](docs/current_tutorial_status_and_flow.md).
 
+## Contents
+
+Open [`alchemi-mace-adsorption-search.ipynb`](alchemi-mace-adsorption-search.ipynb).
+The notebook is organized as a live tutorial, not just a report:
+
+1. Frame adsorption as a combinatorial structure-search problem.
+2. Introduce the Toolkit objects used in the notebook: `AtomicData`, `Batch`, model wrappers, and `FIRE2`.
+3. Run a small H2O batching example and a real adsorption batch-size calibration.
+4. Validate the model/workflow against selected OC20Dense DFT trajectories.
+5. Build the surface-screen panel step by step: slabs, Miller indices, adsorbates, sites, orientations, and starting heights.
+6. Relax the generated structures in batches, rank by `E_ads`, inspect reliability flags, and visualize selected structures.
+7. Write reproducible artifacts for review without overwriting saved results by accident.
+
+The companion [`oc20dense-accuracy-reproducibility-check.ipynb`](oc20dense-accuracy-reproducibility-check.ipynb)
+keeps the deeper OC20Dense audit surface separate, but the main tutorial already
+contains the compact validation checkpoint used in the teaching flow.
+
 ## Toolkit/Jupyter Run
 
 ### Prerequisites
@@ -35,9 +52,6 @@ LD_LIBRARY_PATH="$PWD/.venv-toolkit/lib/python3.12/site-packages/nvidia/cu13/lib
 ```
 
 Open `part-1-batched-adsorption/alchemi-mace-adsorption-search.ipynb` first.
-The companion `oc20dense-accuracy-reproducibility-check.ipynb` remains a
-deeper audit surface for the OC20Dense reference checks, but the main tutorial
-now includes the selected validation cells directly.
 
 ## Runtime Modes
 
@@ -58,8 +72,7 @@ The current local notebook defaults to live computation for both the main
 tutorial path and the compact validation path. Switch either result source to
 `"saved"` when you only want to inspect existing tables and figures.
 
-Saved result layout. These folders are generated/local artifacts and are not
-part of the minimum GitHub upload:
+Data and result layout:
 
 - `outputs/precomputed/tutorial/` -- official saved tutorial outputs.
 - `outputs/precomputed/accuracy/` -- official saved OC20Dense validation outputs.
@@ -70,8 +83,11 @@ part of the minimum GitHub upload:
 
 The validation pack is about 73 MB compressed and expands to about 278 MB. It
 is intentionally separate from saved output caches: it is source/reference data,
-not a precomputed result table. Requests for other OC20Dense ids still need a
-full local OC20Dense download/extract, roughly 40 GB.
+not a precomputed result table. The notebook can unpack it when live validation
+needs the reference trajectories. Requests for other OC20Dense ids still need a
+full local OC20Dense download/extract, roughly 40 GB. Generated `outputs/`,
+runtime caches, and the expanded reference folder are not part of the committed
+content.
 
 ## Scientific Scope
 
