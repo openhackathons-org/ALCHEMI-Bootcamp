@@ -207,7 +207,6 @@ REQUIRED_RESULT_COLUMNS: tuple[ResultColumn, ...] = (
     ResultColumn("start_orientation", None, "Starting adsorbate orientation."),
     ResultColumn("final_site", None, "Relaxed final adsorption-site class."),
     ResultColumn("E_ads_eV", "eV", "Canonical adsorption energy; negative is exothermic."),
-    ResultColumn("E_bind_eV", "eV", "Legacy compatibility alias for E_ads_eV."),
     ResultColumn("converged", None, "Optimizer convergence flag."),
     ResultColumn("max_force_eV_A", "eV/A", "Maximum final force magnitude."),
     ResultColumn("geometry_status", None, "adsorbed, desorbed, or dissociated."),

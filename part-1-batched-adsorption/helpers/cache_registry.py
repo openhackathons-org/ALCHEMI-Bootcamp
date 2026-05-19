@@ -365,7 +365,7 @@ def list_live_runs(tutorial_root: Path, *, run_scope: str | None = None) -> list
 
 
 def require_complete(validation: ArtifactValidation, *, label: str) -> Path:
-    """Return the root or raise a user-facing error listing the missing files."""
+    """Return the root or raise an error listing the missing files."""
     if validation.complete:
         return validation.root
     preview = ", ".join(validation.missing[:6])

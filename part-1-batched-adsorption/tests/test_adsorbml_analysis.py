@@ -124,7 +124,7 @@ def test_context_references_do_not_pass_strict_validation():
     pair_results = {
         ("Cu(111)", "CO"): pd.DataFrame([
             {
-                "E_bind (eV)": -0.75,
+                "E_ads (eV)": -0.75,
                 "final_site": "top",
                 "binding_atom_symbol": "C",
             }
@@ -142,13 +142,13 @@ def test_validation_uses_lowest_reliable_configuration_not_failed_minimum():
     pair_results = {
         ("Cu(111)", "CO"): pd.DataFrame([
             {
-                "E_bind (eV)": -9.99,
+                "E_ads (eV)": -9.99,
                 "final_site": "bridge",
                 "binding_atom_symbol": "C",
                 "reliable_for_minimum": False,
             },
             {
-                "E_bind (eV)": -0.75,
+                "E_ads (eV)": -0.75,
                 "final_site": "top",
                 "binding_atom_symbol": "C",
                 "reliable_for_minimum": True,
@@ -168,7 +168,7 @@ def test_validation_flags_pair_with_no_reliable_configuration():
     pair_results = {
         ("Cu(111)", "CO"): pd.DataFrame([
             {
-                "E_bind (eV)": -9.99,
+                "E_ads (eV)": -9.99,
                 "final_site": "bridge",
                 "binding_atom_symbol": "C",
                 "reliable_for_minimum": False,
@@ -237,7 +237,7 @@ def test_validation_handles_context_reference_without_energy():
     pair_results = {
         ("Pd(111)", "NH3"): pd.DataFrame([
             {
-                "E_bind (eV)": -0.62,
+                "E_ads (eV)": -0.62,
                 "final_site": "top",
                 "binding_atom_symbol": "N",
                 "reliable_for_minimum": True,

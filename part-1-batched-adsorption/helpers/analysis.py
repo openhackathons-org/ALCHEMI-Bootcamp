@@ -32,14 +32,11 @@ ADSORPTION_ENERGY_FORMULA = (
 )
 
 CANONICAL_EADS_COLUMN = "E_ads (eV)"
-LEGACY_EBIND_COLUMN = "E_bind (eV)"
 
 
 def adsorption_energy_column(df: pd.DataFrame) -> str:
-    """Return the canonical adsorption-energy column, with legacy fallback."""
-    if CANONICAL_EADS_COLUMN in df.columns:
-        return CANONICAL_EADS_COLUMN
-    return LEGACY_EBIND_COLUMN
+    """Return the canonical adsorption-energy column."""
+    return CANONICAL_EADS_COLUMN
 
 
 @dataclass(frozen=True)
@@ -366,9 +363,6 @@ def build_pair_results_table(
             "reliable_for_minimum": reliable_for_minimum,
             "E_ads_eV": e_ads,
             "E_ads (eV)": e_ads,
-            # Backward-compatible aliases for older cached outputs and reports.
-            "E_bind_eV": e_ads,
-            "E_bind (eV)": e_ads,
             "reference_scope": "none",
             "validation_status": "not-evaluated",
         }

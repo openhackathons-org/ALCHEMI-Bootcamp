@@ -54,7 +54,6 @@ get_toolkit_relaxation_engine = get_relaxation_backend
 from .analysis import (
     ADSORPTION_ENERGY_FORMULA,
     CANONICAL_EADS_COLUMN,
-    LEGACY_EBIND_COLUMN,
     FinalSiteAnalysis,
     ValidationResult,
     adsorption_energy_column,
@@ -259,7 +258,6 @@ __all__ = [
     # analysis
     "ADSORPTION_ENERGY_FORMULA",
     "CANONICAL_EADS_COLUMN",
-    "LEGACY_EBIND_COLUMN",
     "FinalSiteAnalysis",
     "ValidationResult",
     "adsorption_energy_column",

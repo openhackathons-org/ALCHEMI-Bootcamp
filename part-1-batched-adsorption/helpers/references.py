@@ -292,7 +292,7 @@ class AdsorbMLReference:
     host: str
     adsorbate: str
     binding_site: str  # e.g. "top-Cu", "fcc-hollow", "Al-top"
-    E_bind_eV: float | None  # negative = exothermic; PBE/PBE-D3 reference, None = site-only context
+    E_ads_eV: float | None  # negative = exothermic; PBE/PBE-D3 reference, None = site-only context
     method: str
     ref: str
     doi: str | None
@@ -314,19 +314,19 @@ class AdsorbMLReference:
     @property
     def strict_for_parity(self) -> bool:
         """True when the row can be used in the strict MACE-vs-DFT parity plot."""
-        return self.E_bind_eV is not None and self.reference_scope in {"strict", "near-strict"}
+        return self.E_ads_eV is not None and self.reference_scope in {"strict", "near-strict"}
 
     @property
     def e_ads_ev(self) -> float | None:
         """Lowercase alias used by newer analysis code."""
-        return self.E_bind_eV
+        return self.E_ads_eV
 
 
 ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Cu(111)", "CO"): AdsorbMLReference(
         host="Cu(111)", adsorbate="CO",
         binding_site="top",
-        E_bind_eV=-0.75,
+        E_ads_eV=-0.75,
         method="PBE-D3, slab",
         ref="Bagus & Pacchioni 1989; OC20",
         doi="10.1021/acscatal.0c04525",
@@ -346,7 +346,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Cu(111)", "H2O"): AdsorbMLReference(
         host="Cu(111)", adsorbate="H2O",
         binding_site="top (O-down, tilted)",
-        E_bind_eV=-0.30,
+        E_ads_eV=-0.30,
         method="PBE-D3, slab (Feibelman-style)",
         ref="Feibelman 2002; OC20",
         doi=None,
@@ -366,7 +366,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Cu(111)", "CH3OH"): AdsorbMLReference(
         host="Cu(111)", adsorbate="CH3OH",
         binding_site="top (O-down)",
-        E_bind_eV=-0.45,
+        E_ads_eV=-0.45,
         method="PBE-D3, slab",
         ref="Greeley & Mavrikakis 2002",
         doi=None,
@@ -386,7 +386,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Cu(111)", "NH3"): AdsorbMLReference(
         host="Cu(111)", adsorbate="NH3",
         binding_site="top (N-down)",
-        E_bind_eV=-0.70,
+        E_ads_eV=-0.70,
         method="GGA DFT, slab",
         ref="Mayers et al. 2002 Surface Science; OC20 context",
         doi="10.1016/S0039-6028(01)01769-1",
@@ -406,7 +406,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Pd(111)", "CO"): AdsorbMLReference(
         host="Pd(111)", adsorbate="CO",
         binding_site="fcc-hollow",
-        E_bind_eV=-1.90,
+        E_ads_eV=-1.90,
         method="PBE-D3, slab",
         ref="Hammer, Morikawa, Norskov 1996 PRL 76, 2141; OC20",
         doi=None,
@@ -426,7 +426,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Pd(111)", "H2O"): AdsorbMLReference(
         host="Pd(111)", adsorbate="H2O",
         binding_site="top (O-down, tilted)",
-        E_bind_eV=-0.45,
+        E_ads_eV=-0.45,
         method="PBE-D3, slab",
         ref="Feibelman 2002; OC20",
         doi=None,
@@ -446,7 +446,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Pd(111)", "CH3OH"): AdsorbMLReference(
         host="Pd(111)", adsorbate="CH3OH",
         binding_site="top (O-down)",
-        E_bind_eV=-0.55,
+        E_ads_eV=-0.55,
         method="PBE-D3, slab",
         ref="Desai & Neurock 2003",
         doi=None,
@@ -466,7 +466,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Pd(111)", "NH3"): AdsorbMLReference(
         host="Pd(111)", adsorbate="NH3",
         binding_site="top (N-down)",
-        E_bind_eV=None,
+        E_ads_eV=None,
         method="DFT-GGA, periodic slab, 1/4 ML",
         ref="Herron, Tonelli & Mavrikakis 2012 Surface Science",
         doi="10.1016/j.susc.2012.07.003",
@@ -486,7 +486,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Al2O3(0001)", "CO"): AdsorbMLReference(
         host="Al2O3(0001)", adsorbate="CO",
         binding_site="Al-top (C-down)",
-        E_bind_eV=-0.35,
+        E_ads_eV=-0.35,
         method="PBE-D3, periodic slab",
         ref="Manassidis & Gillan 1994; OC22",
         doi="10.1021/acscatal.2c05426",
@@ -506,7 +506,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Al2O3(0001)", "H2O"): AdsorbMLReference(
         host="Al2O3(0001)", adsorbate="H2O",
         binding_site="Al-top (O-down)",
-        E_bind_eV=-0.85,
+        E_ads_eV=-0.85,
         method="PBE-D3, periodic slab",
         ref="Lodziana et al. 2004; OC22",
         doi="10.1021/acscatal.2c05426",
@@ -526,7 +526,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Al2O3(0001)", "CH3OH"): AdsorbMLReference(
         host="Al2O3(0001)", adsorbate="CH3OH",
         binding_site="Al-top (O-down, H-bond to surface O)",
-        E_bind_eV=-0.70,
+        E_ads_eV=-0.70,
         method="PBE-D3, periodic slab",
         ref="Tran et al. 2023 OC22",
         doi="10.1021/acscatal.2c05426",
@@ -546,7 +546,7 @@ ADSORBML_REFERENCES: dict[tuple[str, str], AdsorbMLReference] = {
     ("Al2O3(0001)", "NH3"): AdsorbMLReference(
         host="Al2O3(0001)", adsorbate="NH3",
         binding_site="Al-top (N-down)",
-        E_bind_eV=None,
+        E_ads_eV=None,
         method="oxide-support / Lewis-acid-site literature context",
         ref="Kelber 2007 Surface Science Reports; McBriarty & Ellis 2016 Surface Science",
         doi="10.1016/j.surfrep.2006.12.003",
