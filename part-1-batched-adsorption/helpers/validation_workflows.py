@@ -2,7 +2,7 @@
 
 The notebook exposes the scientific choices and calls Python functions directly.
 The command-line scripts remain available for reproducible batch runs, but the
-reader-facing notebook should not shell out to them.
+tutorial notebook should not shell out to them.
 """
 
 from __future__ import annotations

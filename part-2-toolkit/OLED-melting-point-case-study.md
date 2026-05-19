@@ -1,5 +1,5 @@
 # Case Study: Melting Point of UDC OLED Molecules via MD  
-**PES: **AIMNet2 (general-purpose, no fine-tuning) — wB97X-D3/def2-TZVPP training; predicts E, F, charges, stress tensor for periodic systems.  
+**PES: **AIMNet2 (general-purpose, no fine-tuning) -- wB97M/def2-TZVPP training target. AIMNet2 predicts short-range E/F/stress and atomic charges; external Coulomb term is required, and dispersion term is highly recommended.
 ## Molecules (UDC-OLED-molecules directory)  
 10 fused oxadiazole/isoxazole polycyclic aromatics on biphenyl/terphenyl cores. All SMILES verified against XYZ files (heavy-atom counts match).  
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Run the notebook's full AdsorbML panel with native Toolkit, resumably."""
+"""Run the three-surface AdsorbML Toolkit auxiliary panel, resumably."""
 
 from __future__ import annotations
 
@@ -447,9 +447,9 @@ def _write_report(
         "",
         "## Scope",
         "",
-        "This run covers the notebook full panel: Cu(111), Al2O3(0001), and "
-        "TiO2(110) crossed with CO, H2O, and CH3OH. The grid uses all "
-        "notebook sites, all notebook orientations, rotations 0/60/120 deg, "
+        "This three-surface auxiliary run covers Cu(111), Al2O3(0001), and "
+        "TiO2(110) crossed with CO, H2O, and CH3OH. The grid uses this "
+        "runner's sites and orientations, rotations 0/60/120 deg, "
         "and an initial height of 2.2 A.",
         "",
         "The execution path is native Toolkit MACE only. D3(BJ) is disabled, "

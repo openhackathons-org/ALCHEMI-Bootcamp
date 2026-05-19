@@ -10,7 +10,7 @@
 
 Adsorption configuration search is the worked example because it makes the combinatorial problem visible: surfaces, Miller indices, sites, orientations, heights, and local minima. The active panel is CO, H2O, NH3, and CH3OH on Cu(111), Cu(100), Cu(110), rutile TiO2(110), TiO2(100), TiO2(101), TiN(001), TiN(110), and TiN(210). The same throughput pattern is relevant to real discovery pipelines in catalysis, separations, water harvesting, OER materials, framework screening, and surface chemistry.
 
-NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers already use. ASE and pymatgen build structures; the surface-screen teaching path uses open MACE checkpoints; ALCHEMI provides batching, GPU execution, optimizers, constraints, metadata, and reusable workflow building blocks. The batch-size calibration compares open MACE sizes so readers can see the accuracy/cost tradeoff. MACE-MH-1 with an OC20 surface head is a promising surface-specialized option, but it is license-gated and is not part of the runnable NVIDIA tutorial path. DFT-D3(BJ) is available in Toolkit workflows, but it is disabled here because the OC20Dense validation data follows the non-D3 OC20 convention. Quantitative claims are intentionally scoped. Published model-level MAD values are recorded for orientation, but they are not run-specific error bars. Strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are pinned in the reference manifest, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
+NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers already use. ASE and pymatgen build structures; the surface-screen teaching path uses open MACE checkpoints (machine-learning interatomic potentials, or MLIPs); ALCHEMI provides batching, GPU execution, optimizers, constraints, metadata, and reusable workflow building blocks. The batch-size calibration compares open MACE sizes so readers can see the accuracy/cost tradeoff. MACE-MH-1 with an OC20 surface head is a promising surface-specialized option, but it is license-gated and is not part of the runnable NVIDIA tutorial path. DFT-D3(BJ) is available in Toolkit workflows, but it is disabled here because the OC20Dense validation data follows the non-D3 OC20 convention. Quantitative claims are intentionally scoped. Published model-level MAD (Mean Absolute Deviation from DFT) values are recorded for orientation, but they are not run-specific error bars. Strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are added to the reference list, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
 
 Current goal, flow, verification status, and presentation checklist:
 [`docs/current_tutorial_status_and_flow.md`](docs/current_tutorial_status_and_flow.md).
@@ -46,7 +46,7 @@ Start Jupyter from the repository root. Make sure the CUDA NVRTC libraries
 installed with the venv are visible before the kernel starts:
 
 ```bash
-cd /home/nfedik/projects/tutorials
+cd /path/to/ALCHEMI-Bootcamp
 LD_LIBRARY_PATH="$PWD/.venv-toolkit/lib/python3.12/site-packages/nvidia/cu13/lib:$LD_LIBRARY_PATH" \
   .venv-toolkit/bin/jupyter lab --no-browser --ip=127.0.0.1 --port=8888
 ```
@@ -86,8 +86,8 @@ is intentionally separate from saved output caches: it is source/reference data,
 not a precomputed result table. The notebook can unpack it when live validation
 needs the reference trajectories. Requests for other OC20Dense ids still need a
 full local OC20Dense download/extract, roughly 40 GB. Generated `outputs/`,
-runtime caches, and the expanded reference folder are not part of the committed
-content.
+runtime caches, and the expanded reference folder are not provided in this
+repository.
 
 ## Scientific Scope
 
@@ -101,7 +101,7 @@ The reference layer is deliberately conservative:
 
 - `context` rows support interpretation and plotting.
 - `near-strict` rows may support limited quantitative comparison when only minor modeling details differ.
-- `strict` rows require an exact manifest-backed match to the tutorial's slab, adsorbate, coverage, functional, dispersion, frozen-layer convention, and sign convention.
+- `strict` rows require an exact match recorded in the reference list, covering the tutorial's slab, adsorbate, coverage, functional, dispersion, frozen-layer convention, and sign convention.
 
 ## References To Verify
 
@@ -115,7 +115,7 @@ Primary references currently used by the notebook or plan:
 6. Grimme, S. et al. "Effect of the damping function in dispersion corrected density functional theory." *Journal of Computational Chemistry* 32, 1456 (2011).
 7. Stukowski, A. "Visualization and analysis of atomistic simulation data with OVITO." *Modelling and Simulation in Materials Science and Engineering* 18, 015012 (2010).
 
-See `references/manual_checks.md` and `references/manifest.yml` for the verification state before promoting any contextual number into strict validation.
+See `references/manual_checks.md` and the reference registry `references/manifest.yml` for the verification state before promoting any contextual number into strict validation.
 
 ## License
 

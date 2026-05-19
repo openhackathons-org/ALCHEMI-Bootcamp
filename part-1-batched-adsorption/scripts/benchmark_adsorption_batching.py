@@ -4,6 +4,8 @@ The H2O saturation benchmark measures a clean molecule-only throughput curve.
 This script probes the adsorption workflow itself: slab + adsorbate graphs,
 active masks, neighbor hooks, and FIRE2 batching. It keeps the same Toolkit
 API used by the notebook and builds all chemistry through helper functions.
+Profiles that include Al2O3 are retained as Al2O3 throughput probes, not as
+part of the Cu/TiO2/TiN nine-surface adsorption screen.
 """
 
 from __future__ import annotations
@@ -26,7 +28,6 @@ import sys
 sys.path.insert(0, str(PART1))
 
 from helpers import (  # noqa: E402
-    ADSORBATE_ORIENTATIONS,
     RelaxationBackendConfig,
     ase_to_atomic_data,
     build_alpha_alumina_0001_slab,

@@ -100,7 +100,6 @@ required_analysis_schema:
   - start_orientation
   - final_site
   - E_ads_eV
-  - E_bind_eV  # legacy alias
   - converged
   - max_force_eV_A
   - geometry_status

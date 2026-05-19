@@ -11,11 +11,6 @@ from pydantic import (
 )
 
 # ---------------------------------------------------------------------------
-# Physical constants (canonical definitions in constants.py)
-# ---------------------------------------------------------------------------
-from .constants import BOLTZ_EV_K, KE_CONV, P_CONV  # noqa: F401
-
-# ---------------------------------------------------------------------------
 # Geometry-relaxation models
 # ---------------------------------------------------------------------------
 
@@ -71,7 +66,7 @@ class OptimizationResult(AtomicStructurePayload):
 
     @property
     def num_optimization_steps(self) -> int:
-        """Back-compat alias for older notebook code that used the long name."""
+        """Back-compat alias for records that used the long field name."""
         return self.optimizer_nsteps
 
 

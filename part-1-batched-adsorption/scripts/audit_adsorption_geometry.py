@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Write numeric geometry diagnostics for the adsorption tutorial panel."""
+"""Write numeric geometry diagnostics for a Cu/Pd/Al2O3 auxiliary panel."""
 
 from __future__ import annotations
 
