@@ -6,9 +6,9 @@ the GitHub-clean cleanup.
 
 ## Notebook Banner
 
-- `banner_adsorbml_toolkit_abstract_spheres.png`:
-  current first-viewport raster banner: a unified abstract slab scene with
-  independent green, yellow, and orange spheres.
+- `banner_adsorption_scale_alchemi.jpg`:
+  current first-viewport raster banner exported from the selected presentation
+  replacement slide and compressed for notebook display.
 
 ## Core Tutorial Figures
 
@@ -18,8 +18,9 @@ the GitHub-clean cleanup.
   current notebook GPU-batching search visual: one unified abstract slab scene
   with independent green, yellow, and orange sphere starts converging into an
   integrated GPU accelerator.
-- `alchemi_toolkit_community_ops.png`:
-  ALCHEMI community, NIM, Toolkit, and Toolkit-Ops architecture figure with neighbor-list, DFT-D3, electrostatics/PME, batched-kernel, and JAX feature callouts.
+- `alchemi_toolkit_architecture.png`:
+  current ALCHEMI architecture figure exported from the selected presentation
+  replacement slide and compressed for notebook display.
 
 ## Shared Style Prompt
 
@@ -34,8 +35,8 @@ species.
 
 ## Visual Review
 
-<mark>TODO - VISUAL REVIEW</mark>: keep selected candidates as flat files in
-this directory before linking them from the notebook. Older exploratory
-image-generation and OVITO-fusion drafts may still exist locally under ignored
+Selected candidates should be kept as flat files in this directory before
+linking them from the notebook. Older exploratory image-generation and
+OVITO-fusion drafts may still exist locally under ignored
 `assets/images/_review_candidates/`, but they are not part of the shipped
 notebook path.
