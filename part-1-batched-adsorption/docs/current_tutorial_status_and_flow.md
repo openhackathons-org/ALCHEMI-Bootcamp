@@ -250,8 +250,8 @@ Batching evidence:
 - New notebook calibration section: H2O/TiO2(110), 27 starting structures, 75
   atoms each, 31 active atoms each, 40 FIRE2 steps. The current direction is to
   compare open MACE checkpoints so the batch-size recommendation is tied to
-  both model size and available VRAM. Earlier MH-1 timings are historical only
-  and should not appear as active tutorial defaults.
+  both model size and available VRAM. License-gated model timings are excluded
+  from shipped tutorial artifacts.
 
 OC20Dense validation checks:
 
@@ -272,9 +272,8 @@ OC20Dense validation checks:
 - Current open-model fixed-geometry baseline: `medium-mpa-0` gives
   DFT-rank-1 anchored RMSE `0.178 eV`, MAE `0.150 eV`, bias `-0.145 eV`,
   Spearman `0.786`, and selects a structure only `0.0128 eV` above the released
-  DFT minimum in this 92-geometry NH3 slice. The stronger MH-1/OC20-head result
-  from earlier exploration is retained only as a license-gated note, not as the
-  active NVIDIA tutorial path.
+  DFT minimum in this 92-geometry NH3 slice. License-gated model metrics are
+  not shipped in the tutorial.
 - Neutral-gas Eads subtraction is retained only as a reference-convention
   control. It is not the primary accuracy metric because it does not reproduce
   the OC20Dense DFT reference convention.
@@ -364,10 +363,9 @@ Latest production check on 2026-05-16:
 
 - Notebook-bridge edits were used for notebook cells, and the live notebook
   buffer was saved clean (`isDirty: false`).
-- Surface-screen artifacts were previously regenerated on `ws-loc` with
-  MH-1/OC20-head, D3 disabled. Those results are now historical and should be
-  regenerated with the open-model default before publishing saved tutorial
-  outputs.
+- Surface-screen artifacts must be regenerated with the open-model default
+  before publishing saved tutorial outputs. License-gated model-generated
+  surface-screen caches are not shipped.
 - Output counts: 1093 files under
   `outputs/precomputed/tutorial/surface_screen_v1_mace_mpa0_full/surface_screen/`,
   including 229 trajectory files and 229 trajectory-log CSVs. That full
