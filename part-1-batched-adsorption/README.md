@@ -46,7 +46,7 @@ Start Jupyter from the repository root. Make sure the CUDA NVRTC libraries
 installed with the venv are visible before the kernel starts:
 
 ```bash
-cd /home/nfedik/projects/tutorials
+cd /path/to/ALCHEMI-Bootcamp
 LD_LIBRARY_PATH="$PWD/.venv-toolkit/lib/python3.12/site-packages/nvidia/cu13/lib:$LD_LIBRARY_PATH" \
   .venv-toolkit/bin/jupyter lab --no-browser --ip=127.0.0.1 --port=8888
 ```

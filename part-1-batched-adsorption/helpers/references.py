@@ -2,7 +2,7 @@
 
 The active tutorial uses ``ADSORBML_REFERENCES`` and
 ``REFERENCE_PUBLICATIONS`` below. Older AWH/S24 data structures remain in
-this file for archived notebooks and tests, but should not drive the
+this file for auxiliary notebooks and tests, but should not drive the
 current AdsorbML notebook.
 
 Every value here has a documented provenance; the ``ref`` field points to

@@ -1,7 +1,8 @@
 """Oxide bulk and slab builders for the AdsorbML tutorial.
 
-The current AdsorbML panel uses alpha-Al2O3(0001). TiO2 and ZrO2 builders
-are retained for archived tutorial branches and tests:
+The Cu/TiO2/TiN nine-surface adsorption screen uses rutile TiO2 and rocksalt TiN surfaces.
+alpha-Al2O3 and ZrO2 builders are retained for non-panel tutorial branches,
+contextual references, and tests:
 
 * alpha-Al2O3 (corundum, space group R-3c, #167) - (0001) surface
 * TiO2 rutile (P4_2/mnm, #136) - (110), (100), and (101) surfaces

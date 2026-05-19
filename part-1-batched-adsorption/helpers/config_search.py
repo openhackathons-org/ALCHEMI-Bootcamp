@@ -1,5 +1,10 @@
 """AdsorbML-style configuration grid generator.
 
+This generic helper supports both the Cu/TiO2/TiN nine-surface adsorption
+screen and Cu/Pd/Al2O3 auxiliary examples. The alpha-Al2O3 site path is
+retained for Cu/Pd/Al2O3 auxiliary scripts and is not part of the
+Cu/TiO2/TiN nine-surface adsorption screen.
+
 Given (slab, adsorbate) generate N starting configurations on a
 systematic grid:
 

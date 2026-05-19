@@ -11,16 +11,20 @@ solid-liquid coexistence melting-point workflow.
 The reusable AdsorbML science contract now lives in
 [`../shared/adsorption_tutorial`](../shared/adsorption_tutorial/):
 
-- `contract.py` defines the canonical Cu(111), Pd(111), alpha-Al2O3(0001) panel.
+- `panel.yml` records the Cu/TiO2/TiN nine-surface adsorption screen: CO, H2O, NH3, and CH3OH on
+  Cu(111), Cu(100), Cu(110), rutile TiO2(110), TiO2(100), TiO2(101),
+  TiN(001), TiN(110), and TiN(210).
+- `contract.py` defines the shared result-table fields, units, execution
+  status, and validation helpers.
 - `backends.md` defines the output format (column names, units, error
   handling) that all relaxation engines must produce.
 - `domain_expert_fact_check.md` in Part 1 references records the energy
   fact-check packet.
 
-Before treating this as equivalent to the BGR NIM tutorial, add a matching
-Toolkit notebook that produces the shared output format for at least the small
-CO/Cu(111) setup check, then compare the slab, gas, clean-slab, final-site, and
-adsorption-energy outputs against Part 1.
+Before treating a Toolkit adsorption notebook as shared-contract parity with
+Part 1, make it produce the shared output format for at least the small
+CO/Cu(111) setup check, then compare the slab, gas, clean-slab, final-site,
+and adsorption-energy outputs against Part 1.
 
 The Docker image is fixed to a specific Toolkit version (`7fe7756bd1b13580a619cff39b69742145d416e1`) via the `NVALCHEMI_TOOLKIT_REF` environment variable, so results are reproducible across runs.
 
@@ -31,7 +35,7 @@ The Docker image is fixed to a specific Toolkit version (`7fe7756bd1b13580a619cf
 | Docker | Docker Engine with GPU support |
 | GPU | NVIDIA GPU with drivers installed |
 
-No NGC API key or enterprise licence is required.
+No NGC API key or enterprise license is required.
 
 ## Reproducibility
 

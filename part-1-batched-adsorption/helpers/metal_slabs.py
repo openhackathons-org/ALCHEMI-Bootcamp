@@ -1,11 +1,11 @@
-"""fcc metal-slab builders for the AdsorbML configuration-search tutorial.
+"""fcc metal-slab builders for AdsorbML configuration-search examples.
 
-Cu(111) and Pd(111) are the two canonical fcc-metal surfaces in the
-Open Catalyst 2020 dataset and in decades of surface-science literature
-(CO/Cu(111) top-site, CO/Pd(111) hollow-site, methanol/Cu(111) O-down,
-H2O bilayers on both). Both are non-magnetic at the closed-shell
-level used by the MACE-family model in this tutorial, and both sit inside
-the broad materials benchmark coverage used to evaluate that model family.
+The Cu/TiO2/TiN nine-surface adsorption screen uses Cu facets. Cu(111) remains
+the metal reference builder used by that screen; Pd(111) is retained for
+OC20/context checks and Cu/Pd geometry-audit scripts. Both are non-magnetic at
+the closed-shell level used by the MACE-family model in this tutorial, and
+both sit inside the broad materials benchmark coverage used to evaluate that
+model family.
 
 Slab convention (OC20-compatible):
 - 4 layers total, bottom 2 frozen via active_mask

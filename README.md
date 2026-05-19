@@ -52,7 +52,7 @@ Start Jupyter from a Toolkit-capable GPU environment, then open the Part 1
 notebook:
 
 ```bash
-cd /home/nfedik/projects/tutorials
+cd /path/to/ALCHEMI-Bootcamp
 source .venv-toolkit/bin/activate
 LD_LIBRARY_PATH="$PWD/.venv-toolkit/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}" \
   jupyter lab --no-browser --ip=127.0.0.1 --port=8888
