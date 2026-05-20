@@ -48,7 +48,6 @@ from helpers import (  # noqa: E402
 )
 from oc20dense_dft_reference_checks import (  # noqa: E402
     DEFAULT_ARCHIVE,
-    DEFAULT_DATA_ROOT,
     _read_atoms_sequence,
 )
 from _oc20dense_common import (  # noqa: E402
@@ -296,6 +295,12 @@ def _surface_tags(initial_structure_path: Path) -> np.ndarray:
 def _surface_atoms(surface_path: Path, tags: np.ndarray) -> tuple[Atoms, list[bool]]:
     frames = _read_atoms_sequence(surface_path)
     atoms = frames[-1].copy()
+    if len(tags) > len(atoms):
+        # OC20Dense adslab structures store the slab atoms first and append the
+        # adsorbate atoms. Clean-surface trajectories only contain the slab, so
+        # use the matching slab prefix when the adslab tag vector includes the
+        # appended adsorbate.
+        tags = tags[: len(atoms)]
     if len(atoms) != len(tags):
         raise ValueError(
             f"Surface atom count mismatch for {surface_path}: "

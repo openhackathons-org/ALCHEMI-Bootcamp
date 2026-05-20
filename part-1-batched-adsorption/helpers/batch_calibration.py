@@ -1,8 +1,12 @@
-"""Adsorption-specific Toolkit batch-size calibration helpers."""
+"""Adsorption-specific Toolkit batch-size sweep helpers."""
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+import os
 from pathlib import Path
+import sys
+import tempfile
 from time import perf_counter
 from typing import Any
 
@@ -14,6 +18,8 @@ from .models import ase_to_atomic_data
 from .oxide_slabs import build_alpha_alumina_0001_slab, build_tio2_110_slab
 from .metal_slabs import build_cu111_slab
 from .relaxation_backends import RelaxationBackendConfig, ToolkitBackend, get_relaxation_backend
+
+_TORCH_NVFUSER_DEPRECATION = "nvfuser is no longer supported in torch script"
 
 
 HOST_BUILDERS = {
@@ -35,7 +41,7 @@ HOST_BUILDERS = {
 }
 
 
-def build_adsorption_calibration_pool(
+def build_adsorption_batch_sweep_pool(
     *,
     host_name: str = "TiO2(110)",
     adsorbate_name: str = "H2O",
@@ -45,11 +51,11 @@ def build_adsorption_calibration_pool(
     heights_A: tuple[float, ...] = (2.2,),
     frozen_fraction: float = 0.5,
 ) -> list[Configuration]:
-    """Build a small adsorption-configuration pool for batch calibration."""
+    """Build a small adsorption-configuration pool for a batch-size sweep."""
     try:
         slab = HOST_BUILDERS[host_name]()
     except KeyError as exc:
-        raise ValueError(f"Unknown calibration host {host_name!r}") from exc
+        raise ValueError(f"Unknown batch-sweep host {host_name!r}") from exc
     return build_config_grid(
         host_name=host_name,
         slab=slab,
@@ -92,7 +98,7 @@ def _payloads_for_batch(configs: list[Configuration], batch_size: int):
         payloads.append(
             ase_to_atomic_data(
                 config.atoms,
-                structure_id=f"{config.label}_calibration{idx:04d}",
+                structure_id=f"{config.label}_batch_sweep{idx:04d}",
                 active_mask=config.active_mask,
             )
         )
@@ -102,7 +108,6 @@ def _payloads_for_batch(configs: list[Configuration], batch_size: int):
 def _disable_fragile_torch_fusers(torch) -> None:
     """Avoid TorchScript/NVRTC fusion paths that can be fragile in notebooks."""
     for name in (
-        "_jit_set_nvfuser_enabled",
         "_jit_set_texpr_fuser_enabled",
         "_jit_override_can_fuse_on_gpu",
     ):
@@ -113,7 +118,30 @@ def _disable_fragile_torch_fusers(torch) -> None:
                 pass
 
 
-def _run_one_calibration_batch(
+@contextmanager
+def _hide_torch_nvfuser_deprecation_stderr():
+    """Suppress only the noisy PyTorch nvFuser deprecation line in sweep cells."""
+    saved_stderr_fd = os.dup(2)
+    with tempfile.TemporaryFile(mode="w+b") as captured:
+        os.dup2(captured.fileno(), 2)
+        try:
+            yield
+        finally:
+            os.dup2(saved_stderr_fd, 2)
+            os.close(saved_stderr_fd)
+            captured.seek(0)
+            text = captured.read().decode(errors="replace")
+
+    kept = [
+        line for line in text.splitlines(keepends=True)
+        if _TORCH_NVFUSER_DEPRECATION not in line
+    ]
+    if kept:
+        sys.stderr.write("".join(kept))
+        sys.stderr.flush()
+
+
+def _run_one_batch_sweep(
     *,
     backend: ToolkitBackend,
     configs: list[Configuration],
@@ -153,7 +181,8 @@ def _run_one_calibration_batch(
     before = _cuda_snapshot(torch, device)
     started = perf_counter()
     try:
-        batch = optimizer.run(batch)
+        with _hide_torch_nvfuser_deprecation_stderr():
+            batch = optimizer.run(batch)
         if str(device).startswith("cuda"):
             torch.cuda.synchronize(device)
         wall_time_s = perf_counter() - started
@@ -209,7 +238,7 @@ def _run_one_calibration_batch(
         }
 
 
-def run_adsorption_batch_calibration(
+def run_adsorption_batch_sweep(
     *,
     configs: list[Configuration],
     model_specs: list[dict[str, str | None]],
@@ -225,12 +254,11 @@ def run_adsorption_batch_calibration(
     enable_cueq: bool = False,
     progress: Any | None = None,
 ) -> pd.DataFrame:
-    """Run short adsorption relaxations to calibrate batch size by model."""
+    """Run short adsorption relaxations to measure batch-size throughput by model."""
     if not configs:
-        raise ValueError("Calibration config pool is empty.")
+        raise ValueError("Batch-size sweep config pool is empty.")
 
     rows: list[dict[str, Any]] = []
-    total = len(model_specs) * len(batch_sizes)
     done = 0
     output_csv = Path(output_csv)
     output_csv.parent.mkdir(parents=True, exist_ok=True)
@@ -238,33 +266,35 @@ def run_adsorption_batch_calibration(
 
     for spec in model_specs:
         label = str(spec["label"])
-        backend = get_relaxation_backend(
-            RelaxationBackendConfig(
-                name="toolkit",
-                cache_dir=str(cache_dir / label.replace(" ", "_").replace("+", "plus")),
-                use_cached_responses=False,
-                toolkit_checkpoint=str(spec["checkpoint"]),
-                toolkit_head=spec.get("head"),
-                toolkit_device=toolkit_device,
-                toolkit_dtype=toolkit_dtype,
-                toolkit_compile_model=compile_model,
-                toolkit_enable_cueq=enable_cueq,
-                toolkit_dt=toolkit_dt,
-                toolkit_n_steps=n_steps,
-                toolkit_fmax=fmax,
-                toolkit_require_d3bj=False,
-                toolkit_d3bj=None,
+        with _hide_torch_nvfuser_deprecation_stderr():
+            backend = get_relaxation_backend(
+                RelaxationBackendConfig(
+                    name="toolkit",
+                    cache_dir=str(cache_dir / label.replace(" ", "_").replace("+", "plus")),
+                    use_cached_responses=False,
+                    toolkit_checkpoint=str(spec["checkpoint"]),
+                    toolkit_head=spec.get("head"),
+                    toolkit_device=toolkit_device,
+                    toolkit_dtype=toolkit_dtype,
+                    toolkit_compile_model=compile_model,
+                    toolkit_enable_cueq=enable_cueq,
+                    toolkit_dt=toolkit_dt,
+                    toolkit_n_steps=n_steps,
+                    toolkit_fmax=fmax,
+                    toolkit_require_d3bj=False,
+                    toolkit_d3bj=None,
+                )
             )
-        )
         for batch_size in batch_sizes:
             if progress is not None:
                 progress.update(done=done, message=f"{label}: batch size {batch_size}")
-            row = _run_one_calibration_batch(
-                backend=backend,
-                configs=configs,
-                batch_size=batch_size,
-                label=label,
-            )
+            with _hide_torch_nvfuser_deprecation_stderr():
+                row = _run_one_batch_sweep(
+                    backend=backend,
+                    configs=configs,
+                    batch_size=batch_size,
+                    label=label,
+                )
             row["checkpoint"] = spec["checkpoint"]
             row["head"] = spec.get("head") or ""
             rows.append(row)
@@ -281,15 +311,15 @@ def run_adsorption_batch_calibration(
     return pd.DataFrame(rows)
 
 
-def summarize_adsorption_batch_calibration(
-    calibration_df: pd.DataFrame,
+def summarize_adsorption_batch_sweep(
+    sweep_df: pd.DataFrame,
     *,
     memory_fraction: float = 0.80,
     near_best_fraction: float = 0.90,
 ) -> pd.DataFrame:
-    """Recommend a conservative batch size from calibration results."""
+    """Recommend a conservative batch size from sweep results."""
     rows = []
-    for label, df in calibration_df.groupby("label", sort=False):
+    for label, df in sweep_df.groupby("label", sort=False):
         ok = df[df["status"] == "ok"].copy()
         if ok.empty:
             rows.append({
@@ -343,19 +373,19 @@ def summarize_adsorption_batch_calibration(
     return pd.DataFrame(rows)
 
 
-def _validate_precomputed_calibration(
-    calibration_df: pd.DataFrame,
+def _validate_precomputed_batch_sweep(
+    sweep_df: pd.DataFrame,
     *,
     model_specs: list[dict[str, str | None]],
     batch_sizes: list[int],
     source: Path,
 ) -> pd.DataFrame:
-    """Return the requested calibration slice, or fail on stale provenance."""
+    """Return the requested batch-sweep slice, or fail on stale provenance."""
     required_columns = {"label", "batch_size", "status"}
-    missing_columns = sorted(required_columns - set(calibration_df.columns))
+    missing_columns = sorted(required_columns - set(sweep_df.columns))
     if missing_columns:
         raise RuntimeError(
-            "Precomputed adsorption batch-calibration table is missing "
+            "Precomputed adsorption batch-size sweep table is missing "
             f"required columns {missing_columns}: {source}"
         )
 
@@ -364,30 +394,40 @@ def _validate_precomputed_calibration(
         label = str(spec["label"])
         expected_checkpoint = str(spec["checkpoint"])
         expected_head = spec.get("head") or ""
-        label_mask = calibration_df["label"].astype(str) == label
-        metadata_mask = pd.Series(False, index=calibration_df.index)
-        if {"checkpoint", "head"}.issubset(calibration_df.columns):
+        label_mask = sweep_df["label"].astype(str) == label
+        metadata_mask = pd.Series(False, index=sweep_df.index)
+        if {"checkpoint", "head"}.issubset(sweep_df.columns):
             metadata_mask = (
-                calibration_df["checkpoint"].astype(str).eq(expected_checkpoint)
-                & calibration_df["head"].fillna("").astype(str).eq(expected_head)
+                sweep_df["checkpoint"].astype(str).eq(expected_checkpoint)
+                & sweep_df["head"].fillna("").astype(str).eq(expected_head)
             )
-        df_label = calibration_df[label_mask | metadata_mask].copy()
+        df_label = sweep_df[label_mask | metadata_mask].copy()
         if df_label.empty:
             raise RuntimeError(
-                "Precomputed adsorption batch-calibration table does not include "
+                "Precomputed adsorption batch-size sweep table does not include "
                 f"model {label!r} with checkpoint={expected_checkpoint!r}, "
                 f"head={expected_head!r}. Set USE_SAVED_TUTORIAL_RESULTS = False "
                 "to regenerate it."
             )
         df_label["label"] = label
 
-        available_batches = set(df_label["batch_size"].astype(int))
+        df_label["batch_size"] = df_label["batch_size"].astype(int)
+        df_label = df_label.sort_values("batch_size")
+        available_batches = set(df_label["batch_size"])
+        expected_batches = list(batch_sizes)
+        if "status" in df_label.columns:
+            oom_rows = df_label[df_label["status"].astype(str).eq("oom")]
+            if not oom_rows.empty:
+                first_oom_batch = int(oom_rows["batch_size"].min())
+                expected_batches = [
+                    size for size in expected_batches if size <= first_oom_batch
+                ]
         missing_batches = [
-            size for size in batch_sizes if size not in available_batches
+            size for size in expected_batches if size not in available_batches
         ]
         if missing_batches:
             raise RuntimeError(
-                "Precomputed adsorption batch-calibration table does not "
+                "Precomputed adsorption batch-size sweep table does not "
                 f"include batch sizes {missing_batches} for {label!r}. Set "
                 "USE_SAVED_TUTORIAL_RESULTS = False to regenerate it."
             )
@@ -396,7 +436,7 @@ def _validate_precomputed_calibration(
             observed_checkpoints = set(df_label["checkpoint"].astype(str))
             if expected_checkpoint not in observed_checkpoints:
                 raise RuntimeError(
-                    "Precomputed adsorption batch-calibration table has stale "
+                    "Precomputed adsorption batch-size sweep table has stale "
                     f"checkpoint metadata for {label!r}. Expected "
                     f"{expected_checkpoint!r}, found {sorted(observed_checkpoints)}."
                 )
@@ -405,7 +445,7 @@ def _validate_precomputed_calibration(
             observed_heads = set(df_label["head"].fillna("").astype(str))
             if expected_head not in observed_heads:
                 raise RuntimeError(
-                    "Precomputed adsorption batch-calibration table has stale "
+                    "Precomputed adsorption batch-size sweep table has stale "
                     f"head metadata for {label!r}. Expected {expected_head!r}, "
                     f"found {sorted(observed_heads)}."
                 )
@@ -416,7 +456,7 @@ def _validate_precomputed_calibration(
     return pd.concat(filtered_parts, ignore_index=True)
 
 
-def load_or_run_adsorption_batch_calibration(
+def load_or_run_adsorption_batch_sweep(
     *,
     use_precomputed: bool,
     run_scope: str,
@@ -439,7 +479,7 @@ def load_or_run_adsorption_batch_calibration(
     display_fn=None,
     markdown_cls=None,
 ) -> tuple[pd.DataFrame, pd.DataFrame, Path]:
-    """Load or run the notebook's adsorption batch-size calibration."""
+    """Load or run the notebook's adsorption batch-size sweep."""
     cache_path = Path(cache_path)
     full_cache_path = Path(full_cache_path)
     cache_source = cache_path
@@ -454,11 +494,11 @@ def load_or_run_adsorption_batch_calibration(
     if use_precomputed:
         if not cache_source.exists():
             raise RuntimeError(
-                "Precomputed adsorption batch-calibration table not found. "
+                "Precomputed adsorption batch-size sweep table not found. "
                 f"Expected {tutorial_relpath(cache_path)}. "
                 "Set USE_SAVED_TUTORIAL_RESULTS = False to recompute it."
             )
-        calibration_df = _validate_precomputed_calibration(
+        sweep_df = _validate_precomputed_batch_sweep(
             pd.read_csv(cache_source),
             model_specs=model_specs,
             batch_sizes=batch_sizes,
@@ -467,12 +507,12 @@ def load_or_run_adsorption_batch_calibration(
         if display_fn is not None and markdown_cls is not None:
             display_fn(
                 markdown_cls(
-                    "Using saved adsorption batch calibration from "
+                    "Using saved adsorption batch-size sweep from "
                     f"`{tutorial_relpath(cache_source)}`."
                 )
             )
     else:
-        calibration_pool = build_adsorption_calibration_pool(
+        sweep_pool = build_adsorption_batch_sweep_pool(
             host_name=host_name,
             adsorbate_name=adsorbate_name,
             rotations_deg=(0.0, 60.0, 120.0),
@@ -480,25 +520,25 @@ def load_or_run_adsorption_batch_calibration(
             frozen_fraction=0.5,
         )
         print(
-            f"Calibration pool: {len(calibration_pool)} starting structures; "
+            f"Batch-size sweep pool: {len(sweep_pool)} starting structures; "
             "larger batches cycle through this pool to measure GPU throughput."
         )
         progress = None
         if progress_factory is not None:
             progress = progress_factory(
-                title="Adsorption batch calibration",
+                title="Adsorption batch-size sweep",
                 total=len(model_specs) * len(batch_sizes),
                 unit="model-batch tests",
                 message="building short relaxation batches",
                 average_label="s/test",
                 width_px=680,
             )
-        calibration_df = run_adsorption_batch_calibration(
-            configs=calibration_pool,
+        sweep_df = run_adsorption_batch_sweep(
+            configs=sweep_pool,
             model_specs=model_specs,
             batch_sizes=batch_sizes,
             output_csv=cache_path,
-            cache_dir=Path(output_dir) / "adsorption_batch_calibration_work",
+            cache_dir=Path(output_dir) / "adsorption_batch_sweep_work",
             toolkit_device=toolkit_device,
             toolkit_dtype=toolkit_dtype,
             toolkit_dt=toolkit_dt,
@@ -509,28 +549,28 @@ def load_or_run_adsorption_batch_calibration(
             progress=progress,
         )
 
-    summary = summarize_adsorption_batch_calibration(
-        calibration_df,
+    summary = summarize_adsorption_batch_sweep(
+        sweep_df,
         memory_fraction=memory_fraction,
     )
-    return calibration_df, summary, cache_source
+    return sweep_df, summary, cache_source
 
 
-def display_adsorption_batch_calibration_results(
-    calibration_df: pd.DataFrame,
+def display_adsorption_batch_sweep_results(
+    sweep_df: pd.DataFrame,
     summary: pd.DataFrame,
     *,
     display_fn,
     markdown_cls,
 ) -> None:
-    """Print a compact notebook-facing calibration summary."""
-    _ = calibration_df
+    """Print a compact notebook-facing batch-size sweep summary."""
+    _ = sweep_df
     _ = display_fn, markdown_cls
 
     print("Recommended adsorption batch sizes:")
     for _, row in summary.iterrows():
         if pd.isna(row.get("recommended_batch_size")):
-            print(f"  {row.get('model', 'model')}: no successful calibration point")
+            print(f"  {row.get('model', 'model')}: no successful sweep point")
             continue
         print(
             f"  {row['model']}: batch {int(row['recommended_batch_size'])} "
@@ -540,3 +580,11 @@ def display_adsorption_batch_calibration_results(
             f"{row['observed_free_drop_gb']:.2f} GB observed free-VRAM drop)"
         )
     print("Full timing rows are saved to CSV; the figure shows throughput saturation and measured VRAM footprint.")
+
+
+# Backward-compatible aliases for older notebooks/tests.
+build_adsorption_calibration_pool = build_adsorption_batch_sweep_pool
+display_adsorption_batch_calibration_results = display_adsorption_batch_sweep_results
+load_or_run_adsorption_batch_calibration = load_or_run_adsorption_batch_sweep
+run_adsorption_batch_calibration = run_adsorption_batch_sweep
+summarize_adsorption_batch_calibration = summarize_adsorption_batch_sweep

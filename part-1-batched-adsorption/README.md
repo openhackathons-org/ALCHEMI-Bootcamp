@@ -1,19 +1,25 @@
-<p align="center">
-  <img src="assets/images/logos/nvidia-logo.png" alt="NVIDIA" height="55"/>
-</p>
+<div align="center">
+  <table>
+    <tr>
+      <td align="center" width="210" height="118"><img src="assets/images/logos/nvidia-logo.png" alt="NVIDIA" height="62"/></td>
+      <td align="center" width="170" height="118"><img src="assets/images/logos/eneos-orange.png" alt="ENEOS" height="38"/></td>
+      <td align="center" width="260" height="118"><img src="assets/images/logos/matlantis.png" alt="Matlantis" height="104"/></td>
+      <td align="center" width="170" height="118"><img src="assets/images/logos/ovito_logo.png" alt="OVITO" height="42"/></td>
+    </tr>
+  </table>
+</div>
 
 ---
 
 # Batched Atomistic Simulation with NVIDIA ALCHEMI
 
+Partner context: NVIDIA ALCHEMI provides the accelerated tutorial/runtime layer. ENEOS and Matlantis motivate the production oxygen evolution reaction (OER) catalysis-search context, and OVITO is used for structure inspection and rendering. The notebook is a simplified, auditable adsorption tutorial inspired by that real production search.
+
 **Interactive Jupyter tutorial.** This notebook shows how batching changes the practical scale of atomistic simulation. Instead of running one hand-picked structure at a time, the workflow builds many plausible structures with established Python tools, relaxes them in batches with NVIDIA ALCHEMI Toolkit, ranks the results, inspects failures, and keeps reference comparisons honest.
 
-Adsorption configuration search is the worked example because it makes the combinatorial problem visible: surfaces, Miller indices, sites, orientations, heights, and local minima. The active panel is CO, H2O, NH3, and CH3OH on Cu(111), Cu(100), Cu(110), rutile TiO2(110), TiO2(100), TiO2(101), TiN(001), TiN(110), and TiN(210). The same throughput pattern is relevant to real discovery pipelines in catalysis, separations, water harvesting, OER materials, framework screening, and surface chemistry.
+Adsorption configuration search is the worked example because it makes the combinatorial problem visible: surfaces, Miller indices, sites, orientations, heights, and local minima. The active panel is CO, H<sub>2</sub>O, NH<sub>3</sub>, and CH<sub>3</sub>OH on Cu(111), Cu(100), Cu(110), rutile TiO<sub>2</sub>(110), TiO<sub>2</sub>(100), TiO<sub>2</sub>(101), TiN(001), TiN(110), and TiN(210). The same throughput pattern is relevant to real discovery pipelines in catalysis, separations, water harvesting, OER materials, framework screening, and surface chemistry.
 
-NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers already use. ASE and pymatgen build structures; the surface-screen teaching path uses open MACE checkpoints (machine-learning interatomic potentials, or MLIPs); ALCHEMI provides batching, GPU execution, optimizers, constraints, metadata, and reusable workflow building blocks. The batch-size calibration compares open MACE sizes so readers can see the accuracy/cost tradeoff. MACE-MH-1 with an OC20 surface head is a promising surface-specialized option, but it is license-gated and is not part of the runnable NVIDIA tutorial path. DFT-D3(BJ) is available in Toolkit workflows, but it is disabled here because the OC20Dense validation data follows the non-D3 OC20 convention. Quantitative claims are intentionally scoped. Published model-level MAD (Mean Absolute Deviation from DFT) values are recorded for orientation, but they are not run-specific error bars. Strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are added to the reference list, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
-
-Current goal, flow, verification status, and presentation checklist:
-[`docs/current_tutorial_status_and_flow.md`](docs/current_tutorial_status_and_flow.md).
+NVIDIA ALCHEMI is presented here as an enabling layer for the tools researchers already use. ASE and pymatgen build structures; the surface-screen teaching path uses open MACE checkpoints (machine-learning interatomic potentials, or MLIPs); ALCHEMI provides batching, GPU execution, optimizers, constraints, metadata, and reusable workflow building blocks. The batch-size sweep compares open MACE sizes so readers can see the speed/memory tradeoff before a larger run. Other MACE models, including MACE-MH-1 with an OC20 surface head, can be tested separately by changing the model setup and following the applicable upstream license; those results are not part of the shipped tutorial outputs. DFT-D3(BJ) is available in Toolkit workflows, but it is disabled here because the OC20Dense validation data follows the non-D3 OC20 convention. Quantitative claims are intentionally scoped. Published model-level MAD (Mean Absolute Deviation from DFT) values are recorded for orientation, but they are not run-specific error bars. Strict tutorial-level validation requires exact matching reference records for slab model, coverage, functional, dispersion convention, frozen layers, and energy sign convention. Until those records are added to the reference list, per-pair literature values are treated as contextual checkpoints rather than strict parity data.
 
 ## Contents
 
@@ -22,7 +28,7 @@ The notebook is organized as a live tutorial, not just a report:
 
 1. Frame adsorption as a combinatorial structure-search problem.
 2. Introduce the Toolkit objects used in the notebook: `AtomicData`, `Batch`, model wrappers, and `FIRE2`.
-3. Run a small H2O batching example and a real adsorption batch-size calibration.
+3. Run a small H2O batching example and a real adsorption batch-size sweep.
 4. Validate the model/workflow against selected OC20Dense DFT trajectories.
 5. Build the surface-screen panel step by step: slabs, Miller indices, adsorbates, sites, orientations, and starting heights.
 6. Relax the generated structures in batches, rank by `E_ads`, inspect reliability flags, and visualize selected structures.
@@ -103,7 +109,7 @@ The reference layer is deliberately conservative:
 - `near-strict` rows may support limited quantitative comparison when only minor modeling details differ.
 - `strict` rows require an exact match recorded in the reference list, covering the tutorial's slab, adsorbate, coverage, functional, dispersion, frozen-layer convention, and sign convention.
 
-## References To Verify
+## References
 
 Primary references currently used by the notebook or plan:
 
@@ -119,16 +125,18 @@ See `references/manual_checks.md` and the reference registry `references/manifes
 
 ## License
 
-Apache 2.0 -- see [LICENSE](../LICENSE).
+This tutorial is part of the repository licensed under the Apache License 2.0.
+See [LICENSE](../LICENSE).
 
-Model/data licensing notes for this tutorial:
+This tutorial also uses third-party model checkpoints, validation data, and
+Python dependencies with their own upstream terms:
 
-- Active MACE-MP/MACE-MPA tutorial checkpoints are used because the MACE
-  foundation-model registry lists those model families under MIT.
-- MACE-MH-1 is not used in the runnable NVIDIA tutorial path because it is
-  ASL-listed. It may be useful to test in a separate environment when license
-  review permits it.
-- The bundled OC20Dense validation pack is a slim subset of released Open
-  Catalyst validation data. OC20 is listed by the Open Catalyst terms as
-  Creative Commons Attribution 4.0; keep attribution in any redistributed
-  derivative tutorial package.
+| Package or artifact | License | Upstream link |
+|---|---|---|
+| NVIDIA ALCHEMI Toolkit (`nvalchemi-toolkit`) | Apache License 2.0 | [GitHub](https://github.com/NVIDIA/nvalchemi-toolkit) |
+| NVIDIA ALCHEMI Toolkit-Ops (`nvalchemi-toolkit-ops`) | Apache License 2.0 | [GitHub](https://github.com/NVIDIA/nvalchemi-toolkit-ops) |
+| MACE-MP/MACE-MPA foundation-model checkpoints | MIT License | [MACE foundation-model registry](https://mace-docs.readthedocs.io/en/latest/guide/foundation_models.html) |
+| OC20/OC20Dense validation data | Creative Commons Attribution 4.0 International (CC BY 4.0) | [Open Catalyst OC20](https://fair-chem.github.io/oc20/) |
+
+Retain the applicable third-party notices and attribution when redistributing
+model artifacts, dataset artifacts, or derivative tutorial packages.

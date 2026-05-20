@@ -14,10 +14,12 @@ import io
 import importlib
 import pickle
 import tarfile
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from argparse import Namespace
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass
+from math import gcd
 from itertools import combinations
 from pathlib import Path
 
@@ -137,6 +139,7 @@ def validation_context_table(
     """Return a compact table of the validation choices readers can change."""
     relpath = relpath_fn or (lambda path: Path(path).as_posix())
     adsorbates = ", ".join(row["adsorbate"] for row in context.trajectory_selection)
+    nh3_surface = describe_oc20dense_system(context, context.nh3_system)
     return pd.DataFrame(
         [
             {"choice": "result source", "value": context.result_source},
@@ -151,7 +154,7 @@ def validation_context_table(
             {
                 "choice": "NH3 ranking",
                 "value": (
-                    f"system {context.nh3_system}, 92 DFT-relaxed geometries, "
+                    f"{nh3_surface['surface_label']}, 92 DFT-relaxed geometries, "
                     f"single-point batch size {context.single_point_batch_size}"
                 ),
             },
@@ -173,6 +176,114 @@ def validation_context_table(
             },
         ]
     )
+
+
+def describe_oc20dense_system(
+    context: OC20DenseValidationContext,
+    system_id: str,
+) -> dict[str, object]:
+    """Return the notebook-facing OC20Dense surface label for one system."""
+    data_root = ensure_oc20dense_reference_data(context.tutorial_root)
+    mapping = _read_pickle(_mapping_file(data_root, "oc20dense_mapping.pkl"))
+    matches = [
+        (sid, meta)
+        for sid, meta in mapping.items()
+        if str(meta.get("system_id")) == str(system_id)
+    ]
+    if not matches:
+        return {
+            "system_id": str(system_id),
+            "surface_label": f"OC20Dense system {system_id}",
+            "mpid": "",
+            "miller_idx": "",
+            "side": "",
+            "slab_formula": "",
+        }
+
+    sid, meta = sorted(matches, key=lambda item: str(item[1].get("config_id", "")))[0]
+    miller = tuple(meta.get("miller_idx", ()))
+    miller_label = "".join(str(index) for index in miller) if miller else "surface"
+    side = "top" if bool(meta.get("top", False)) else "bottom"
+    slab_formula = _slab_formula_for_system(data_root, system_id=str(system_id), sid=sid, meta=meta)
+    material_label = slab_formula or str(meta.get("mpid", "OC20Dense slab"))
+    material_label_html = _formula_html_subscripts(material_label) if slab_formula else material_label
+    surface_label_plain = (
+        f"{material_label}({miller_label})"
+        f" [{meta.get('mpid', '')}, system {system_id}, {side} side]"
+    )
+    surface_label = (
+        f"{material_label_html}({miller_label})"
+        f" [{meta.get('mpid', '')}, system {system_id}, {side} side]"
+    )
+    return {
+        "system_id": str(system_id),
+        "surface_label": surface_label,
+        "surface_label_plain": surface_label_plain,
+        "mpid": str(meta.get("mpid", "")),
+        "miller_idx": str(miller),
+        "side": side,
+        "slab_formula": slab_formula,
+    }
+
+
+def _slab_formula_for_system(
+    data_root: Path,
+    *,
+    system_id: str,
+    sid: object,
+    meta: dict,
+) -> str:
+    config_id = str(meta.get("config_id", ""))
+    initial_dir = data_root / "initial_structures" / "adslab"
+    candidates = [
+        data_root
+        / "initial_structures"
+        / "adslab"
+        / f"{system_id}_{config_id}_sid{int(sid)}.extxyz"
+    ]
+    candidates.extend(sorted(initial_dir.glob(f"{system_id}_*_sid*.extxyz")))
+    candidates.append(
+        data_root
+        / "selected_trajectories"
+        / "surfaces"
+        / f"{system_id}_surface.traj"
+    )
+    path = next((candidate for candidate in candidates if candidate.exists()), None)
+    if path is None:
+        return ""
+    atoms = ase_read(path)
+    adsorbate_mask = _adsorbate_atom_mask(atoms)
+    symbols = [
+        symbol
+        for symbol, is_adsorbate in zip(atoms.get_chemical_symbols(), adsorbate_mask)
+        if not is_adsorbate
+    ]
+    return _reduced_formula(symbols)
+
+
+def _reduced_formula(symbols: Sequence[str]) -> str:
+    counts = Counter(str(symbol) for symbol in symbols if str(symbol))
+    if not counts:
+        return ""
+    divisor = 0
+    for count in counts.values():
+        divisor = count if divisor == 0 else gcd(divisor, count)
+    divisor = max(divisor, 1)
+    parts = []
+    for symbol in sorted(counts):
+        count = counts[symbol] // divisor
+        parts.append(symbol if count == 1 else f"{symbol}{count}")
+    return "".join(parts)
+
+
+def _formula_html_subscripts(formula: str) -> str:
+    import re
+
+    def replace(match):
+        element, count = match.groups()
+        return f"{element}<sub>{count}</sub>" if count else element
+
+    return re.sub(r"([A-Z][a-z]?)([0-9]*)", replace, str(formula))
 
 
 def find_oc20dense_source_root(tutorial_root: Path) -> Path:
@@ -486,7 +597,7 @@ def run_or_load_oc20dense_validation(
             ]
         )
         if display_fn is not None:
-            display_fn(table)
+            display_fn(table.style.hide(axis="index"))
         return table
 
     recompute = True if force is None else bool(force)
@@ -579,8 +690,100 @@ def run_or_load_oc20dense_validation(
 
     table = pd.DataFrame(rows)
     if display_fn is not None:
-        display_fn(table)
+        display_fn(table.style.hide(axis="index"))
     return table
+
+
+def run_nh3_single_point_batches(
+    context: OC20DenseValidationContext,
+    *,
+    progress_factory=None,
+    display_fn=None,
+    markdown_cls=None,
+    relpath_fn: Callable[[Path], str] | None = None,
+    force: bool = True,
+) -> pd.DataFrame:
+    """Construct and run the NH3 DFT-final single-point batches."""
+    relpath = relpath_fn or (lambda path: Path(path).as_posix())
+    steps = build_nh3_ranking_stage_plan(
+        tutorial_root=context.tutorial_root,
+        source_root=context.nh3_reference_source_root,
+        output_root=context.nh3_ranking_root,
+        system_id=context.nh3_system,
+        single_point_batch_size=context.single_point_batch_size,
+        n_steps=context.n_steps,
+        fmax=context.fmax,
+        force=bool(force),
+    )
+
+    if display_fn is not None and markdown_cls is not None:
+        display_fn(
+            markdown_cls(
+                "Constructing the NH<sub>3</sub> validation workload from the released "
+                "DFT-final frames, then scoring it as Toolkit single-point batches. "
+                f"Configured batch size: `{context.single_point_batch_size}`."
+            )
+        )
+
+    progress = None
+    if progress_factory is not None:
+        progress = progress_factory(
+            title="NH3 single-point batches",
+            total=len(steps),
+            unit="steps",
+            message="ready to construct validation batches",
+            width_px=760,
+        )
+
+    old_cache_overwrite = os.environ.get("ALCHEMI_ALLOW_CACHE_OVERWRITE")
+    live_root = context.tutorial_root / "outputs" / "live_runs"
+    if _is_relative_to(context.accuracy_output_dir, live_root):
+        os.environ["ALCHEMI_ALLOW_CACHE_OVERWRITE"] = "1"
+
+    rows = []
+    try:
+        for index, step in enumerate(steps, start=1):
+            if progress is not None:
+                progress.update(done=index - 1, message=step.label)
+            elapsed_minutes = run_validation_step(step)
+            rows.append(
+                {
+                    "timed action": step.label,
+                    "elapsed_min": elapsed_minutes,
+                }
+            )
+            if progress is not None:
+                progress.update(done=index, message=f"{step.label} complete")
+    finally:
+        if old_cache_overwrite is None:
+            os.environ.pop("ALCHEMI_ALLOW_CACHE_OVERWRITE", None)
+        else:
+            os.environ["ALCHEMI_ALLOW_CACHE_OVERWRITE"] = old_cache_overwrite
+
+    chunk_timing_path = (
+        context.nh3_ranking_root
+        / "dft_final_single_points"
+        / "tables"
+        / "dft_final_sp_chunk_timings.csv"
+    )
+    if chunk_timing_path.exists():
+        chunk_timings = pd.read_csv(chunk_timing_path)
+        total_runtime_s = float(chunk_timings["runtime_s"].astype(float).sum())
+        n_structures = int(chunk_timings["n_configs"].astype(int).sum())
+        n_batches = int(len(chunk_timings))
+        occupancy = ", ".join(str(value) for value in chunk_timings["n_configs"].astype(int))
+        if display_fn is not None and markdown_cls is not None:
+            display_fn(
+                markdown_cls(
+                    f"Ran `{n_structures}` NH<sub>3</sub> DFT-final single-point "
+                    f"calculations as `{n_batches}` Toolkit batches "
+                    f"(`{occupancy}` structures per batch). Total single-point "
+                    f"batch runtime: `{total_runtime_s:.3f} s`. Chunk timings: "
+                    f"`{relpath(chunk_timing_path)}`."
+                )
+            )
+
+    return pd.DataFrame(rows)
 
 
 def build_trajectory_stage_plan(
@@ -801,6 +1004,287 @@ def _resolve_validation_artifact(
     return candidates[0]
 
 
+def _resolve_nh3_dft_final_structure(row, *, root: Path) -> Path:
+    stem = _artifact_stem(row)
+    primary = _resolve_validation_artifact(
+        getattr(row, "dft_final_structure_path", None),
+        root=root,
+        relative_dir="dft_final_single_points/structures/dft_final",
+        fallback_name=f"{stem}.extxyz",
+    )
+    if primary.exists():
+        return primary
+    alternate = _resolve_validation_artifact(
+        getattr(row, "dft_final_structure_path", None),
+        root=root,
+        relative_dir="structures/dft_final",
+        fallback_name=f"{stem}.extxyz",
+    )
+    return alternate if alternate.exists() else primary
+
+
+def _adsorbate_atom_mask(atoms) -> np.ndarray:
+    tags = atoms.arrays.get("tags")
+    if tags is not None:
+        tagged_adsorbate = np.asarray(tags) == 2
+        if bool(np.any(tagged_adsorbate)):
+            return tagged_adsorbate
+    symbols = np.asarray(atoms.get_chemical_symbols())
+    return np.isin(symbols, ["N", "H"])
+
+
+def _adsorbate_anchor_index(atoms, adsorbate_mask: np.ndarray) -> int | None:
+    symbols = np.asarray(atoms.get_chemical_symbols())
+    nitrogen = np.flatnonzero(adsorbate_mask & (symbols == "N"))
+    if nitrogen.size:
+        return int(nitrogen[0])
+    adsorbate = np.flatnonzero(adsorbate_mask)
+    if adsorbate.size:
+        return int(adsorbate[0])
+    return None
+
+
+def _adsorbate_unwrapped_local_positions(atoms, adsorbate_mask: np.ndarray) -> np.ndarray:
+    """Return display positions with the adsorbate kept whole across PBCs."""
+    from ase.geometry import find_mic
+
+    positions = np.asarray(atoms.positions, dtype=float)
+    anchor_index = _adsorbate_anchor_index(atoms, adsorbate_mask)
+    if anchor_index is None:
+        return positions.copy()
+
+    anchor = positions[anchor_index]
+    vectors, _distances = find_mic(
+        positions - anchor,
+        atoms.cell,
+        atoms.pbc,
+    )
+    adsorbate_center = vectors[adsorbate_mask].mean(axis=0)
+    return vectors - adsorbate_center
+
+
+def _adsorbate_unwrapped_positions_in_cell(atoms, adsorbate_mask: np.ndarray) -> np.ndarray:
+    """Return positions with only the adsorbate unwrapped around its anchor atom."""
+    from ase.geometry import find_mic
+
+    positions = np.asarray(atoms.positions, dtype=float)
+    anchor_index = _adsorbate_anchor_index(atoms, adsorbate_mask)
+    if anchor_index is None:
+        return positions.copy()
+
+    anchor = positions[anchor_index]
+    adsorbate_indices = np.flatnonzero(adsorbate_mask)
+    adsorbate_vectors, _distances = find_mic(
+        positions[adsorbate_indices] - anchor,
+        atoms.cell,
+        atoms.pbc,
+    )
+    unwrapped = positions.copy()
+    unwrapped[adsorbate_indices] = anchor + adsorbate_vectors
+    return unwrapped
+
+
+def _crop_adsorbate_local_environment(
+    atoms,
+    *,
+    radius: float = 5.0,
+):
+    """Return a display-only local site crop around the tagged adsorbate."""
+    adsorbate_mask = _adsorbate_atom_mask(atoms)
+    if not bool(np.any(adsorbate_mask)):
+        return atoms
+
+    local_positions_all = _adsorbate_unwrapped_local_positions(atoms, adsorbate_mask)
+    adsorbate_vectors = local_positions_all[adsorbate_mask]
+    distances_to_adsorbate = np.linalg.norm(
+        local_positions_all[:, None, :] - adsorbate_vectors[None, :, :],
+        axis=2,
+    ).min(axis=1)
+    selected = adsorbate_mask | (distances_to_adsorbate <= float(radius))
+    cropped = atoms[selected].copy()
+    local_positions = local_positions_all[selected]
+    cropped.positions = local_positions
+    cropped.set_cell([0.0, 0.0, 0.0])
+    cropped.set_pbc(False)
+    camera = _top_down_adsorbate_site_camera(
+        atoms,
+        local_positions=local_positions,
+        selected_mask=selected,
+        adsorbate_mask=adsorbate_mask,
+    )
+    if camera is not None:
+        cropped.info["render_camera"] = camera
+    return cropped
+
+
+def _unwrap_full_adsorbate_structure(atoms):
+    """Return all atoms in a display frame where NH3 is not split by PBCs."""
+    adsorbate_mask = _adsorbate_atom_mask(atoms)
+    if not bool(np.any(adsorbate_mask)):
+        return atoms
+
+    local_positions = _adsorbate_unwrapped_positions_in_cell(atoms, adsorbate_mask)
+    unwrapped = atoms.copy()
+    unwrapped.positions = local_positions
+    selected = np.ones(len(atoms), dtype=bool)
+    camera = _top_down_adsorbate_site_camera(
+        atoms,
+        local_positions=local_positions,
+        selected_mask=selected,
+        adsorbate_mask=adsorbate_mask,
+        target="extent",
+        margin_factor=1.35,
+    )
+    if camera is not None:
+        unwrapped.info["render_camera"] = camera
+    return unwrapped
+
+
+def _top_down_adsorbate_site_camera(
+    atoms,
+    *,
+    local_positions: np.ndarray,
+    selected_mask: np.ndarray,
+    adsorbate_mask: np.ndarray,
+    target: str = "adsorbate",
+    margin_factor: float = 1.9,
+) -> dict[str, object] | None:
+    """Build a top-down camera from the original slab normal for local crops."""
+    if atoms.cell.rank < 2 or len(local_positions) == 0:
+        return None
+
+    cell = np.asarray(atoms.cell.array, dtype=float)
+    normal = np.cross(cell[0], cell[1])
+    norm = float(np.linalg.norm(normal))
+    if norm < 1e-8:
+        return None
+    normal = normal / norm
+
+    selected_adsorbate = np.asarray(adsorbate_mask[selected_mask], dtype=bool)
+    selected_surface = ~selected_adsorbate
+    if bool(np.any(selected_surface)):
+        adsorbate_mean = local_positions[selected_adsorbate].mean(axis=0)
+        surface_mean = local_positions[selected_surface].mean(axis=0)
+        if float(np.dot(adsorbate_mean - surface_mean, normal)) < 0:
+            normal = -normal
+
+    lateral_1 = cell[0] / np.linalg.norm(cell[0])
+    lateral_2 = np.cross(normal, lateral_1)
+    lateral_2_norm = float(np.linalg.norm(lateral_2))
+    if lateral_2_norm < 1e-8:
+        lateral_2 = np.array([0.0, 1.0, 0.0])
+    else:
+        lateral_2 = lateral_2 / lateral_2_norm
+
+    adsorbate_center = local_positions[selected_adsorbate].mean(axis=0)
+    if target == "extent":
+        lateral_1_values = local_positions @ lateral_1
+        lateral_2_values = local_positions @ lateral_2
+        center = adsorbate_center.copy()
+        center += lateral_1 * float((lateral_1_values.min() + lateral_1_values.max()) / 2.0)
+        center += lateral_2 * float((lateral_2_values.min() + lateral_2_values.max()) / 2.0)
+        center -= lateral_1 * float(adsorbate_center @ lateral_1)
+        center -= lateral_2 * float(adsorbate_center @ lateral_2)
+    else:
+        center = adsorbate_center
+
+    relative = local_positions - center
+    lateral_extent = max(
+        float(np.ptp(relative @ lateral_1)),
+        float(np.ptp(relative @ lateral_2)),
+        3.8,
+    )
+    fov = float(np.deg2rad(24.0))
+    distance = max(
+        lateral_extent / (2.0 * np.tan(fov / 2.0)) * float(margin_factor),
+        6.0,
+    )
+    camera_pos = center + normal * distance
+    return {
+        "camera_pos": tuple(float(x) for x in camera_pos),
+        "camera_dir": tuple(float(x) for x in -normal),
+        "fov": fov,
+    }
+
+
+def _assert_single_nh3_structure(atoms, *, source: str) -> None:
+    symbols = np.asarray(atoms.get_chemical_symbols())
+    adsorbate_mask = _adsorbate_atom_mask(atoms)
+    counts = Counter(symbols[adsorbate_mask])
+    if counts.get("O", 0):
+        raise ValueError(f"Expected NH3-only adsorbate, found adsorbate O atoms in {source}.")
+    if counts.get("N", 0) != 1 or counts.get("H", 0) != 3:
+        raise ValueError(
+            "Expected exactly one NH3 adsorbate in "
+            f"{source}; found N={counts.get('N', 0)} and H={counts.get('H', 0)}."
+        )
+
+
+def _nh3_site_particle_colors(atoms) -> np.ndarray:
+    colors = []
+    for symbol in atoms.get_chemical_symbols():
+        if symbol == "N":
+            colors.append((0.05, 0.16, 0.85))
+        elif symbol == "H":
+            colors.append((0.96, 0.96, 0.96))
+        else:
+            colors.append((0.56, 0.58, 0.60))
+    return np.asarray(colors, dtype=float)
+
+
+def _normalize_rgb_float(values: Sequence[float]) -> tuple[float, float, float]:
+    rgb = tuple(float(value) for value in values)
+    if len(rgb) != 3:
+        raise ValueError("RGB float colour must contain exactly three values")
+    if any(value < 0.0 or value > 1.0 for value in rgb):
+        raise ValueError("RGB float colour values must be in the [0, 1] range")
+    return rgb
+
+
+def _normalize_rgb_int(values: Sequence[int]) -> tuple[int, int, int]:
+    rgb = tuple(int(value) for value in values)
+    if len(rgb) != 3:
+        raise ValueError("RGB integer colour must contain exactly three values")
+    if any(value < 0 or value > 255 for value in rgb):
+        raise ValueError("RGB integer colour values must be in the [0, 255] range")
+    return rgb
+
+
+def _rgb_float_cache_token(
+    prefix: str,
+    values: tuple[float, float, float],
+    *,
+    default: tuple[float, float, float],
+) -> str:
+    if all(abs(value - reference) < 1e-9 for value, reference in zip(values, default)):
+        return ""
+    return "_" + prefix + "".join(f"{int(round(value * 100)):03d}" for value in values)
+
+
+def _rgb_int_cache_token(
+    prefix: str,
+    values: tuple[int, int, int],
+    *,
+    default: tuple[int, int, int],
+) -> str:
+    if values == default:
+        return ""
+    return "_" + prefix + "".join(f"{value:03d}" for value in values)
+
+
+def _nh3_render_focus_token(
+    focus: str,
+    *,
+    local_environment_radius: float,
+) -> str:
+    if focus == "full_slab":
+        return "fullslab_top"
+    if focus != "adsorbate_site":
+        raise ValueError("focus must be 'adsorbate_site' or 'full_slab'")
+    radius_token = f"{float(local_environment_radius):.1f}".replace(".", "p")
+    return f"nh3site_r{radius_token}"
+
+
 def load_trajectory_validation_results(
     *,
     root: Path,
@@ -858,8 +1342,7 @@ def load_trajectory_validation_results(
             markdown_cls(
                 f"Loaded validated trajectory-replay artifacts for "
                 f"`{len(dft_reference)}` OC20Dense records "
-                f"with `{validation_model_label}`. Max DFT trajectory-target "
-                f"difference: `{max_target_delta:.2e} eV`."
+                f"with `{validation_model_label}`."
             )
         )
         trajectory_columns = [
@@ -995,7 +1478,6 @@ def load_nh3_ranking_results(
         )
         display_fn(
             markdown_cls(
-                f"Max DFT trajectory-target difference: `{max_target_delta:.2e} eV`. "
                 f"Max start-frame adsorbate RMSD: `{max_start_adsorbate_rmsd:.2e} A`."
             )
         )
@@ -1085,7 +1567,6 @@ def show_trajectory_validation_results(
     )
     relaxation_errors = results["trajectory_relaxation_errors"]
     mace_refs = results["trajectory_mace_refs"]
-    max_target_delta = results["max_trajectory_dft_target_delta_eV"]
 
     trajectory_table = relaxation_errors[
         [
@@ -1107,7 +1588,7 @@ def show_trajectory_validation_results(
     )
 
     display_fn(markdown_cls("#### Relaxation check: Toolkit trajectories against OC20Dense DFT"))
-    display_fn(trajectory_table)
+    display_fn(trajectory_table.style.hide(axis="index"))
     display_fn(
         markdown_cls(
             "RMSD is reported for all atoms using the exact OC20Dense atom order "
@@ -1124,8 +1605,7 @@ def show_trajectory_validation_results(
     )
     display_fn(
         markdown_cls(
-            f"Max DFT trajectory-target difference: `{max_target_delta:.2e} eV`. "
-            f"The largest relaxed-endpoint miss in this compact slice is "
+            f"Largest MACE-vs-DFT relaxed-endpoint miss in this compact slice: "
             f"`{worst_row['adsorbate']}`: Eads error "
             f"`{worst_row['mace_relaxed_eads_error_eV']:.3f} eV`, "
             f"all-atom RMSD `{worst_row['mic_all_atom_rmsd_A']:.3f} A`."
@@ -1160,22 +1640,15 @@ def show_trajectory_validation_results(
             "the released OC20Dense adsorption-energy target."
         )
     )
-    display_fn(reference_table)
+    display_fn(reference_table.style.hide(axis="index"))
     return results
 
 
-def show_trajectory_validation_widget_grid(
+def validation_trajectory_artifact_paths(
     context: OC20DenseValidationContext,
     trajectory_results: dict[str, object],
-    *,
-    display_fn,
-    markdown_cls,
-    trajectory_grid_fn,
-    width: str = "260px",
-    height: str = "220px",
-    show_cell: bool = False,
 ) -> pd.DataFrame:
-    """Display DFT-vs-MACE relaxation trajectories for side-by-side inspection."""
+    """Return resolved DFT and Toolkit trajectory paths for validation videos."""
     per_config = trajectory_results["trajectory_per_config"]
     dft_reference = trajectory_results["trajectory_dft_reference"]
     keys = ["system_id", "config_id", "sid"]
@@ -1200,7 +1673,6 @@ def show_trajectory_validation_widget_grid(
         .drop(columns="_display_order")
     )
 
-    widget_rows = []
     artifact_rows = []
     missing = []
     for row in merged.itertuples(index=False):
@@ -1221,34 +1693,67 @@ def show_trajectory_validation_widget_grid(
             missing.append(f"DFT trajectory: {dft_path}")
         if not mace_path.exists():
             missing.append(f"MACE trajectory: {mace_path}")
-        label_core = f"{row.adsorbate} | {row.system_id} {row.config_id}"
-        widget_rows.append(
-            [
-                (f"DFT trajectory | {label_core}", dft_path),
-                (f"MACE trajectory | {label_core}", mace_path),
-            ]
-        )
         artifact_rows.append(
             {
                 "system_id": row.system_id,
                 "config_id": row.config_id,
                 "sid": int(row.sid),
                 "adsorbate": row.adsorbate,
+                "dft_trajectory_path": dft_path.as_posix(),
+                "toolkit_trajectory_path": mace_path.as_posix(),
+                # Keep legacy keys so older render helpers/notebooks still work.
                 "dft_trajectory_widget_path": dft_path.as_posix(),
                 "mace_trajectory_widget_path": mace_path.as_posix(),
             }
         )
     if missing:
-        raise FileNotFoundError("Missing validation trajectory widget artifacts: " + "; ".join(missing))
+        raise FileNotFoundError("Missing validation trajectory artifacts: " + "; ".join(missing))
+
+    return pd.DataFrame(artifact_rows)
+
+
+def show_trajectory_validation_widget_grid(
+    context: OC20DenseValidationContext,
+    trajectory_results: dict[str, object],
+    *,
+    display_fn,
+    markdown_cls,
+    trajectory_grid_fn,
+    width: str = "260px",
+    height: str = "220px",
+    show_cell: bool = False,
+) -> pd.DataFrame:
+    """Deprecated widget display retained for older notebooks."""
+    artifact_df = validation_trajectory_artifact_paths(context, trajectory_results)
+    widget_rows = []
+    for row in artifact_df.itertuples(index=False):
+        label_core = f"{row.adsorbate} | {row.system_id} {row.config_id}"
+        widget_rows.append(
+            [
+                (f"DFT trajectory | {label_core}", Path(row.dft_trajectory_path)),
+                (f"MACE trajectory | {label_core}", Path(row.toolkit_trajectory_path)),
+            ]
+        )
 
     display_fn(markdown_cls("#### DFT and MACE trajectory widgets"))
-    trajectory_grid_fn(
-        widget_rows,
-        width=width,
-        height=height,
-        show_cell=show_cell,
-    )
-    return pd.DataFrame(artifact_rows)
+    try:
+        trajectory_grid_fn(
+            widget_rows,
+            width=width,
+            height=height,
+            show_cell=show_cell,
+        )
+    except Exception as exc:
+        display_fn(
+            markdown_cls(
+                "Interactive OVITO trajectory widgets are unavailable in this "
+                f"frontend/kernel session: `{type(exc).__name__}: {exc}`. "
+                "The trajectory files were still resolved successfully and can "
+                "be opened in OVITO or tested in `ovito-trajectory-widget-smoke.ipynb`."
+            )
+        )
+        display_fn(artifact_df.style.hide(axis="index"))
+    return artifact_df
 
 
 def show_nh3_ranking_results(
@@ -1348,12 +1853,9 @@ def show_nh3_all_geometry_grid(
     rows = []
     missing = []
     for row in dft_final_sp.itertuples(index=False):
-        stem = _artifact_stem(row)
-        structure_path = _resolve_validation_artifact(
-            getattr(row, "dft_final_structure_path", None),
+        structure_path = _resolve_nh3_dft_final_structure(
+            row,
             root=context.nh3_ranking_root,
-            relative_dir="dft_final_single_points/structures/dft_final",
-            fallback_name=f"{stem}.extxyz",
         )
         if not structure_path.exists():
             missing.append(structure_path.as_posix())
@@ -1389,6 +1891,349 @@ def show_nh3_all_geometry_grid(
     return pd.DataFrame(rows)
 
 
+def show_nh3_all_geometry_render_grid(
+    context: OC20DenseValidationContext,
+    ranking_results: dict[str, object],
+    *,
+    display_fn,
+    markdown_cls,
+    renderer: str = "visrtx",
+    samples_per_pixel: int = 24,
+    tile_size: tuple[int, int] = (360, 260),
+    columns: int = 6,
+    show_cell: bool = False,
+    focus: str = "adsorbate_site",
+    local_environment_radius: float = 5.0,
+    force: bool = False,
+    display_width: int = 1600,
+    annotation_scale: float = 1.0,
+    render_background: Sequence[float] = (0.97, 0.98, 0.99),
+    overview_background: Sequence[int] = (255, 255, 255),
+) -> pd.DataFrame:
+    """Batch-render all 92 NH3 DFT-final geometries and show one grid PNG."""
+    from IPython.display import Image as IPythonImage
+
+    from .visualization import render_structure_ovito
+
+    dft_final_sp = (
+        ranking_results["ranking_dft_final_sp"]
+        .sort_values("dft_rank")
+        .reset_index(drop=True)
+    )
+    tile_width, tile_height = (int(tile_size[0]), int(tile_size[1]))
+    columns = max(1, int(columns))
+    annotation_scale = max(1.0, float(annotation_scale))
+    render_background = _normalize_rgb_float(render_background)
+    overview_background = _normalize_rgb_int(overview_background)
+    visual_root = context.nh3_ranking_root / "visuals" / "nh3_92_geometry_scan"
+    focus = str(focus)
+    focus_token = _nh3_render_focus_token(
+        focus,
+        local_environment_radius=local_environment_radius,
+    )
+    if focus == "full_slab" and show_cell:
+        focus_token = f"{focus_token}_cell"
+    render_background_token = _rgb_float_cache_token(
+        "bg",
+        render_background,
+        default=(0.97, 0.98, 0.99),
+    )
+    overview_background_token = _rgb_int_cache_token(
+        "canvas",
+        overview_background,
+        default=(255, 255, 255),
+    )
+    tile_root = visual_root / (
+        f"tiles_{focus_token}{render_background_token}_{renderer}_"
+        f"{tile_width}x{tile_height}_spp{samples_per_pixel}"
+    )
+    annotation_token = (
+        ""
+        if abs(annotation_scale - 1.0) < 1e-9
+        else f"_text{annotation_scale:.1f}".replace(".", "p")
+    )
+    overview_path = visual_root / (
+        f"nh3_92_geometry_scan_{focus_token}{annotation_token}"
+        f"{render_background_token}{overview_background_token}_{renderer}_{columns}col_"
+        f"{tile_width}x{tile_height}_spp{samples_per_pixel}.png"
+    )
+    tile_root.mkdir(parents=True, exist_ok=True)
+    surface_summary = describe_oc20dense_system(context, context.nh3_system)
+
+    rows = []
+    missing = []
+    for row in dft_final_sp.itertuples(index=False):
+        stem = _artifact_stem(row)
+        structure_path = _resolve_nh3_dft_final_structure(
+            row,
+            root=context.nh3_ranking_root,
+        )
+        if not structure_path.exists():
+            missing.append(structure_path.as_posix())
+        tile_path = tile_root / f"rank_{int(row.dft_rank):03d}_{stem}.png"
+        rows.append(
+            {
+                "dft_rank": int(row.dft_rank),
+                "mace_rank": int(row.mace_dft_final_sp_rank),
+                "config_id": row.config_id,
+                "sid": int(row.sid),
+                "dft_adsorption_energy_eV": float(row.dft_adsorption_energy_eV),
+                "dft_gap_from_best_eV": float(row.dft_rank1_relative_energy_eV),
+                "mace_gap_error_eV": float(row.mace_dft_rank1_relative_energy_error_eV),
+                "structure_path": structure_path.as_posix(),
+                "render_tile_path": tile_path.as_posix(),
+                "render_focus": focus_token,
+            }
+        )
+    if missing:
+        raise FileNotFoundError(
+            "Missing NH3 geometry render structures: " + "; ".join(missing[:5])
+            + (f"; ... {len(missing)} total" if len(missing) > 5 else "")
+        )
+
+    if focus == "full_slab":
+        cell_text = (
+            "shows the simulation-cell boundary"
+            if show_cell
+            else "hides the simulation-cell boundary"
+        )
+        render_scope_text = (
+            "The render keeps all atoms from each DFT-final structure, unwraps "
+            f"NH<sub>3</sub> around the N atom, {cell_text}, and uses the same "
+            "top-down surface-normal orientation for every tile. "
+        )
+        focus_label = (
+            "all atoms, top-down NH3 orientation, cell shown"
+            if show_cell
+            else "all atoms, top-down NH3 orientation"
+        )
+    else:
+        render_scope_text = (
+            f"The render uses a `{local_environment_radius:.1f}` A local crop "
+            "around NH<sub>3</sub> and its nearby surface atoms. "
+        )
+        focus_label = f"NH3/site crop radius {local_environment_radius:.1f} A"
+
+    display_fn(markdown_cls("#### NH<sub>3</sub> 92-configuration visual scan"))
+    display_fn(
+        markdown_cls(
+            f"Rendering `{len(rows)}` DFT-final NH<sub>3</sub> geometries with "
+            f"`{renderer}` at `{tile_width}x{tile_height}` px per tile on "
+            f"{surface_summary['surface_label']}. "
+            f"{render_scope_text}"
+            "Each tile reports the released reference rank, MACE single-point "
+            "rank, configuration id, and sid for visual inspection."
+        )
+    )
+
+    for idx, item in enumerate(rows, start=1):
+        tile_path = Path(item["render_tile_path"])
+        if force or not tile_path.exists():
+            atoms = ase_read(item["structure_path"])
+            _assert_single_nh3_structure(atoms, source=item["structure_path"])
+            render_camera = None
+            if focus == "adsorbate_site":
+                atoms = _crop_adsorbate_local_environment(
+                    atoms,
+                    radius=float(local_environment_radius),
+                )
+                render_camera = atoms.info.get("render_camera")
+                wrap_periodic_cell = show_cell
+            else:
+                atoms = _unwrap_full_adsorbate_structure(atoms)
+                render_camera = atoms.info.get("render_camera")
+                wrap_periodic_cell = False
+            item["rendered_atoms"] = len(atoms)
+            render_structure_ovito(
+                atoms,
+                output_path=tile_path.as_posix(),
+                size=(tile_width, tile_height),
+                background=render_background,
+                renderer=renderer,
+                samples_per_pixel=samples_per_pixel,
+                show_cell=show_cell,
+                camera=render_camera,
+                wrap_periodic_cell=wrap_periodic_cell,
+            )
+        if idx == 1 or idx % 10 == 0 or idx == len(rows):
+            print(f"NH3 render progress: {idx}/{len(rows)} tiles ready")
+
+    _compose_nh3_render_overview(
+        rows,
+        overview_path=overview_path,
+        columns=columns,
+        tile_size=(tile_width, tile_height),
+        renderer=renderer,
+        samples_per_pixel=samples_per_pixel,
+        surface_label=str(surface_summary["surface_label_plain"]),
+        focus_label=focus_label,
+        annotation_scale=annotation_scale,
+        overview_background=overview_background,
+        force=force,
+    )
+    display_fn(IPythonImage(filename=str(overview_path), width=int(display_width)))
+    display_fn(
+        pd.DataFrame(
+            [
+                {
+                    "molecule": "NH3",
+                    "surface": surface_summary["surface_label"],
+                    "mpid": surface_summary["mpid"],
+                    "miller_idx": surface_summary["miller_idx"],
+                    "side": surface_summary["side"],
+                    "system_id": context.nh3_system,
+                    "structures": len(rows),
+                    "render_focus": focus_token,
+                    "renderer": renderer,
+                    "samples_per_pixel": int(samples_per_pixel),
+                    "annotation_scale": annotation_scale,
+                    "render_background": render_background,
+                    "overview_background": overview_background,
+                    "grid_png": overview_path.as_posix(),
+                    "tile_dir": tile_root.as_posix(),
+                }
+            ]
+        ).style.hide(axis="index")
+    )
+    if focus == "adsorbate_site":
+        display_fn(
+            markdown_cls(
+                "Adsorbate-site tiles use OVITO's default element colours and a "
+                "top-down camera centred on NH<sub>3</sub>. Each source structure "
+                "is checked to contain exactly one NH<sub>3</sub> adsorbate and no "
+                "adsorbate O atoms before rendering."
+            )
+        )
+    else:
+        cell_note = (
+            " The simulation-cell boundary is shown."
+            if show_cell
+            else " The simulation-cell boundary is hidden."
+        )
+        display_fn(
+            markdown_cls(
+                "Full-structure tiles use OVITO's default element colours and a "
+                "shared top-down surface-normal orientation. The display copy is "
+                "unwrapped around NH<sub>3</sub> so no H atom is split across a "
+                "periodic boundary; the source structure is checked to contain "
+                "exactly one NH<sub>3</sub> adsorbate and no adsorbate O atoms."
+                f"{cell_note}"
+            )
+        )
+    return pd.DataFrame(rows)
+
+
+def _compose_nh3_render_overview(
+    rows: list[dict],
+    *,
+    overview_path: Path,
+    columns: int,
+    tile_size: tuple[int, int],
+    renderer: str,
+    samples_per_pixel: int,
+    surface_label: str,
+    focus_label: str,
+    annotation_scale: float,
+    overview_background: tuple[int, int, int],
+    force: bool,
+) -> None:
+    """Compose cached NH3 render tiles into one annotated PNG."""
+    if overview_path.exists() and not force:
+        return
+
+    from PIL import Image, ImageDraw
+
+    tile_width, tile_height = tile_size
+    scale = max(1.0, float(annotation_scale))
+    gap = 16
+    margin = 24
+    title_height = int(round(92 * scale))
+    label_height = int(round(96 * scale))
+    title_offset = int(round(38 * scale))
+    subtitle_offset = int(round(62 * scale))
+    label_pad_x = int(round(10 * scale))
+    label_pad_y = int(round(8 * scale))
+    label_line_step = int(round(20 * scale))
+    rows_count = int(np.ceil(len(rows) / columns))
+    canvas_width = margin * 2 + columns * tile_width + (columns - 1) * gap
+    canvas_height = (
+        margin * 2
+        + title_height
+        + rows_count * (tile_height + label_height)
+        + (rows_count - 1) * gap
+    )
+    canvas = Image.new("RGB", (canvas_width, canvas_height), overview_background)
+    draw = ImageDraw.Draw(canvas)
+    font_title = _pil_font(int(round(28 * scale)), bold=True)
+    font_subtitle = _pil_font(int(round(16 * scale)))
+    font_label = _pil_font(int(round(13 * scale)))
+    font_label_bold = _pil_font(int(round(14 * scale)), bold=True)
+
+    draw.text((margin, margin), "NH3 92-configuration visual scan", fill=(20, 24, 31), font=font_title)
+    draw.text(
+        (margin, margin + title_offset),
+        f"{surface_label}; OVITO {renderer}, {samples_per_pixel} spp. "
+        "Tiles sorted by released reference rank.",
+        fill=(65, 72, 84),
+        font=font_subtitle,
+    )
+    draw.text(
+        (margin, margin + subtitle_offset),
+        focus_label,
+        fill=(65, 72, 84),
+        font=font_subtitle,
+    )
+
+    for index, item in enumerate(rows):
+        row_idx, col_idx = divmod(index, columns)
+        x = margin + col_idx * (tile_width + gap)
+        y = margin + title_height + row_idx * (tile_height + label_height + gap)
+        tile = Image.open(item["render_tile_path"]).convert("RGB")
+        if tile.size != (tile_width, tile_height):
+            tile = tile.resize((tile_width, tile_height), Image.Resampling.LANCZOS)
+        canvas.paste(tile, (x, y))
+        draw.rectangle(
+            [x, y, x + tile_width - 1, y + tile_height + label_height - 1],
+            outline=(202, 208, 216),
+            width=1,
+        )
+        label_y = y + tile_height + label_pad_y
+        draw.text(
+            (x + label_pad_x, label_y),
+            f"Reference #{item['dft_rank']:02d} | MACE SP #{item['mace_rank']:02d}",
+            fill=(20, 24, 31),
+            font=font_label_bold,
+        )
+        label_lines = [
+            f"config {item['config_id']}",
+            f"sid {item['sid']}",
+            "released DFT-final geometry",
+        ]
+        for offset, text in enumerate(label_lines, start=1):
+            draw.text(
+                (x + label_pad_x, label_y + label_line_step * offset),
+                text,
+                fill=(65, 72, 84),
+                font=font_label,
+            )
+
+    overview_path.parent.mkdir(parents=True, exist_ok=True)
+    canvas.save(overview_path, optimize=True)
+
+
+def _pil_font(size: int, *, bold: bool = False):
+    from PIL import ImageFont
+
+    candidates = [
+        "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+        "/usr/share/fonts/dejavu/DejaVuSans-Bold.ttf" if bold else "/usr/share/fonts/dejavu/DejaVuSans.ttf",
+    ]
+    for path in candidates:
+        if Path(path).exists():
+            return ImageFont.truetype(path, size)
+    return ImageFont.load_default()
+
+
 def show_nh3_geometry_widgets(
     context: OC20DenseValidationContext,
     ranking_results: dict[str, object],
@@ -1398,6 +2243,8 @@ def show_nh3_geometry_widgets(
     widgets_row_fn,
     width: str = "240px",
     height: str = "220px",
+    show_cell: bool = False,
+    local_environment_radius: float = 5.0,
 ) -> pd.DataFrame:
     """Display highlighted NH3 DFT-final structures and pairwise geometry spread."""
     ranking_all = ranking_results["nh3_ranking_all"]
@@ -1415,30 +2262,20 @@ def show_nh3_geometry_widgets(
         highlight_paths["dft_rank"].isin(context.preview_ranks)
     ].copy()
     highlight_paths["resolved_dft_final_structure_path"] = [
-        _resolve_validation_artifact(
-            row.dft_final_structure_path,
+        _resolve_nh3_dft_final_structure(
+            row,
             root=context.nh3_ranking_root,
-            relative_dir="dft_final_single_points/structures/dft_final",
-            fallback_name=f"{_artifact_stem(row)}.extxyz",
         )
         for row in highlight_paths.itertuples(index=False)
     ]
 
     def adsorbate_geometry(path: str) -> tuple[np.ndarray, object, np.ndarray]:
         atoms = ase_read(path)
-        tags = np.asarray(atoms.get_tags(), dtype=int)
-        if tags.size and np.any(tags == 2):
-            positions = atoms.get_positions()[tags == 2]
-            return positions, atoms.cell, atoms.pbc
-        # Some DFT-final extxyz files produced during live notebook runs do not
-        # preserve OC20 tags. This widget is specific to the NH3 ranking check,
-        # and the selected surface contains no slab H or N atoms, so N/H is the
-        # chemically meaningful fallback for the adsorbate coordinates.
-        symbols = np.asarray(atoms.get_chemical_symbols())
-        adsorbate = np.isin(symbols, ["N", "H"])
-        if not np.any(adsorbate):
+        adsorbate = _adsorbate_atom_mask(atoms)
+        if not bool(np.any(adsorbate)):
             raise ValueError(f"Could not identify NH3 adsorbate atoms in {path}")
-        positions = atoms.get_positions()[adsorbate]
+        local_positions = _adsorbate_unwrapped_local_positions(atoms, adsorbate)
+        positions = local_positions[adsorbate]
         return positions, atoms.cell, atoms.pbc
 
     rows = []
@@ -1472,12 +2309,30 @@ def show_nh3_geometry_widgets(
     widget_items = []
     for row in highlight_paths.sort_values("dft_rank").itertuples(index=False):
         label = f"DFT rank {int(row.dft_rank)}: {row.config_id}"
-        widget_items.append((label, ase_read(row.resolved_dft_final_structure_path)))
+        atoms = ase_read(row.resolved_dft_final_structure_path)
+        _assert_single_nh3_structure(atoms, source=row.resolved_dft_final_structure_path)
+        if show_cell:
+            widget_atoms = _unwrap_full_adsorbate_structure(atoms)
+        else:
+            widget_atoms = _crop_adsorbate_local_environment(
+                atoms,
+                radius=float(local_environment_radius),
+            )
+        widget_items.append((
+            label,
+            widget_atoms,
+        ))
 
     display_fn(markdown_cls("#### Highlighted NH<sub>3</sub> geometries"))
-    widgets_row_fn(widget_items, width=width, height=height, show_cell=False)
+    widgets_row_fn(
+        widget_items,
+        width=width,
+        height=height,
+        show_cell=show_cell,
+        wrap_periodic_cell=False if show_cell else None,
+    )
     display_fn(markdown_cls("#### Geometry spread among highlighted NH<sub>3</sub> ranks"))
-    display_fn(pairwise_rmsd)
+    display_fn(pairwise_rmsd.style.hide(axis="index"))
     display_fn(
         markdown_cls(
             "The pairwise table uses DFT-relaxed final structures and is "
@@ -1499,13 +2354,13 @@ def show_validation_model_tradeoff(
         [
             {
                 "model": "MACE-MP-0 small",
-                "tutorial use": "active calibration option",
+                "tutorial use": "active batch-size sweep option",
                 "license note": "MIT-listed MACE-MP-0 family",
                 "why include it": "fast open baseline for batch-size and memory trade-off",
             },
             {
                 "model": "MACE-MP-0 large",
-                "tutorial use": "active calibration option",
+                "tutorial use": "active batch-size sweep option",
                 "license note": "MIT-listed MACE-MP-0 family",
                 "why include it": "larger open checkpoint for throughput comparison",
             },
@@ -1514,12 +2369,6 @@ def show_validation_model_tradeoff(
                 "tutorial use": "active default",
                 "license note": "MIT-listed MACE-MPA-0 model",
                 "why include it": "more recent open materials baseline for validation and screen",
-            },
-            {
-                "model": "MACE-MH-1 / OC20 surface head",
-                "tutorial use": "not executed in this NVIDIA tutorial",
-                "license note": "ASL-listed model; use only if your license review permits",
-                "why include it": "surface-specialized option that users can test separately",
             },
         ]
     )
@@ -1539,15 +2388,22 @@ def show_validation_model_tradeoff(
     )
 
     display_fn(markdown_cls("#### Model choice is a license, cost, and accuracy trade-off"))
-    display_fn(model_policy)
+    display_fn(model_policy.style.hide(axis="index"))
     display_fn(markdown_cls("#### Measured open-model baseline for this validation slice"))
-    display_fn(open_model_baseline)
+    display_fn(open_model_baseline.style.hide(axis="index"))
     display_fn(
         markdown_cls(
-            "The active notebook uses open MACE checkpoints. The MH-1 surface "
-            "head is worth testing in environments where the ASL license is "
-            "acceptable, but it is intentionally outside the runnable NVIDIA "
-            "tutorial path."
+            "The runnable notebook uses MACE-MP/MACE-MPA checkpoints only. "
+            "For adsorption and surface chemistry, MACE-MH-1 with the OC20 "
+            "surface head is the strongest follow-up candidate to test: the "
+            "model card reports an OC20/surface head and surface-adsorption "
+            "benchmarks, and the MACE foundation-model registry lists it as a "
+            "multihead model for materials, molecules, and surfaces. It is "
+            "beyond the scope of this runnable NVIDIA tutorial because the "
+            "upstream model is ASL-licensed, so no shipped outputs in this "
+            "notebook are produced with MH-1. Reference: "
+            "[MACE-MH-1 model card](https://huggingface.co/mace-foundations/mace-mh-1) "
+            "and [MACE foundation-model repository](https://github.com/ACEsuit/mace-foundations)."
         )
     )
     return {

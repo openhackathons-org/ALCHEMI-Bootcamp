@@ -17,15 +17,45 @@ import json
 import os
 from pathlib import Path
 from statistics import median
+import sys
 from time import perf_counter
 
 import numpy as np
 import torch
 
 PART1 = Path(__file__).resolve().parents[1]
-import sys
 
 sys.path.insert(0, str(PART1))
+
+RUNTIME_CACHE = PART1 / "outputs" / "runtime_cache"
+
+# Keep Toolkit/PyTorch runtime caches next to the tutorial artifacts. The CUDA
+# wheel layout also needs the cu13 library directory on LD_LIBRARY_PATH for
+# TorchScript/NVRTC kernels used by e3nn spherical harmonics.
+os.environ.setdefault("WARP_CACHE_PATH", str(RUNTIME_CACHE / "warp"))
+os.environ.setdefault("XDG_CACHE_HOME", str(RUNTIME_CACHE / "xdg"))
+os.environ.setdefault("MPLCONFIGDIR", str(RUNTIME_CACHE / "matplotlib"))
+os.environ.setdefault("TRITON_CACHE_DIR", str(RUNTIME_CACHE / "triton"))
+os.environ.setdefault("TORCHINDUCTOR_CACHE_DIR", str(RUNTIME_CACHE / "torchinductor"))
+os.environ.setdefault("TORCHDYNAMO_DISABLE", "1")
+
+_CU13_LIB = (
+    Path(sys.prefix)
+    / "lib"
+    / f"python{sys.version_info.major}.{sys.version_info.minor}"
+    / "site-packages"
+    / "nvidia"
+    / "cu13"
+    / "lib"
+)
+if _CU13_LIB.exists() and os.environ.get("ADS_BATCH_LD_REEXEC") != "1":
+    ld_paths = os.environ.get("LD_LIBRARY_PATH", "").split(":")
+    if str(_CU13_LIB) not in ld_paths:
+        os.environ["LD_LIBRARY_PATH"] = (
+            f"{_CU13_LIB}:{os.environ.get('LD_LIBRARY_PATH', '')}"
+        ).rstrip(":")
+        os.environ["ADS_BATCH_LD_REEXEC"] = "1"
+        os.execv(sys.executable, [sys.executable, *sys.argv])
 
 from helpers import (  # noqa: E402
     RelaxationBackendConfig,
@@ -94,6 +124,10 @@ PROFILES = {
         "rotations": (0.0, 60.0, 120.0),
     },
 }
+
+
+def _safe_label(value: str) -> str:
+    return "".join(char if char.isalnum() else "_" for char in str(value)).strip("_")
 
 
 def _parse_args() -> argparse.Namespace:
@@ -215,7 +249,8 @@ def main() -> int:
         flush=True,
     )
 
-    cache_dir = output_path.parent / "_adsorption_batch_cache"
+    checkpoint_label = _safe_label(args.checkpoint)
+    cache_dir = output_path.parent / f"_adsorption_batch_cache_{checkpoint_label}"
     backend_start = perf_counter()
     backend = get_relaxation_backend(
         RelaxationBackendConfig(
@@ -242,7 +277,10 @@ def main() -> int:
         warmup_payloads = _payloads_for_batch(configs, args.warmup_batch_size)
         _ = backend.relax(
             warmup_payloads,
-            label=f"bench_{args.profile}_warmup_n{args.warmup_batch_size}",
+            label=(
+                f"bench_{args.profile}_{checkpoint_label}_"
+                f"warmup_n{args.warmup_batch_size}"
+            ),
             cellopt=False,
         )
         torch.cuda.synchronize(device)
@@ -291,7 +329,7 @@ def main() -> int:
                     reply = backend.relax(
                         payloads,
                         label=(
-                            f"bench_{args.profile}_n{batch_size}_"
+                            f"bench_{args.profile}_{checkpoint_label}_n{batch_size}_"
                             f"steps{args.n_steps}_rep{repeat}"
                         ),
                         cellopt=False,

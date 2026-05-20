@@ -5,9 +5,11 @@ import tempfile
 
 import pytest
 from ase import Atoms
+from ase.io import write as ase_write
 
 from helpers.visualization import (
     _clean_atoms_for_ovito,
+    _trajectory_with_whole_adsorbate,
     render_structure_ovito,
     structure_summary_table,
     subscript_formula_html,
@@ -66,6 +68,32 @@ class TestOVITOCellDisplayPreparation:
         assert scaled.min() >= -1e-7
         assert scaled.max() < 1.0 + 1e-7
         assert atoms.positions[:, 1].min() < 0.0
+
+
+class TestTrajectoryPreparation:
+    def test_whole_adsorbate_trajectory_path_does_not_raise(self, tmp_path):
+        frames = [
+            Atoms(
+                "TiNH3",
+                positions=[
+                    [0.0, 0.0, 0.0],
+                    [0.2, 0.2, 1.0],
+                    [0.3, 0.2, 1.8],
+                    [0.2, 0.3, 1.9],
+                    [0.1, 0.2, 1.9],
+                ],
+                cell=[6.0, 6.0, 10.0],
+                pbc=True,
+            )
+        ]
+        source = tmp_path / "input.extxyz"
+        output = tmp_path / "whole.extxyz"
+        ase_write(source, frames, format="extxyz")
+
+        result = _trajectory_with_whole_adsorbate(source, output)
+
+        assert result in {source, output}
+        assert result.exists()
 
 
 class TestOVITORender:

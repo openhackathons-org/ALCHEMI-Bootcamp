@@ -49,7 +49,6 @@ import numpy as np
 import pandas as pd
 from ase import Atoms
 from ase.constraints import FixAtoms
-from ase.data import chemical_symbols
 from ase.io import read as ase_read
 from ase.io import write as ase_write
 

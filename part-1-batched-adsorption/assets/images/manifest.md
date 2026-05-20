@@ -10,6 +10,14 @@ the GitHub-clean cleanup.
   current first-viewport raster banner exported from the selected presentation
   replacement slide and compressed for notebook display.
 
+## Partner Logos
+
+- `logos/nvidia-logo.png`, `logos/eneos-orange.png`, `logos/matlantis.png`, and
+  `logos/ovito_logo.png`:
+  normalized logo strip used at the top of the notebook and Part 1 README.
+  Compatibility copies of the ENEOS and Matlantis assets may remain in
+  `assets/` while older notebook buffers are still open.
+
 ## Core Tutorial Figures
 
 - `discovery_funnel.png`:
@@ -21,6 +29,9 @@ the GitHub-clean cleanup.
 - `alchemi_toolkit_architecture.png`:
   current ALCHEMI architecture figure exported from the selected presentation
   replacement slide and compressed for notebook display.
+- `adsorption_slab_1x_vs_20x_black.png`:
+  compact black-background batching summary used in the final adsorption-screen
+  interpretation cell.
 
 ## Shared Style Prompt
 

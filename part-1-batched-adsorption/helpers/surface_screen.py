@@ -61,6 +61,53 @@ def _safe(name: str) -> str:
     )
 
 
+def safe_artifact_label(name: str) -> str:
+    """Return the filesystem-safe label used for per-structure artifacts."""
+    return _safe(name)
+
+
+def surface_screen_plan_table(
+    specs: list[SurfaceScreenSlabSpec] | tuple[SurfaceScreenSlabSpec, ...],
+) -> pd.DataFrame:
+    """Format the visible slab plan for notebook display."""
+    return pd.DataFrame(
+        [
+            {
+                "surface": spec.name,
+                "class": spec.material_class,
+                "Miller index": str(spec.miller_index),
+                "facet model": spec.facet,
+                "builder": spec.builder_name,
+                "supercell": str(spec.default_supercell),
+                "why included": spec.note,
+            }
+            for spec in specs
+        ]
+    )
+
+
+def require_surface_screen_artifact(
+    paths: dict[str, Path],
+    path_key: str,
+    *,
+    relpath=lambda path: str(path),
+) -> Path:
+    """Return a required surface-screen artifact path or raise a tutorial-facing error."""
+    path = paths[path_key]
+    if not path.exists():
+        raise RuntimeError(
+            f"Precomputed surface-screen artifact is missing: {relpath(path)}. "
+            "Run scripts/run_surface_screen.py on the Toolkit GPU environment, select a complete "
+            'SAVED_TUTORIAL_RUN_ID, or set TUTORIAL_RESULT_SOURCE = "compute" for a live notebook recompute.'
+        )
+    return path
+
+
+def surface_screen_result_json_path(paths: dict[str, Path], label: str) -> Path:
+    """Return the raw-result JSON path for one generated adsorption configuration."""
+    return paths["raw"] / f"{safe_artifact_label(label)}.json"
+
+
 def surface_screen_result_artifact_paths(
     output_root: str | Path,
     pair_results: dict[tuple[str, str], pd.DataFrame],
@@ -295,7 +342,7 @@ def write_surface_screen_audit_tables(
 def first_converged_step_from_log(log_path: str | Path) -> dict[str, object]:
     """Return convergence statistics from a trajectory log CSV."""
     path = Path(log_path)
-    if not path.exists():
+    if not str(log_path).strip() or not path.is_file():
         return {
             "trajectory_log_exists": False,
             "n_logged_frames": 0,

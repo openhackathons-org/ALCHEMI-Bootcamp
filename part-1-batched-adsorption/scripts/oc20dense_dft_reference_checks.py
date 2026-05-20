@@ -14,7 +14,6 @@ from __future__ import annotations
 
 import argparse
 import hashlib
-import json
 import lzma
 import pickle
 import sys
@@ -41,12 +40,11 @@ from _oc20dense_common import (  # noqa: E402
     CLOSED_SHELL_ADSORBATE_REFERENCES,
     DEFAULT_DATA_ROOT,
     DEFAULT_EXTRACT_DIR,
-    DEFAULT_CLOSED_SHELL_SYSTEMS,
     DEFAULT_SYSTEMS,
     DEFAULT_TRAJECTORY_ARCHIVE,
+    FULL_DATA_NOTICE,
     MACE_EADS_REFERENCE_STATUS,
     MACE_RANK_BASIS,
-    FULL_DATA_NOTICE,
     oc20dense_mapping_file,
     require_precomputed_write_allowed,
 )

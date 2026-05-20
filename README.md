@@ -19,7 +19,7 @@ Open first: [`part-1-batched-adsorption/alchemi-mace-adsorption-search.ipynb`](p
 Included content:
 
 - Toolkit API walkthrough: ASE structures -> `AtomicData` -> `Batch` -> GPU relaxation.
-- H2O/TiO2 batching calibration with timing and memory context.
+- H2O/TiO2 batch-size sweep with timing and memory context.
 - OC20Dense validation using full released DFT trajectories for the selected checks.
 - Surface-screen panel: 9 facets x 4 adsorbates x 6 starts.
 - Built-in OVITO widgets for spotting failed or anomalous relaxations, plus a file listing of generated outputs.
@@ -69,7 +69,7 @@ Toolkit notebook path.
 - `part-1-batched-adsorption/` -- current tutorial and validation pack.
 - `part-1-batched-adsorption/helpers/` -- formatting, plotting, cache, validation, and artifact utilities used by the notebook.
 - `part-1-batched-adsorption/scripts/` -- reproducibility and batch-run entry points for validation and artifact regeneration.
-- `part-1-batched-adsorption/docs/` -- current flow, changelog, review notes, and run records.
+- Generated run logs, review notes, and local agent handoffs are intentionally ignored.
 - `shared/adsorption_tutorial/` -- backend-neutral science/result contract for the adsorption workflow.
 - `part-2-toolkit/` -- separate Toolkit sandbox material.
 
@@ -78,10 +78,18 @@ runtime caches, and rendered review candidates are ignored by git.
 
 ## License
 
-Apache 2.0 -- see [LICENSE](LICENSE).
+This repository is licensed under the Apache License 2.0. See
+[LICENSE](LICENSE).
 
-Part 1 also uses third-party model/data artifacts. The runnable tutorial path
-uses open MACE-MP/MACE-MPA checkpoints; MACE-MH-1 is license-gated and is not
-part of the NVIDIA tutorial execution path. The OC20Dense validation pack is a
-slim subset of released Open Catalyst validation data and should retain OC20
-attribution when redistributed.
+Part 1 also uses third-party model checkpoints, validation data, and Python
+dependencies with their own upstream terms:
+
+| Package or artifact | License | Upstream link |
+|---|---|---|
+| NVIDIA ALCHEMI Toolkit (`nvalchemi-toolkit`) | Apache License 2.0 | [GitHub](https://github.com/NVIDIA/nvalchemi-toolkit) |
+| NVIDIA ALCHEMI Toolkit-Ops (`nvalchemi-toolkit-ops`) | Apache License 2.0 | [GitHub](https://github.com/NVIDIA/nvalchemi-toolkit-ops) |
+| MACE-MP/MACE-MPA foundation-model checkpoints | MIT License | [MACE foundation-model registry](https://mace-docs.readthedocs.io/en/latest/guide/foundation_models.html) |
+| OC20/OC20Dense validation data | Creative Commons Attribution 4.0 International (CC BY 4.0) | [Open Catalyst OC20](https://fair-chem.github.io/oc20/) |
+
+Retain the applicable third-party notices and attribution when redistributing
+model artifacts, dataset artifacts, or derivative tutorial packages.

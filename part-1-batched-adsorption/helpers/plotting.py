@@ -117,11 +117,11 @@ def plot_h2o_batch_speedup(
     return output_path
 
 
-def plot_adsorption_batch_calibration(
-    calibration_df: pd.DataFrame,
+def plot_adsorption_batch_sweep(
+    sweep_df: pd.DataFrame,
     output_path: str,
     *,
-    title: str = "Adsorption batch-size calibration",
+    title: str = "Adsorption batch-size sweep",
 ) -> str:
     """Plot short-relaxation throughput, saturation, and memory use."""
     import matplotlib.pyplot as plt
@@ -134,7 +134,7 @@ def plot_adsorption_batch_calibration(
     grid = "#2F3A44"
     colors = [nv_green, nv_blue, "#F5B642", "#D7E3F4"]
 
-    df = calibration_df.copy()
+    df = sweep_df.copy()
     if "status" not in df:
         df["status"] = "ok"
     if "gpu_free_drop_gb" not in df and {"gpu_free_before_gb", "gpu_free_after_gb"}.issubset(df.columns):
@@ -283,6 +283,10 @@ def plot_adsorption_batch_calibration(
     )
     plt.close(fig)
     return output_path
+
+
+# Backward-compatible alias for older notebooks/tests.
+plot_adsorption_batch_calibration = plot_adsorption_batch_sweep
 
 
 def plot_surface_screen_heatmap(

@@ -42,6 +42,8 @@ SURFACE_SCREEN_REQUIRED_FILES = (
     "tables/step_statistics.csv",
     "tables/difficult_cases.csv",
     "tables/application_heatmap.csv",
+    "raw_batches",
+    "structures/relaxed_adsorption",
     "reports/surface_screen_report.md",
 )
 
@@ -59,9 +61,6 @@ ACCURACY_NH3_REQUIRED_FILES = (
     "dft_reference_checks/dft_reference_comparison.csv",
     "dft_final_single_points/tables/dft_final_sp_results.csv",
     "dft_final_single_points/tables/dft_final_sp_system_summary.csv",
-    "mace_adsorption_energy/tables/mace_adsorption_energies.csv",
-    "mace_adsorption_energy/tables/mace_adsorption_energy_summary.csv",
-    "mace_adsorption_energy/tables/mace_adsorption_reference_energies.csv",
 )
 
 

@@ -21,6 +21,7 @@ from .cache_registry import (
     write_artifact_index,
     write_run_manifest,
 )
+from .notebook_runtime import make_tutorial_relpath
 from .relaxation_backends import (
     BackendUnavailableError,
     RelaxationBackendConfig,
@@ -49,8 +50,6 @@ from .models import (
     atomic_data_to_ase,
 )
 
-ToolkitRelaxationConfig = RelaxationBackendConfig
-get_toolkit_relaxation_engine = get_relaxation_backend
 from .analysis import (
     ADSORPTION_ENERGY_FORMULA,
     CANONICAL_EADS_COLUMN,
@@ -137,22 +136,32 @@ from .surface_screen import (
     build_difficult_cases,
     build_step_statistics,
     load_surface_screen_tables,
+    require_surface_screen_artifact,
+    safe_artifact_label,
     summarize_surface_screen_pairs,
+    surface_screen_plan_table,
     surface_screen_expected_counts,
     surface_screen_output_paths,
+    surface_screen_result_json_path,
     surface_screen_result_artifact_paths,
     write_surface_screen_audit_tables,
     write_surface_screen_result_artifacts,
 )
 from .batch_calibration import (
+    build_adsorption_batch_sweep_pool,
     build_adsorption_calibration_pool,
+    display_adsorption_batch_sweep_results,
     display_adsorption_batch_calibration_results,
+    load_or_run_adsorption_batch_sweep,
     load_or_run_adsorption_batch_calibration,
+    run_adsorption_batch_sweep,
     run_adsorption_batch_calibration,
+    summarize_adsorption_batch_sweep,
     summarize_adsorption_batch_calibration,
 )
 from .plotting import (
     plot_adsorption_energy_spread,
+    plot_adsorption_batch_sweep,
     plot_adsorption_batch_calibration,
     plot_adsorption_summary,
     plot_h2o_batch_speedup,
@@ -181,11 +190,16 @@ from .visualization import (
     display_widgets_row,
     format_elapsed,
     make_notebook_progress,
+    display_validation_trajectory_videos,
+    make_browser_safe_mp4,
     notebook_progress_html,
     render_structure_ovito,
+    render_trajectory_video_grid,
+    render_validation_trajectory_videos,
     structure_summary_table,
     subscript_formula_html,
     subscript_formula_markdown,
+    trajectory_video_links_markdown,
 )
 from .validation_workflows import (
     OC20DenseValidationContext,
@@ -198,13 +212,18 @@ from .validation_workflows import (
     run_or_load_oc20dense_validation,
     run_validation_step,
     show_nh3_all_geometry_grid,
+    show_nh3_all_geometry_render_grid,
     show_nh3_geometry_widgets,
     show_nh3_ranking_results,
     show_trajectory_validation_widget_grid,
     show_trajectory_validation_results,
     show_validation_model_tradeoff,
+    validation_trajectory_artifact_paths,
     validation_context_table,
 )
+
+ToolkitRelaxationConfig = RelaxationBackendConfig
+get_toolkit_relaxation_engine = get_relaxation_backend
 
 __all__ = [
     # relaxation_backends
@@ -239,6 +258,7 @@ __all__ = [
     "require_complete",
     "write_run_manifest",
     "write_artifact_index",
+    "make_tutorial_relpath",
     # constants
     "KE_CONV",
     "BOLTZ_EV_K",
@@ -286,11 +306,16 @@ __all__ = [
     "display_widgets_row",
     "display_inline",
     "format_elapsed",
+    "display_validation_trajectory_videos",
+    "make_browser_safe_mp4",
     "notebook_progress_html",
     "make_notebook_progress",
+    "render_trajectory_video_grid",
+    "render_validation_trajectory_videos",
     "structure_summary_table",
     "subscript_formula_html",
     "subscript_formula_markdown",
+    "trajectory_video_links_markdown",
     # validation workflows
     "OC20DenseValidationContext",
     "build_trajectory_stage_plan",
@@ -303,8 +328,10 @@ __all__ = [
     "run_validation_step",
     "show_trajectory_validation_results",
     "show_trajectory_validation_widget_grid",
+    "validation_trajectory_artifact_paths",
     "show_nh3_ranking_results",
     "show_nh3_all_geometry_grid",
+    "show_nh3_all_geometry_render_grid",
     "show_nh3_geometry_widgets",
     "show_validation_model_tradeoff",
     "validation_context_table",
@@ -352,8 +379,12 @@ __all__ = [
     "SURFACE_SCREEN_GRID_VERSION",
     "SurfaceScreenSlabSpec",
     "SurfaceScreenAdsorbateSpec",
+    "safe_artifact_label",
+    "surface_screen_plan_table",
     "surface_screen_expected_counts",
     "surface_screen_output_paths",
+    "require_surface_screen_artifact",
+    "surface_screen_result_json_path",
     "surface_screen_result_artifact_paths",
     "audit_initial_configs",
     "build_step_statistics",
@@ -363,7 +394,14 @@ __all__ = [
     "build_application_heatmap",
     "build_difficult_cases",
     "load_surface_screen_tables",
-    # batch calibration
+    # adsorption batch-size sweep
+    "build_adsorption_batch_sweep_pool",
+    "display_adsorption_batch_sweep_results",
+    "load_or_run_adsorption_batch_sweep",
+    "run_adsorption_batch_sweep",
+    "summarize_adsorption_batch_sweep",
+    "plot_adsorption_batch_sweep",
+    # backward-compatible batch calibration aliases
     "build_adsorption_calibration_pool",
     "display_adsorption_batch_calibration_results",
     "load_or_run_adsorption_batch_calibration",
