@@ -4,6 +4,7 @@ import os
 import tempfile
 
 import pytest
+import pandas as pd
 from ase import Atoms
 from ase.io import write as ase_write
 
@@ -94,6 +95,36 @@ class TestTrajectoryPreparation:
 
         assert result in {source, output}
         assert result.exists()
+
+
+class TestSurfaceScreenWinnerArtifacts:
+    def test_live_ranking_table_can_use_existing_relaxed_structures_without_csv(self, tmp_path):
+        from helpers.surface_screen_widgets import _load_ranked_winners
+
+        root = tmp_path / "surface_screen"
+        (root / "tables").mkdir(parents=True)
+        (root / "structures" / "relaxed_adsorption").mkdir(parents=True)
+        ranking_df = pd.DataFrame(
+            [
+                {
+                    "adsorbate": "H2O",
+                    "host": "TiO2(110)",
+                    "rank_within_adsorbate": 1,
+                    "best_E_ads_eV": -0.42,
+                    "best_label": "H2O_TiO2_110_top",
+                    "best_final_site": "top",
+                    "best_optimizer_nsteps": 12,
+                }
+            ]
+        )
+
+        ranked, pair_summary_path = _load_ranked_winners(
+            surface_pair_summary_df=ranking_df,
+            surface_screen_paths={"root": root},
+        )
+
+        assert pair_summary_path == root / "tables" / "pair_summary.csv"
+        assert ranked["best_label"].tolist() == ["H2O_TiO2_110_top"]
 
 
 class TestOVITORender:

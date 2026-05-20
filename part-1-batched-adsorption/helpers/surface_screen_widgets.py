@@ -26,7 +26,7 @@ def _find_pair_summary_path(surface_screen_paths: Mapping[str, object] | None = 
         elif "root" in surface_screen_paths:
             configured = Path(surface_screen_paths["root"]) / "tables" / "pair_summary.csv"
 
-    configured_path = configured.resolve() if configured is not None else None
+    configured_path = configured if configured is not None else None
     if configured_path is not None:
         relaxed_dir = configured_path.parent.parent / "structures" / "relaxed_adsorption"
         if configured_path.exists() and relaxed_dir.exists():
@@ -62,7 +62,24 @@ def _load_ranked_winners(
     surface_pair_summary_df: pd.DataFrame | None,
     surface_screen_paths: Mapping[str, object] | None,
 ) -> tuple[pd.DataFrame, Path]:
-    pair_summary_path = _find_pair_summary_path(surface_screen_paths)
+    configured_pair_summary_path: Path | None = None
+    if surface_screen_paths:
+        if "pair_summary_csv" in surface_screen_paths:
+            configured_pair_summary_path = Path(surface_screen_paths["pair_summary_csv"])
+        elif "root" in surface_screen_paths:
+            configured_pair_summary_path = (
+                Path(surface_screen_paths["root"]) / "tables" / "pair_summary.csv"
+            )
+
+    if surface_pair_summary_df is not None and configured_pair_summary_path is not None:
+        relaxed_dir = configured_pair_summary_path.parent.parent / "structures" / "relaxed_adsorption"
+        if relaxed_dir.exists():
+            pair_summary_path = configured_pair_summary_path
+        else:
+            pair_summary_path = _find_pair_summary_path(surface_screen_paths)
+    else:
+        pair_summary_path = _find_pair_summary_path(surface_screen_paths)
+
     if surface_pair_summary_df is not None:
         summary_df = surface_pair_summary_df.copy()
     else:
@@ -338,7 +355,15 @@ def display_surface_screen_winner_widgets(
                 "while the adsorbate molecule remains intact."
             )
         )
-        display(Markdown(f"Loaded winner metadata from `{pair_summary_path}`."))
+        if pair_summary_path.exists():
+            display(Markdown(f"Loaded winner metadata from `{pair_summary_path}`."))
+        else:
+            display(
+                Markdown(
+                    "Using the live ranking table from the notebook and loading final "
+                    f"structures from `{pair_summary_path.parent.parent / 'structures' / 'relaxed_adsorption'}`."
+                )
+            )
 
     if show_table:
         _display_winner_table(items)
