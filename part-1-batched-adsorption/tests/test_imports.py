@@ -69,6 +69,11 @@ class TestHelperImports:
             structure_summary_table,
         )
 
+    def test_surface_screen_widgets(self):
+        from helpers.surface_screen_widgets import display_surface_screen_winner_widgets
+
+        assert callable(display_surface_screen_winner_widgets)
+
     def test_surfaces(self):
         from helpers.surfaces import (  # noqa: F401
             build_slab,

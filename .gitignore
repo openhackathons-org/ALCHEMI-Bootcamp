@@ -32,7 +32,6 @@ part-1-batched-adsorption/docs/
 part-1-batched-adsorption/ovito-trajectory-widget-smoke.ipynb
 part-1-batched-adsorption/assets/eneos-orange.png
 part-1-batched-adsorption/assets/matlantis.png
-part-1-batched-adsorption/helpers/surface_screen_widgets.py
 
 # Local tool spillover that can appear when running agents inside the repo.
 /.codex
