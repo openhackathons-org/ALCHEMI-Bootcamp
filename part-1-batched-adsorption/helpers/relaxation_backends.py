@@ -121,7 +121,7 @@ def _import_required(module_name: str, *, context: str) -> object:
         raise BackendUnavailableError(
             f"Toolkit execution selected, but the native ALCHEMI "
             f"Toolkit API is not importable while loading {context}. Missing "
-            f"module: {missing!r}. Install the pinned Part 2 dependency with "
+            f"module: {missing!r}. Install "
             f"`nvalchemi-toolkit[ase,mace]` and `nvalchemi-toolkit-ops` in "
             f"this kernel/environment."
         ) from exc
