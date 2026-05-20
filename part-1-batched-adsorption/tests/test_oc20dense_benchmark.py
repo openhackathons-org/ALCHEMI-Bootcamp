@@ -336,9 +336,9 @@ def test_oc20dense_mace_adsorption_energy_subtraction_round_trips():
         assert abs(relaxed_eads - float(row["mace_relaxed_eads_eV"])) <= 1e-10
 
 
-def test_oc20dense_notebook_live_subset_commands_are_isolated():
+def test_main_notebook_keeps_oc20dense_validation_inside_tutorial_flow():
     notebook = json.loads(
-        (PART1 / "oc20dense-accuracy-reproducibility-check.ipynb").read_text(
+        (PART1 / "alchemi-mace-adsorption-search.ipynb").read_text(
             encoding="utf-8"
         )
     )
@@ -348,11 +348,10 @@ def test_oc20dense_notebook_live_subset_commands_are_isolated():
         if cell.get("cell_type") == "code"
     )
 
-    assert '"--config-ids"' in source
-    assert '"--extract-dir"' in source
-    assert '"extracted_trajectories"' in source
-    assert '"--surface-dir"' in source
-    assert '"surface_trajectories"' in source
+    assert "make_oc20dense_validation_context" in source
+    assert "run_or_load_oc20dense_validation" in source
+    assert "show_trajectory_validation_results" in source
+    assert "show_nh3_ranking_results" in source
     assert "include_groups=False" not in source
 
 

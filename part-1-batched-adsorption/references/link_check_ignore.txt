@@ -1,9 +1,0 @@
-# Local services started by the Docker Compose stack.
-http://localhost:8000
-http://localhost:8888
-http://localhost:3000
-http://127.0.0.1
-
-# Deployment placeholders.
-<login-host>
-<compute-node>
