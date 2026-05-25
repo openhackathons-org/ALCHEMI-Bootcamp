@@ -1,10 +1,14 @@
 **/outputs/
 **/logs/
+**/assets/
 # Cache CSVs shipped to students for FAST_DEMO progress-replay
-!part-2-toolkit/assets/*/logs/
+!part-2-toolkit/assets/*/
 !part-2-toolkit/assets/*/logs/**
+# tools/assets is a convenience symlink to ../assets (not tracked)
+part-2-toolkit/tools/assets
 __pycache__/
 *.pyc
+benchmarking/
 .ipynb_checkpoints/
 .env
 .pytest_cache/
