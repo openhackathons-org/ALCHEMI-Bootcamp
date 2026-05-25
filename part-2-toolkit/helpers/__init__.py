@@ -15,6 +15,7 @@ need them will hit a clean ``ImportError`` at use site.
 # --- Always available (numpy / pure Python) -----------------------------
 from .constants import (
     AMU_OVER_A3_TO_G_CM3,
+    D3_PRESETS,
     MAX_FORCE_CLAMP,
     P_1ATM,
     STAGE_COLORS,
@@ -60,7 +61,6 @@ except ImportError:
 try:
     from .hooks import (
         InitVelocitiesOnConverge,
-        ResetEwaldEnergiesBufHook,
         StatusTransitionLogger,
         make_graph_tagged_writer,
         make_safety_hooks,
@@ -105,13 +105,28 @@ try:
 except ImportError:
     pass
 
+try:
+    from .orb import OrbV3Wrapper
+except ImportError:
+    pass
+
+try:
+    from .packmol import (
+        extract_single_molecule,
+        pack_liquid_box,
+        pack_with_fixed_obstacle,
+    )
+except ImportError:
+    pass
+
 __all__ = [
     "AMU_OVER_A3_TO_G_CM3",
+    "D3_PRESETS",
     "DYNAMICS_SCALARS",
     "InitVelocitiesOnConverge",
     "MAX_FORCE_CLAMP",
+    "OrbV3Wrapper",
     "P_1ATM",
-    "ResetEwaldEnergiesBufHook",
     "STAGE_COLORS",
     "STAGE_LABELS",
     "StatusTransitionLogger",
@@ -134,6 +149,7 @@ __all__ = [
     "dedup_legend",
     "density_scalar",
     "extract_per_graph_trajectory",
+    "extract_single_molecule",
     "fit_diffusion_coefficient",
     "fresh_zarr_sink",
     "integrator_state_exists",
@@ -149,6 +165,8 @@ __all__ = [
     "make_safety_hooks",
     "min_pbc_distance",
     "next_part_index",
+    "pack_liquid_box",
+    "pack_with_fixed_obstacle",
     "part_paths",
     "plot_trajectory_frames",
     "pressure_scalar",

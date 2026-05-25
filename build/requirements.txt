@@ -1,12 +1,27 @@
-# Unified runtime dependencies for the ALCHEMI Playbook (Parts 1 + 2).
+# Unified runtime + tooling dependencies for the ALCHEMI Playbook (Parts 1 + 2).
 #
 # ovito is installed via conda (see dev/environment.yml) so its bundled
 # Qt6 / glib / fontconfig runtime ships with the conda env instead of via
 # apt-get system libs. See dev/Dockerfile and dev/README.md for the
 # full install sequence.
 
+# nvalchemi-toolkit-ops pinned to git HEAD AHEAD of nvalchemi-toolkit so the
+# direct-URL spec is satisfied before toolkit's transitive resolution
+# would otherwise pull a PyPI wheel for `nvalchemi-toolkit-ops[torch]>=0.3.1`.
+# Without this explicit entry, the build silently risks installing a
+# PyPI snapshot that may pre-date critical NPT fixes (PR #77's strain-rate
+# semantics + eta_dots removal); the compat shim in helpers/compat.py
+# detects the eta_dots signature shift to decide whether to strip the
+# legacy positional arg, so a PyPI-snapshot install with eta_dots still
+# present silently produces different physics.
+nvalchemi-toolkit-ops[torch] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git
+
 # Toolkit (Part 2 core; pulls in ase as a transitive)
 nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git
+
+# ORB-v3 foundation model (Part 2; resolved by `--model orb` in the drivers
+# via `orb_models.forcefield.pretrained.orb_v3_conservative_inf_omat`).
+orb-models
 
 # Part 1 scientific stack
 pymatgen>=2024.1.1
@@ -25,3 +40,8 @@ jupyterlab-vim
 
 # Part 2 packing
 packmol
+
+# Test + lint tooling (formerly requirements-dev.txt; included unconditionally
+# so the image always ships the same toolchain regardless of build target).
+pytest>=8.0
+ruff>=0.4

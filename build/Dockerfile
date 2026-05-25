@@ -33,15 +33,14 @@ WORKDIR /workspace
 # (next layer) skips pulling the CPU wheel.
 RUN uv pip install torch --index-url https://download.pytorch.org/whl/cu130
 
-# Remaining runtime deps via uv (faster than conda for these PyPI / git packages).
-# Copy into /tmp so the requirements files don't end up inside /workspace
-# (which is the WORKDIR and would leak them into the student view).
-COPY build/requirements.txt build/requirements-dev.txt /tmp/
+# Remaining runtime + tooling deps via uv (faster than conda for these PyPI /
+# git packages). Single requirements file -- toolkit-ops is pinned to git
+# HEAD inside it so transitive PyPI resolution can't silently override
+# the integrator-fix commits (PR #77, etc.). Copy into /tmp so the file
+# doesn't end up inside /workspace (which is the WORKDIR and would leak
+# it into the student view).
+COPY build/requirements.txt /tmp/
 RUN uv pip install -r /tmp/requirements.txt
-
-# Dev extras. Disable for student image: docker build --build-arg INSTALL_DEV=false .
-ARG INSTALL_DEV=true
-RUN if [ "$INSTALL_DEV" = "true" ]; then uv pip install -r /tmp/requirements-dev.txt; fi
 
 # Fail the build loud if any resolver tug-of-war silently broke an import.
 RUN python -c "import torch, ovito, ase, pymatgen, nvalchemi, matplotlib, aiohttp, pydantic, ipywidgets; print('imports ok; torch', torch.__version__, 'ovito', ovito.version)"
