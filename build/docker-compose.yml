@@ -43,6 +43,8 @@ services:
     volumes:
       - ../part-1-nim:/workspace/part-1-nim
       - ../part-2-toolkit:/workspace/part-2-toolkit
+      - ../part-3-batched-adsorption:/workspace/part-3-batched-adsorption
+      - ../shared:/workspace/shared
       - ../README.md:/workspace/README.md:ro
       - ../LICENSE:/workspace/LICENSE:ro
     deploy:

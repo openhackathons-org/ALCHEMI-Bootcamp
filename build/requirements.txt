@@ -41,6 +41,10 @@ jupyterlab-vim
 # Part 2 packing
 packmol
 
+# Part 3 trajectory MP4 rendering (imageio_ffmpeg ships a static ffmpeg binary,
+# so no apt-get ffmpeg is needed in the image).
+imageio-ffmpeg
+
 # Test + lint tooling (formerly requirements-dev.txt; included unconditionally
 # so the image always ships the same toolchain regardless of build target).
 pytest>=8.0
