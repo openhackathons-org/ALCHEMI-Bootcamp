@@ -141,7 +141,9 @@ copy_repo() {
         --exclude='cached_responses' \
         --exclude='outputs' \
         --exclude='logs' \
-        --exclude='assets' \
+        --exclude='./part-1-nim/assets' \
+        --exclude='./part-2-toolkit/assets' \
+        --exclude='./part-3-batched-adsorption/data/reference/oc20dense-validation-pack.tgz' \
         --exclude='__pycache__' \
         --exclude='.pytest_cache' \
         --exclude='.ruff_cache' \
