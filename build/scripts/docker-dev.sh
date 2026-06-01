@@ -17,24 +17,6 @@ require_x86_64() {
     fi
 }
 
-load_env() {
-    if [ -f "$BUILD_DIR/.env" ]; then
-        set -a
-        # shellcheck source=/dev/null
-        source "$BUILD_DIR/.env"
-        set +a
-    fi
-}
-
-ngc_login() {
-    load_env
-    if [ -z "${NGC_API_KEY:-}" ]; then
-        echo "Error: NGC_API_KEY not set. Create build/.env with NGC_API_KEY=<key>."
-        exit 1
-    fi
-    echo "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
-}
-
 cmd_start() {
     if [ ! -d "$BUILD_DIR" ]; then
         echo "Error: build dir not found at $BUILD_DIR. Run deploy.sh setup first."
@@ -42,7 +24,6 @@ cmd_start() {
     fi
 
     require_x86_64
-    ngc_login
 
     cd "$BUILD_DIR"
     docker compose -p "$COMPOSE_PROJECT" up -d --build
@@ -61,7 +42,6 @@ cmd_restart() {
 
 cmd_rebuild() {
     require_x86_64
-    ngc_login
     cd "$BUILD_DIR"
     docker compose -p "$COMPOSE_PROJECT" up -d --build --force-recreate
     echo "Stack rebuilt and started."
@@ -84,15 +64,6 @@ cmd_status() {
     echo "=== GPUs visible to Jupyter container ==="
     docker compose -p "$COMPOSE_PROJECT" exec -T jupyter nvidia-smi -L 2>/dev/null \
         | head -8 || echo "Jupyter container not running (or nvidia-smi unavailable)."
-
-    echo ""
-    echo "=== BGR Health ==="
-    curl -sf http://localhost:8000/v1/health/ready && echo " BGR: healthy" \
-        || echo "BGR: not ready"
-
-    echo ""
-    echo "=== Grafana ==="
-    echo "http://localhost:3000 (admin/admin)"
 }
 
 cmd_stop() {

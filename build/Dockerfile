@@ -45,8 +45,7 @@ RUN uv pip install -r /tmp/requirements.txt
 # Fail the build loud if any resolver tug-of-war silently broke an import.
 RUN python -c "import torch, ovito, ase, pymatgen, nvalchemi, matplotlib, aiohttp, pydantic, ipywidgets; print('imports ok; torch', torch.__version__, 'ovito', ovito.version)"
 
-ENV BGR_SERVER=http://localhost:8000 \
-    LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH}" \
+ENV LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH}" \
     MPLCONFIGDIR=/tmp/mpl \
     OVITO_GUI_MODE=headless
 

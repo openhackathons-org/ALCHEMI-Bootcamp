@@ -31,28 +31,21 @@ Approximately **90–120 minutes per part** (~3–4 hours total).
 | GPU host | NVIDIA x86_64 GPU. Tested on A100, H100, B200, L40S, RTX 6000 Ada. |
 | Docker | Latest [Docker Engine](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker) with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) and the Docker Compose v2 plugin. |
 | Internet | Needed during the initial container build, image pulls, and the first download of the MACE-MPA-0 checkpoint. |
-| NGC API key | Required only to pull the BGR NIM sidecar image launched by the default compose stack; neither tutorial calls it directly. Generate one at [build.nvidia.com](https://build.nvidia.com). |
 
 ## Deploying the Playbook
 
-Both parts run from a single unified Docker container, launched alongside a BGR NIM sidecar, Prometheus, and Grafana — all orchestrated via Docker Compose.
+Both parts run from a single unified Docker container orchestrated via Docker Compose.
 
 ```bash
 cd build
-cp .env.example .env       # then edit .env and set NGC_API_KEY
-set -a; source .env; set +a
-echo "$NGC_API_KEY" | docker login nvcr.io -u '$oauthtoken' --password-stdin
-docker compose up          # builds the unified image and starts all services
+docker compose up          # builds the unified image and starts JupyterLab
 ```
 
-Once running, the services are reachable at:
+Once running, the service is reachable at:
 
 | Service    | URL                                  |
 |------------|--------------------------------------|
 | Jupyter    | http://localhost:8888/lab            |
-| BGR NIM    | http://localhost:8000/v1/...         |
-| Grafana    | http://localhost:3000 (admin/admin)  |
-| Prometheus | http://localhost:9090                |
 
 Open the Jupyter URL in your browser and launch either notebook:
 
