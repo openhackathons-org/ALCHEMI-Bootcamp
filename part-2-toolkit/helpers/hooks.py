@@ -12,6 +12,13 @@ from nvalchemi.hooks import WrapPeriodicHook
 
 from .constants import MAX_FORCE_CLAMP
 
+try:
+    # The toolkit's own temperature reduction (3N-DOF equipartition, correct
+    # amu·Å²/fs² -> eV unit handling) so the live readout matches the CSV log.
+    from nvalchemi.dynamics.hooks._utils import temperature_per_graph
+except ImportError:  # pragma: no cover - tolerate a future toolkit layout change
+    temperature_per_graph = None
+
 
 def make_safety_hooks(model_or_pipe, track_stress=True, max_force=MAX_FORCE_CLAMP):
     """Defensive MD hooks (order: neighbor -> wrap -> clamp -> NaN).
@@ -146,28 +153,45 @@ def make_graph_tagged_writer(labels):
     return writer
 
 
-def make_progress_writer(progress, fields=("temperature", "density")):
-    """Custom ``LoggingHook`` writer that advances a ``NotebookProgress`` bar.
+class ProgressHook:
+    """Synchronous ``AFTER_STEP`` hook that advances a ``NotebookProgress`` bar.
 
-    Mirrors :func:`stdout_writer`'s ``(step, rows)`` signature but, instead of
-    printing, ticks the supplied progress bar to ``step`` with a compact message
-    built from the first graph's scalar fields. Reuses the existing
-    ``backend="custom"`` ``LoggingHook`` plumbing, so a single live MD ``.run()``
-    drives the progress bar without a bespoke per-step hook class.
+    A ``LoggingHook(backend="custom")`` writer dispatches its work on a background
+    thread, so the rapid widget writes a live bar needs are coalesced and the bar
+    only catches up once ``run()`` returns -- it appears to jump in large strides
+    rather than tick steadily. This hook instead updates the bar inline on the
+    integrator's main thread (the pattern ``tqdm`` uses), so it advances smoothly
+    every ``frequency`` steps; ``LoggingHook(backend="csv")`` records the full
+    scalar set to disk in parallel.
+
+    Per the toolkit hook convention the dynamics loop reads ``stage`` and
+    ``frequency`` (``frequency`` gates how often ``__call__`` fires). The message
+    reports the instantaneous temperature -- per graph for a multi-temperature
+    batch -- via the toolkit's own ``temperature_per_graph`` so the units match
+    the CSV log.
     """
-    units = {"temperature": "K", "density": "g/cm³", "pressure": "eV/Å³"}
 
-    def writer(step, rows):
-        message = f"step {int(step)}"
-        if rows:
-            row = rows[0]
-            extras = [
-                f"{key}={row[key]:.3g} {units.get(key, '')}".rstrip()
-                for key in fields
-                if key in row
-            ]
-            if extras:
-                message += " · " + " · ".join(extras)
-        progress.update(done=int(step), message=message)
+    stage = DynamicsStage.AFTER_STEP
 
-    return writer
+    def __init__(self, progress, frequency=1):
+        self.progress = progress
+        self.frequency = frequency
+
+    def __call__(self, ctx, stage_):
+        batch = ctx.batch
+        done = int(ctx.step_count)
+        message = f"step {done}"
+        velocities = getattr(batch, "velocities", None)
+        if velocities is not None and temperature_per_graph is not None:
+            temps = temperature_per_graph(
+                velocities,
+                batch.atomic_masses,
+                batch.batch_idx,
+                batch.num_graphs,
+                batch.num_nodes_per_graph,
+            ).tolist()
+            if len(temps) == 1:
+                message += f" · temperature={temps[0]:.3g} K"
+            else:
+                message += " · T = [" + ", ".join(f"{t:.0f}" for t in temps) + "] K"
+        self.progress.update(done=done, message=message)

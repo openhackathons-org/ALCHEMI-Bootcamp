@@ -66,9 +66,9 @@ except ImportError:
 try:
     from .hooks import (
         InitVelocitiesOnConverge,
+        ProgressHook,
         StatusTransitionLogger,
         make_graph_tagged_writer,
-        make_progress_writer,
         make_safety_hooks,
         stdout_writer,
     )
@@ -195,8 +195,8 @@ __all__ = [
     "load_zarr_frames",
     "load_zarr_trajectory",
     "zarr_trajectory_length",
+    "ProgressHook",
     "make_graph_tagged_writer",
-    "make_progress_writer",
     "make_safety_hooks",
     "min_pbc_distance",
     "next_part_index",
