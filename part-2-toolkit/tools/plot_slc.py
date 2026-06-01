@@ -448,7 +448,7 @@ def main() -> None:
     df = load_multipart_csv(args.log_dir, basename)
 
     n_total = int(args.total_ps * 1000 / args.dt)
-    done = int(df["step"].max())
+    done = int(df["global_step"].max())
     done_ps = done * args.dt / 1000
 
     n_panels = len(cfg["panels"])
