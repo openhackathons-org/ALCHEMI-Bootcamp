@@ -6,10 +6,10 @@ The tutorial path is native ALCHEMI Toolkit:
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import importlib
-from pathlib import Path
 import types
+from dataclasses import dataclass
+from pathlib import Path
 from typing import Literal, Protocol
 
 import numpy as np
