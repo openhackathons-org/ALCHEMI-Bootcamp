@@ -54,7 +54,6 @@ ENV BGR_SERVER=http://localhost:8000 \
 # → `docker run` (no bind-mount) still works. Compose uses selective
 # bind-mounts which shadow these at runtime.
 COPY README.md LICENSE ./
-COPY part-1-nim ./part-1-nim
 COPY part-2-toolkit ./part-2-toolkit
 
 EXPOSE 8888

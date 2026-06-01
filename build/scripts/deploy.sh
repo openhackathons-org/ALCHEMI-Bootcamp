@@ -141,9 +141,8 @@ copy_repo() {
         --exclude='cached_responses' \
         --exclude='outputs' \
         --exclude='logs' \
-        --exclude='./part-1-nim/assets' \
         --exclude='./part-2-toolkit/assets' \
-        --exclude='./part-3-batched-adsorption/data/reference/oc20dense-validation-pack.tgz' \
+        --exclude='./part-1-batched-adsorption/data/reference/oc20dense-validation-pack.tgz' \
         --exclude='__pycache__' \
         --exclude='.pytest_cache' \
         --exclude='.ruff_cache' \
@@ -227,7 +226,7 @@ cmd_pull_changes() {
     echo "Pulling changes from remote..."
     ssh -J "$LOGIN_HOST" "$COMPUTE_NODE" \
         "cd ${REMOTE_REPO_DIR} && tar -cf - \
-            part-1-nim/*.ipynb part-1-nim/helpers/ \
+            part-1-batched-adsorption/*.ipynb part-1-batched-adsorption/helpers/ \
             part-2-toolkit/*.ipynb part-2-toolkit/helpers/" \
         | tar -C "$REPO_DIR" -xf -
     echo "Remote notebook and helper changes applied locally. Review with 'git diff'."
