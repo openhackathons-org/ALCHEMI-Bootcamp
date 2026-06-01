@@ -2,9 +2,6 @@
 set -euo pipefail
 
 JUPYTER_LOCAL_PORT="${JUPYTER_LOCAL_PORT:-8888}"
-GRAFANA_LOCAL_PORT="${GRAFANA_LOCAL_PORT:-3000}"
-PROMETHEUS_LOCAL_PORT="${PROMETHEUS_LOCAL_PORT:-}"   # set to e.g. 9090 to forward
-BGR_LOCAL_PORT="${BGR_LOCAL_PORT:-}"                 # set to e.g. 8000 to forward
 
 REMOTE_REPO_DIR="/tmp/alchemi-playbook"
 REMOTE_BUILD_DIR="${REMOTE_REPO_DIR}/build"
@@ -25,14 +22,11 @@ Commands:
   setup  <login-host> <compute-node>   First-time: copy repo, build, start stack, open tunnels
   restart                               Pull latest local changes and rebuild stack
   pull-changes                          Sync remote Jupyter edits to local working directory
-  status                                Show Jupyter URL, BGR health, Grafana URL
+  status                                Show Jupyter URL and service status
   stop                                  Close tunnels and stop stack
 
 Environment variables:
   JUPYTER_LOCAL_PORT     Local Jupyter port    (default: 8888)
-  GRAFANA_LOCAL_PORT     Local Grafana port    (default: 3000)
-  PROMETHEUS_LOCAL_PORT  Local Prometheus port (default: unset; set to 9090 to forward)
-  BGR_LOCAL_PORT         Local BGR port        (default: unset; set to 8000 to forward)
 EOF
     exit 1
 }
@@ -74,15 +68,8 @@ remote_exec() {
 }
 
 build_ssh_forwards() {
-    # Echoes the SSH -L flags for whichever ports are non-empty.
+    # Echoes the SSH -L flag for the Jupyter port.
     printf -- '-L %s:localhost:8888 ' "${JUPYTER_LOCAL_PORT}"
-    printf -- '-L %s:localhost:3000 ' "${GRAFANA_LOCAL_PORT}"
-    if [ -n "${PROMETHEUS_LOCAL_PORT}" ]; then
-        printf -- '-L %s:localhost:9090 ' "${PROMETHEUS_LOCAL_PORT}"
-    fi
-    if [ -n "${BGR_LOCAL_PORT}" ]; then
-        printf -- '-L %s:localhost:8000 ' "${BGR_LOCAL_PORT}"
-    fi
 }
 
 open_tunnels() {
@@ -97,11 +84,6 @@ open_tunnels() {
     if lsof -ti:"${JUPYTER_LOCAL_PORT}" > /dev/null 2>&1; then
         echo "Tunnels open:"
         echo "  Jupyter:    localhost:${JUPYTER_LOCAL_PORT} -> ${COMPUTE_NODE}:8888"
-        echo "  Grafana:    localhost:${GRAFANA_LOCAL_PORT} -> ${COMPUTE_NODE}:3000"
-        [ -n "${PROMETHEUS_LOCAL_PORT}" ] && \
-            echo "  Prometheus: localhost:${PROMETHEUS_LOCAL_PORT} -> ${COMPUTE_NODE}:9090"
-        [ -n "${BGR_LOCAL_PORT}" ] && \
-            echo "  BGR:        localhost:${BGR_LOCAL_PORT} -> ${COMPUTE_NODE}:8000"
     else
         echo "Failed to open SSH tunnels."
         return 1
@@ -180,16 +162,7 @@ cmd_setup() {
     cleanup_legacy_state
     save_state "$LOGIN_HOST" "$COMPUTE_NODE"
 
-    if [ ! -f "$BUILD_DIR/.env" ]; then
-        echo "Error: .env not found at ${BUILD_DIR}/.env."
-        echo "       Copy build/.env.example to build/.env and set your NGC_API_KEY."
-        exit 1
-    fi
-
     copy_repo
-
-    echo "Copying .env to ${COMPUTE_NODE}..."
-    scp -o ProxyJump="$LOGIN_HOST" "$BUILD_DIR/.env" "${COMPUTE_NODE}:${REMOTE_BUILD_DIR}/.env"
 
     echo "Copying docker-dev.sh to ${COMPUTE_NODE}..."
     scp -o ProxyJump="$LOGIN_HOST" "$SCRIPT_DIR/docker-dev.sh" "${COMPUTE_NODE}:${REMOTE_SCRIPT}"
@@ -203,16 +176,12 @@ cmd_setup() {
     echo ""
     echo "Setup complete."
     echo "  JupyterLab: http://localhost:${JUPYTER_LOCAL_PORT}"
-    echo "  Grafana:    http://localhost:${GRAFANA_LOCAL_PORT}"
 }
 
 cmd_restart() {
     load_state
     echo "Syncing local changes to ${COMPUTE_NODE}..."
     copy_repo
-
-    echo "Re-copying .env to ${COMPUTE_NODE}..."
-    scp -o ProxyJump="$LOGIN_HOST" "$BUILD_DIR/.env" "${COMPUTE_NODE}:${REMOTE_BUILD_DIR}/.env"
 
     echo "Re-copying docker-dev.sh to ${COMPUTE_NODE}..."
     scp -o ProxyJump="$LOGIN_HOST" "$SCRIPT_DIR/docker-dev.sh" "${COMPUTE_NODE}:${REMOTE_SCRIPT}"
@@ -229,7 +198,7 @@ cmd_status() {
 
     echo ""
     if lsof -ti:"${JUPYTER_LOCAL_PORT}" > /dev/null 2>&1; then
-        echo "Tunnels: active (Jupyter localhost:${JUPYTER_LOCAL_PORT}, Grafana localhost:${GRAFANA_LOCAL_PORT})"
+        echo "Tunnels: active (Jupyter localhost:${JUPYTER_LOCAL_PORT})"
     else
         echo "Tunnels: inactive"
     fi
