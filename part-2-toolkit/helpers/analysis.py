@@ -49,13 +49,22 @@ def compute_com_msd(
     rotation (atoms moving around a pinned COM) from the signal so only
     inter-molecular translational drift contributes.
 
-    ``subtract_system_com=True`` (default) additionally subtracts the
-    per-frame mass-weighted system COM from each molecular COM before
-    accumulating, removing whole-system rigid translation in the lab
-    frame. Under anisotropic NPT this lab-COM motion couples to the cell
-    expansion and inflates per-molecule MSD even when molecules are
-    individually pinned to their lattice sites. Affine cell deformation
-    alone is handled regardless (fractional pinning => zero MSD).
+    ``subtract_system_com=True`` (default) additionally subtracts, at each
+    step, the mass-weighted mean of the (MIC-corrected) per-molecule
+    fractional displacement before accumulating. This removes rigid
+    system-wide translation -- including Langevin/thermostat-induced COM
+    drift, which for a small periodic system accumulates and otherwise
+    inflates per-molecule MSD by ~1-2 orders of magnitude even when every
+    molecule is individually pinned to its lattice site. Subtracting the
+    lab-frame COM in Cartesian space (the previous behaviour) does NOT
+    catch this drift: under PBC the lab-frame COM of wrapped raw positions
+    is near-invariant under uniform rigid translation (atoms wrapping in
+    and out cancel), so the subtraction is effectively a no-op for stable
+    crystals while still costing accuracy elsewhere. The fractional-df
+    subtraction is invariant to atom-0 wraps (each per-molecule wrap is
+    already removed by the MIC round before averaging). Affine cell
+    deformation is removed regardless (each step's df uses that step's
+    cell, so fractional pinning => zero MSD).
 
     For a stable crystal this plateaus within ~few hundred fs at
     ~0.01-0.1 A^2; a linearly growing COM MSD is the signature of genuine
@@ -81,12 +90,6 @@ def compute_com_msd(
         com = (mol_mass.unsqueeze(-1) * mol_unwrapped).sum(
             dim=1
         ) / mol_total_mass.unsqueeze(-1)
-        if subtract_system_com:
-            # Lab-frame system COM (from raw atom positions). Using the sum of
-            # per-mol unwrapped COMs would inherit per-molecule atom-0 PBC
-            # wraps and corrupt every molecule's MSD via the subtraction.
-            sys_com_lab = (masses.unsqueeze(-1) * snap).sum(dim=0) / system_total_mass
-            com = com - sys_com_lab
         com_series.append(com)
 
     cumulative_df = torch.zeros(n_mol, 3, device=snapshots[0].device)
@@ -96,6 +99,9 @@ def compute_com_msd(
         s_i = com_series[i] @ torch.linalg.inv(cells[i])
         df = s_i - s_prev
         df -= torch.round(df)
+        if subtract_system_com:
+            mean_df = (mol_total_mass.unsqueeze(-1) * df).sum(dim=0) / system_total_mass
+            df = df - mean_df
         cumulative_df += df
         disp_cart = cumulative_df @ ref_cell
         msd_per_frame.append((disp_cart**2).sum(dim=-1).cpu())

@@ -33,17 +33,19 @@ WORKDIR /workspace
 # (next layer) skips pulling the CPU wheel.
 RUN uv pip install torch --index-url https://download.pytorch.org/whl/cu130
 
-# Remaining runtime deps via uv (faster than conda for these PyPI / git packages).
-# Copy into /tmp so the requirements file doesn't end up inside /workspace
-# (which is the WORKDIR and would leak it into the student view).
+# Remaining runtime + tooling deps via uv (faster than conda for these PyPI /
+# git packages). Single requirements file -- toolkit-ops is pinned to git
+# HEAD inside it so transitive PyPI resolution can't silently override
+# the integrator-fix commits (PR #77, etc.). Copy into /tmp so the file
+# doesn't end up inside /workspace (which is the WORKDIR and would leak
+# it into the student view).
 COPY build/requirements.txt /tmp/
 RUN uv pip install -r /tmp/requirements.txt
 
 # Fail the build loud if any resolver tug-of-war silently broke an import.
 RUN python -c "import torch, ovito, ase, pymatgen, nvalchemi, matplotlib, aiohttp, pydantic, ipywidgets; print('imports ok; torch', torch.__version__, 'ovito', ovito.version)"
 
-ENV BGR_SERVER=http://localhost:8000 \
-    LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH}" \
+ENV LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH}" \
     MPLCONFIGDIR=/tmp/mpl \
     OVITO_GUI_MODE=headless
 
@@ -51,7 +53,6 @@ ENV BGR_SERVER=http://localhost:8000 \
 # → `docker run` (no bind-mount) still works. Compose uses selective
 # bind-mounts which shadow these at runtime.
 COPY README.md LICENSE ./
-COPY part-1-nim ./part-1-nim
 COPY part-2-toolkit ./part-2-toolkit
 
 EXPOSE 8888

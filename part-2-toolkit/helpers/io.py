@@ -42,6 +42,16 @@ _NPT_STATE_KEYS = (
     "nhc_b_eta",
     "nhc_b_eta_dot",
     "nhc_b_Q",
+    # `nhc_zero_eta_dot` is the toolkit-ops <= 0.3.1 workaround buffer (a
+    # permanent zero tensor passed as eta_dots into npt_barostat_half_step
+    # to mute the kernel's spurious -eta_dot·h_dot drag, npt.py:241-252).
+    # The integrator reads `self._state.nhc_zero_eta_dot` every pre/post
+    # update step, so omitting it from the save/load whitelist causes a
+    # `'Batch' has no attribute 'nhc_zero_eta_dot'` crash on the first
+    # NPT step of any extend/resume. Save it so resumes preload a valid
+    # state; `load_integrator_state` also backfills it for checkpoints
+    # written before this key was whitelisted.
+    "nhc_zero_eta_dot",
     "kinetic_tensors",
     "pressure_tensors",
     "volumes",
@@ -204,6 +214,14 @@ def load_integrator_state(stage_name, log_dir, device):
     state_dict = torch.load(path, map_location=device, weights_only=True)
     dev = torch.device(device) if isinstance(device, str) else device
     state_dict = {k: v.to(device=dev) for k, v in state_dict.items()}
+    # Backfill `nhc_zero_eta_dot` for checkpoints written before it was
+    # added to `_NPT_STATE_KEYS`. The toolkit uses it as a permanent zero
+    # buffer (npt.py:250-252), so re-creating it as zeros is exact-correct
+    # for the integrator's runtime semantics. Shape mirrors `nhc_eta_dot`,
+    # which is the per-system NHC chain velocity buffer (`[M, chain_len]`).
+    if "nhc_zero_eta_dot" not in state_dict and "nhc_eta_dot" in state_dict:
+        ref = state_dict["nhc_eta_dot"]
+        state_dict["nhc_zero_eta_dot"] = torch.zeros_like(ref)
     return _make_state_batch(state_dict, dev)
 
 
