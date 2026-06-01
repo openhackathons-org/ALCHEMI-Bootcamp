@@ -64,6 +64,7 @@ class Config(BaseModel):
     SLC_NPT_PS: float = 300.0
     SNAPSHOT_EVERY: int = 1000
     LOG_EVERY: int = 100
+    PROGRESS_EVERY: int = 20  # live progress-bar update cadence (finer than LOG_EVERY)
 
     # ── Live-demo overrides (compute mode; do not alter) ─────────────────
     # The canonical run thermalised for WARMUP_NVT_PS and minimised up to
@@ -223,6 +224,7 @@ class Config(BaseModel):
             "SLC_NPT_PS": self.SLC_NPT_PS,
             "SNAPSHOT_EVERY": self.SNAPSHOT_EVERY,
             "LOG_EVERY": self.LOG_EVERY,
+            "PROGRESS_EVERY": self.PROGRESS_EVERY,
             "LIVE_NVT_PS": self.LIVE_NVT_PS,
             "LIVE_FIRE_MAX_STEPS": self.LIVE_FIRE_MAX_STEPS,
             "ANIM_TARGET_FRAMES": self.ANIM_TARGET_FRAMES,
