@@ -4,7 +4,9 @@
 # Cache CSVs shipped to students for FAST_DEMO progress-replay
 !part-2-toolkit/assets/*/
 !part-2-toolkit/assets/*/logs/**
-# Banner + partner logos embedded in the Part 2 notebook are force-added (the
+# Banner + figures + partner logos embedded in the Part 1 notebook
+!part-1-batched-adsorption/assets/*/
+# Banner + partner logos embedded in the notebooks are force-added (the
 # **/assets/ exclusion above blocks a plain re-include); once tracked they stay
 # tracked. New files under assets/images/ need `git add -f`.
 # tools/assets is a convenience symlink to ../assets (not tracked)
