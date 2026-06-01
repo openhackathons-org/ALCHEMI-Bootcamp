@@ -64,6 +64,18 @@ def parse_args() -> argparse.Namespace:
         default=None,
         help="MD timestep in fs; if set, stamps info['time_fs'] per frame.",
     )
+    p.add_argument(
+        "--step-offset",
+        type=int,
+        default=0,
+        help="Add to step stamp (use to keep stamps continuous across .partN.zarr).",
+    )
+    p.add_argument(
+        "--append",
+        action="store_true",
+        help="Open the output in append mode instead of truncating (extxyz is "
+        "concatenable since each frame is self-contained).",
+    )
     return p.parse_args()
 
 
@@ -118,9 +130,10 @@ def main() -> None:
 
     args.out_path.parent.mkdir(parents=True, exist_ok=True)
     opener = gzip.open if args.out_path.suffix == ".gz" else open
+    open_mode = "at" if args.append else "wt"
     t1 = time.monotonic()
     n_written = 0
-    with opener(args.out_path, "wt") as out:
+    with opener(args.out_path, open_mode) as out:
         for i in range(n_samples):
             s, e = int(atoms_ptr[i]), int(atoms_ptr[i + 1])
             n_atoms = e - s
@@ -131,7 +144,7 @@ def main() -> None:
 
             cell_str = " ".join(f"{x:.10f}" for x in c)
             pbc_str = "T T T" if pbc.all() else " ".join("T" if b else "F" for b in pbc)
-            step = i * args.snapshot_every
+            step = args.step_offset + i * args.snapshot_every
             time_field = f' time_fs="{step * args.dt_fs}"' if args.dt_fs is not None else ""
             properties = "species:S:1:pos:R:3:Z:I:1"
             if forces_arr is not None:

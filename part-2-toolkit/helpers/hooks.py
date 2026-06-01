@@ -144,3 +144,30 @@ def make_graph_tagged_writer(labels):
             print(f"  [{int(step):>6d}] {tag} | {' | '.join(parts)}")
 
     return writer
+
+
+def make_progress_writer(progress, fields=("temperature", "density")):
+    """Custom ``LoggingHook`` writer that advances a ``NotebookProgress`` bar.
+
+    Mirrors :func:`stdout_writer`'s ``(step, rows)`` signature but, instead of
+    printing, ticks the supplied progress bar to ``step`` with a compact message
+    built from the first graph's scalar fields. Reuses the existing
+    ``backend="custom"`` ``LoggingHook`` plumbing, so a single live MD ``.run()``
+    drives the progress bar without a bespoke per-step hook class.
+    """
+    units = {"temperature": "K", "density": "g/cm³", "pressure": "eV/Å³"}
+
+    def writer(step, rows):
+        message = f"step {int(step)}"
+        if rows:
+            row = rows[0]
+            extras = [
+                f"{key}={row[key]:.3g} {units.get(key, '')}".rstrip()
+                for key in fields
+                if key in row
+            ]
+            if extras:
+                message += " · " + " · ".join(extras)
+        progress.update(done=int(step), message=message)
+
+    return writer
