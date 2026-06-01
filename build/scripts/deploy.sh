@@ -156,6 +156,20 @@ copy_repo() {
         -cf - . \
         | ssh -J "$LOGIN_HOST" "$COMPUTE_NODE" \
             "tar -C ${REMOTE_REPO_DIR} -xf -"
+
+    # Part 2 banner + partner logos. The blanket ./part-2-toolkit/assets exclude
+    # above keeps the large dev trajectory/figure dirs out of the copy; this
+    # second pass ships ONLY the small assets/images subtree (banner + logos)
+    # the notebook embeds, so the student build renders the title banner.
+    if [ -d "$REPO_DIR/part-2-toolkit/assets/images" ]; then
+        echo "Copying part-2-toolkit/assets/images (banner + logos)..."
+        COPYFILE_DISABLE=1 tar -C "$REPO_DIR" \
+            --no-xattrs \
+            --exclude='.DS_Store' \
+            -cf - ./part-2-toolkit/assets/images \
+            | ssh -J "$LOGIN_HOST" "$COMPUTE_NODE" \
+                "tar -C ${REMOTE_REPO_DIR} -xf -"
+    fi
 }
 
 cmd_setup() {
