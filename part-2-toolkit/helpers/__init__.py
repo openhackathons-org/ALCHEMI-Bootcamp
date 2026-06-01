@@ -15,6 +15,7 @@ need them will hit a clean ``ImportError`` at use site.
 # --- Always available (numpy / pure Python) -----------------------------
 from .constants import (
     AMU_OVER_A3_TO_G_CM3,
+    D3_PRESETS,
     MAX_FORCE_CLAMP,
     P_1ATM,
     STAGE_COLORS,
@@ -27,7 +28,12 @@ from .diffusion import (
     fit_diffusion_coefficient,
 )
 
-# --- Container-only (torch / nvalchemi) ---------------------------------
+# --- Container-only (torch / nvalchemi / pydantic) ----------------------
+try:
+    from .config import Config
+except ImportError:
+    pass
+
 try:
     from .analysis import (
         _mol_inertia_eigvecs,
@@ -60,9 +66,9 @@ except ImportError:
 try:
     from .hooks import (
         InitVelocitiesOnConverge,
-        ResetEwaldEnergiesBufHook,
         StatusTransitionLogger,
         make_graph_tagged_writer,
+        make_progress_writer,
         make_safety_hooks,
         stdout_writer,
     )
@@ -98,20 +104,62 @@ except ImportError:
 try:
     from .visualization import (
         dedup_legend,
+        plot_batch_speedup,
+        plot_slc_stage,
         plot_trajectory_frames,
+        plot_warmup_stage,
         shade_stages,
         visualize_structure,
     )
 except ImportError:
     pass
 
+try:
+    from .notebook_viz import (
+        NotebookProgress,
+        create_interactive_view,
+        display_inline,
+        display_trajectory_animation,
+        display_widgets_row,
+        make_browser_safe_mp4,
+        render_trajectory_animation,
+        subscript_formula_html,
+    )
+except ImportError:
+    pass
+
+try:
+    from .orb import OrbV3Wrapper
+except ImportError:
+    pass
+
+try:
+    from .packmol import (
+        build_packmol_slc_stack,
+        extract_single_molecule,
+        pack_liquid_box,
+        pack_with_fixed_obstacle,
+    )
+except ImportError:
+    pass
+
 __all__ = [
     "AMU_OVER_A3_TO_G_CM3",
+    "Config",
+    "D3_PRESETS",
+    "NotebookProgress",
+    "create_interactive_view",
+    "display_inline",
+    "display_trajectory_animation",
+    "display_widgets_row",
+    "make_browser_safe_mp4",
+    "render_trajectory_animation",
+    "subscript_formula_html",
     "DYNAMICS_SCALARS",
     "InitVelocitiesOnConverge",
     "MAX_FORCE_CLAMP",
+    "OrbV3Wrapper",
     "P_1ATM",
-    "ResetEwaldEnergiesBufHook",
     "STAGE_COLORS",
     "STAGE_LABELS",
     "StatusTransitionLogger",
@@ -119,6 +167,7 @@ __all__ = [
     "_restore_arrays",
     "_to_jsonable",
     "batch_to_ase",
+    "build_packmol_slc_stack",
     "checkpoint_exists",
     "compute_S0_from_frames",
     "compute_S0_tail",
@@ -134,6 +183,7 @@ __all__ = [
     "dedup_legend",
     "density_scalar",
     "extract_per_graph_trajectory",
+    "extract_single_molecule",
     "fit_diffusion_coefficient",
     "fresh_zarr_sink",
     "integrator_state_exists",
@@ -146,11 +196,17 @@ __all__ = [
     "load_zarr_trajectory",
     "zarr_trajectory_length",
     "make_graph_tagged_writer",
+    "make_progress_writer",
     "make_safety_hooks",
     "min_pbc_distance",
     "next_part_index",
+    "plot_batch_speedup",
+    "pack_liquid_box",
+    "pack_with_fixed_obstacle",
     "part_paths",
+    "plot_slc_stage",
     "plot_trajectory_frames",
+    "plot_warmup_stage",
     "pressure_scalar",
     "read_csv_log",
     "save_checkpoint",

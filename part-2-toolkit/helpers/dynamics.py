@@ -19,10 +19,12 @@ def batch_to_ase(batch):
 def pressure_scalar(ctx):
     """LoggingHook custom_scalar: instantaneous scalar pressure per graph (eV/A^3).
 
-    P = Tr(stress)/3 + 2*KE/(3V), matching nvalchemiops.compute_scalar_pressure
-    applied to ``(kinetic_tensor + stress*V)/V``. nvalchemi stress is
-    compression-positive (``stress = -(1/V) dE/d(strain)``; see
-    ``nvalchemi/models/_utils.py``), so no sign flip is applied.
+    P = 2*KE/(3V) - Tr(stress)/3, matching the toolkit's NPT kernel chain:
+    ``nvalchemi/dynamics/integrators/npt.py`` does ``virial = -batch.stress * V``
+    (its own comment: "batch.stress is tensile-positive Cauchy stress -W/V"),
+    then ``nvalchemiops`` computes ``P_tensor = (KE_tensor + virial) / V`` and
+    ``compute_scalar_pressure`` takes ``Tr(P_tensor)/3``. Substituting gives
+    ``P = (2*KE - V*Tr(stress)) / (3V)``. The minus on the stress term is real.
     """
     batch = ctx.batch
     stress_trace = batch.stress.diagonal(dim1=-2, dim2=-1).mean(dim=-1)
@@ -30,7 +32,7 @@ def pressure_scalar(ctx):
     ke_per_atom = 0.5 * batch.atomic_masses * (batch.velocities**2).sum(dim=-1)
     ke_per_graph = torch.zeros(batch.num_graphs, device=V.device, dtype=V.dtype)
     ke_per_graph.scatter_add_(0, batch.batch_idx, ke_per_atom.to(V.dtype))
-    return stress_trace + (2.0 / 3.0) * ke_per_graph / V
+    return (2.0 / 3.0) * ke_per_graph / V - stress_trace
 
 
 def volume_scalar(ctx):

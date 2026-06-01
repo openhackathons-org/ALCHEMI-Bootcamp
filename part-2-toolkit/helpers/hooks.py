@@ -1,6 +1,6 @@
 """MD hook classes and factories used by the dynamics pipelines."""
 
-import logging
+from loguru import logger
 import time
 
 import torch
@@ -87,8 +87,8 @@ class StatusTransitionLogger:
             if prev != curr:
                 src = self.labels.get(prev, f"s{prev}")
                 dst = self.labels.get(curr, f"s{curr}")
-                logging.info(
-                    "[%s->%s] graduated at step=%d  elapsed=%.2fs",
+                logger.info(
+                    "[{}->{}] graduated at step={}  elapsed={:.2f}s",
                     src,
                     dst,
                     ctx.step_count,
@@ -111,40 +111,13 @@ class StatusTransitionLogger:
             if prev != curr:
                 src = self.labels.get(prev, f"s{prev}")
                 dst = self.labels.get(curr, f"s{curr}")
-                logging.info(
-                    "[%s->%s] graduated at end of run  elapsed=%.2fs",
+                logger.info(
+                    "[{}->{}] graduated at end of run  elapsed={:.2f}s",
                     src,
                     dst,
                     elapsed,
                 )
         self._prev = list(status)
-
-
-class ResetEwaldEnergiesBufHook:
-    """Workaround for ``EwaldModelWrapper._energies_buf`` autograd-retention leak.
-
-    Nulls ``ewald._energies_buf`` before every forward pass so the
-    ``scatter_add_`` inside ``EwaldModelWrapper.forward`` allocates a fresh
-    buffer instead of chaining an autograd version chain onto a persistent
-    one. Without this, per-step wall time grows linearly over long MD runs
-    (~0.7 ms/step per step; ~20x slowdown over 20k steps) because the
-    version counter pins the previous step's Warp backward tape. Resetting
-    only ``_energies_buf`` is sufficient -- other Ewald caches
-    (``_cached_alpha``, ``_cached_k_vectors``, ``_cached_cell``,
-    ``_null_shifts``) do not retain autograd state. See
-    ``../nvalchemi-toolkit/ewald-energies-buf-leak/`` for the investigation
-    and the one-line upstream fix under review; drop this hook once the
-    upstream PR lands.
-    """
-
-    stage = DynamicsStage.BEFORE_COMPUTE
-
-    def __init__(self, ewald):
-        self.ewald = ewald
-        self.frequency = 1
-
-    def __call__(self, ctx, stage_):
-        self.ewald._energies_buf = None
 
 
 def stdout_writer(step, rows):
@@ -169,5 +142,32 @@ def make_graph_tagged_writer(labels):
                 if k not in ("graph_idx", "status")
             ]
             print(f"  [{int(step):>6d}] {tag} | {' | '.join(parts)}")
+
+    return writer
+
+
+def make_progress_writer(progress, fields=("temperature", "density")):
+    """Custom ``LoggingHook`` writer that advances a ``NotebookProgress`` bar.
+
+    Mirrors :func:`stdout_writer`'s ``(step, rows)`` signature but, instead of
+    printing, ticks the supplied progress bar to ``step`` with a compact message
+    built from the first graph's scalar fields. Reuses the existing
+    ``backend="custom"`` ``LoggingHook`` plumbing, so a single live MD ``.run()``
+    drives the progress bar without a bespoke per-step hook class.
+    """
+    units = {"temperature": "K", "density": "g/cm³", "pressure": "eV/Å³"}
+
+    def writer(step, rows):
+        message = f"step {int(step)}"
+        if rows:
+            row = rows[0]
+            extras = [
+                f"{key}={row[key]:.3g} {units.get(key, '')}".rstrip()
+                for key in fields
+                if key in row
+            ]
+            if extras:
+                message += " · " + " · ".join(extras)
+        progress.update(done=int(step), message=message)
 
     return writer
