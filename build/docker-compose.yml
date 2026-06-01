@@ -17,7 +17,6 @@ services:
     volumes:
       - ../part-1-batched-adsorption:/workspace/part-1-batched-adsorption
       - ../part-2-toolkit:/workspace/part-2-toolkit
-      - ../shared:/workspace/shared
       - ../README.md:/workspace/README.md:ro
       - ../LICENSE:/workspace/LICENSE:ro
     deploy:
