@@ -15,6 +15,7 @@ Torch, ASE, or any MLIP package.
 
 - `sei-pareto-challenge.ipynb` - participant notebook with fill-in code blocks.
 - `sei-pareto-challenge-solution.ipynb` - one completed solution path for instructors.
+- `pyproject.toml` and `UV_SETUP.md` - local `uv` environment setup.
 - `data/molecule_manifest.csv` - starter molecules and roles.
 - `data/custom_molecule_manifest_template.csv` - template for optional literature molecules.
 - `data/surface_manifest.csv` - reactive/passivating surface proxies.
@@ -39,6 +40,27 @@ The notebook follows the public ALCHEMI Toolkit workflow documented at
 https://nvidia.github.io/nvalchemi-toolkit/: atomistic structures are represented
 as Toolkit data objects, packed into batches, evaluated by model wrappers, and
 relaxed with Toolkit dynamics/optimizer components.
+
+## Environment
+
+This folder includes a local `uv` setup. For model-free grading and tests:
+
+```bash
+cd challenge-sei
+uv sync --extra dev
+uv run pytest tests
+```
+
+For full notebook execution with ALCHEMI Toolkit on a CUDA-capable GPU machine:
+
+```bash
+cd challenge-sei
+uv sync --extra alchemi --extra dev
+uv run python -m ipykernel install --user --name alchemi-sei-challenge --display-name "ALCHEMI SEI Challenge"
+uv run jupyter lab
+```
+
+See `UV_SETUP.md` for details.
 
 ## Grading
 

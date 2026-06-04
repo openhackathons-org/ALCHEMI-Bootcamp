@@ -1,0 +1,39 @@
+[project]
+name = "alchemi-sei-challenge"
+version = "0.1.0"
+description = "SEI additive Pareto challenge for the ALCHEMI bootcamp"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "ipykernel>=6.29",
+    "jupyterlab>=4.2",
+    "nbclient>=0.10",
+    "nbformat>=5.10",
+    "numpy>=2.0",
+    "pandas>=2.2",
+    "matplotlib>=3.9",
+    "ase>=3.24",
+    "pydantic>=2.8",
+    "pymatgen>=2025.1",
+    "ipywidgets>=8.1",
+    "tqdm>=4.66",
+]
+
+[project.optional-dependencies]
+alchemi = [
+    "nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@7fe7756bd1b13580a619cff39b69742145d416e1",
+    "torch>=2.9",
+]
+dev = [
+    "pytest>=8.0",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
