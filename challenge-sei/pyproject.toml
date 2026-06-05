@@ -16,6 +16,7 @@ dependencies = [
     "pymatgen>=2025.1",
     "ipywidgets>=8.1",
     "tqdm>=4.66",
+    "jupyter>=1.1.1",
 ]
 
 [project.optional-dependencies]
