@@ -114,6 +114,18 @@ def test_tied_maximum_hypervolume_accepts_any_tied_selected_additive(tmp_path: P
     assert result["selected"] == ["VC"]
 
 
+def test_multiple_selected_rows_fail(tmp_path: Path):
+    grader = _load_grader()
+    rows = _base_rows()
+    for row in rows:
+        if row["candidate_id"] in {"FEC", "VC"}:
+            row["selected"] = True
+    submission = _write_csv(tmp_path / "challenge_submission.csv", rows)
+
+    with pytest.raises(grader.GradeError, match="Exactly one additive"):
+        grader.grade_submission(submission)
+
+
 def test_optional_raw_component_energies_check_binding_formula(tmp_path: Path):
     grader = _load_grader()
     rows = _base_rows()
