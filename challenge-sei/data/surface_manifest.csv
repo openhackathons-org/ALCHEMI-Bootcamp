@@ -1,6 +1,6 @@
-surface_id,display_name,role,formula,charge,multiplicity,structure_path,provenance
-Li_metal,lithium metal reactive anode proxy,reactive,Li,0,1,data/surfaces/Li_metal.extxyz,idealized low-index Li teaching slab with vacuum
-LiF,lithium fluoride passivating proxy,passivating,LiF,0,1,data/surfaces/LiF.extxyz,idealized rocksalt-like LiF teaching slab with vacuum
-Li2CO3,lithium carbonate passivating proxy,passivating,Li2CO3,0,1,data/surfaces/Li2CO3.extxyz,idealized stoichiometric carbonate teaching slab with vacuum
-Li3PO4,lithium phosphate passivating proxy,passivating,Li3PO4,0,1,data/surfaces/Li3PO4.extxyz,idealized stoichiometric phosphate teaching slab with vacuum
-Li3N,lithium nitride passivating proxy,passivating,Li3N,0,1,data/surfaces/Li3N.extxyz,idealized stoichiometric nitride teaching slab with vacuum
+surface_id,display_name,role,formula,charge,multiplicity,provenance
+Li_metal,lithium metal reactive anode proxy,reactive,Li,0,1,built in notebook from bcc Li bulk with pymatgen SlabGenerator
+LiF,lithium fluoride passivating proxy,passivating,LiF,0,1,built in notebook from rocksalt LiF bulk with pymatgen SlabGenerator
+Li2CO3,lithium carbonate passivating proxy,passivating,Li2CO3,0,1,built in notebook from COD 9008283 zabuyelite Li2CO3 CIF with pymatgen SlabGenerator
+Li3PO4,lithium phosphate passivating proxy,passivating,Li3PO4,0,1,placeholder metadata; add a bulk-derived builder before using this surface
+Li3N,lithium nitride passivating proxy,passivating,Li3N,0,1,placeholder metadata; add a bulk-derived builder before using this surface

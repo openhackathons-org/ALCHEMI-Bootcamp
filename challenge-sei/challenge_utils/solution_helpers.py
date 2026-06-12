@@ -16,7 +16,7 @@ from typing import Iterable
 
 import numpy as np
 import pandas as pd
-from ase.data import covalent_radii
+from ase.data import covalent_radii, vdw_radii
 from ase.geometry import find_mic
 from ase.io import read as ase_read
 from ase.io import write as ase_write
@@ -24,9 +24,9 @@ from ase.io import write as ase_write
 
 @dataclass(frozen=True)
 class SolutionSettings:
-    adsorption_height_A: float = 2.6
-    li_metal_adsorption_height_A: float = 2.1
     min_adsorption_clearance_A: float = 1.6
+    vdw_height_scale: float = 0.66
+    surface_height_tolerance_A: float = 1.2
     gas_box_A: float = 20.0
     adsorption_site_limit: int = 3
     adsorption_azimuth_angles_deg: tuple[float, ...] = (0.0,)
@@ -37,6 +37,42 @@ class SolutionSettings:
 
 
 ADSORPTION_ANCHOR_ELEMENTS = {"O", "N", "F", "P", "S"}
+
+LI2CO3_COD_9008283_CIF = """
+data_9008283
+_chemical_formula_sum 'C Li2 O3'
+_chemical_name_mineral Zabuyelite
+_space_group_IT_number 15
+_symmetry_space_group_name_Hall '-C 2yc'
+_symmetry_space_group_name_H-M 'C 1 2/c 1'
+_cell_angle_alpha 90
+_cell_angle_beta 114.83
+_cell_angle_gamma 90
+_cell_length_a 8.3593
+_cell_length_b 4.9725
+_cell_length_c 6.1975
+_cell_formula_units_Z 4
+loop_
+_symmetry_equiv_pos_as_xyz
+x,y,z
+1/2+x,1/2+y,z
+x,-y,1/2+z
+1/2+x,1/2-y,1/2+z
+-x,y,1/2-z
+1/2-x,1/2+y,1/2-z
+-x,-y,-z
+1/2-x,1/2-y,-z
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+Li Li 0.19650 0.44840 0.83440
+C C 0.00000 0.06570 0.25000
+O1 O 0.00000 0.32130 0.25000
+O2 O 0.14590 -0.06350 0.31270
+"""
 
 
 def load_atoms(relative_path: str | Path, *, base_dir: str | Path = "."):
@@ -124,6 +160,18 @@ def build_lif_bulk(settings: SolutionSettings):
     )
 
 
+def build_li2co3_bulk(settings: SolutionSettings):
+    """Build ambient monoclinic Li2CO3 from the COD 9008283 CIF.
+
+    The CIF is the zabuyelite C2/c refinement from COD 9008283:
+    Effenberger and Zemann, Zeitschrift fur Kristallographie 150, 133-138 (1979).
+    """
+    del settings
+    from pymatgen.core import Structure
+
+    return Structure.from_str(LI2CO3_COD_9008283_CIF, fmt="cif")
+
+
 def tag_adsorption_slab(atoms, *, surface_id: str, provenance: str):
     slab = atoms.copy()
     slab.set_pbc([True, True, True])
@@ -158,15 +206,33 @@ def build_lif_slab(settings: SolutionSettings):
     return tag_adsorption_slab(slab, surface_id="LiF", provenance="rocksalt-LiF(100)-physical")
 
 
+def build_li2co3_slab(settings: SolutionSettings):
+    from helpers import build_slab
+
+    slab = build_slab(
+        build_li2co3_bulk(settings),
+        miller_index=(0, 0, 1),
+        min_slab_size=8.0,
+        min_vacuum_size=20.0,
+        supercell=(3, 2, 1),
+    )
+    return tag_adsorption_slab(
+        slab,
+        surface_id="Li2CO3",
+        provenance="zabuyelite-Li2CO3(001)-COD9008283",
+    )
+
+
 def prepare_adsorption_surface(surface_id: str, *, settings: SolutionSettings):
     builders = {
         "Li_metal": build_li_metal_slab,
         "LiF": build_lif_slab,
+        "Li2CO3": build_li2co3_slab,
     }
     if surface_id not in builders:
         raise RuntimeError(
             f"No physical slab builder is defined for {surface_id}. "
-            "Keep EXAMPLE_SYSTEMS on Li_metal/LiF examples, or add a bulk-derived builder."
+            "Keep EXAMPLE_SYSTEMS on supported surfaces, or add a bulk-derived builder."
         )
     return builders[surface_id](settings)
 
@@ -337,8 +403,36 @@ def adsorption_orientation_names(candidate_id, interaction, surface_id, molecule
     return orientations[:2]
 
 
-def adsorption_height_for_surface(surface_id: str, *, settings: SolutionSettings) -> float:
-    return settings.li_metal_adsorption_height_A if surface_id == "Li_metal" else settings.adsorption_height_A
+def atomic_vdw_radius_A(atomic_number: int) -> float:
+    radius = float(vdw_radii[int(atomic_number)])
+    if np.isfinite(radius) and radius > 0:
+        return radius
+    return float(covalent_radii[int(atomic_number)] + 0.8)
+
+
+def anchor_index_for_oriented_adsorbate(adsorbate_atoms) -> int:
+    distances = np.linalg.norm(np.asarray(adsorbate_atoms.positions, dtype=float), axis=1)
+    return int(np.argmin(distances))
+
+
+def adsorption_height_for_start(surface, site, adsorbate_atoms, *, settings: SolutionSettings) -> float:
+    anchor = adsorbate_atoms[anchor_index_for_oriented_adsorbate(adsorbate_atoms)]
+    anchor_radius = atomic_vdw_radius_A(anchor.number)
+    top_z = float(np.max(surface.positions[:, 2]))
+    site_z = float(site["position"][2])
+    required_height = float(settings.min_adsorption_clearance_A)
+
+    for atom in surface:
+        if float(atom.position[2]) < top_z - settings.surface_height_tolerance_A:
+            continue
+        lateral = lateral_distance_A(surface, site["position"][:2], atom.position[:2])
+        contact_distance = settings.vdw_height_scale * (anchor_radius + atomic_vdw_radius_A(atom.number))
+        if lateral >= contact_distance:
+            continue
+        vertical_clearance = np.sqrt(max(contact_distance**2 - lateral**2, 0.0))
+        required_height = max(required_height, float(atom.position[2]) + vertical_clearance - site_z)
+
+    return required_height
 
 
 def surface_normal_from_cell(slab) -> np.ndarray:
@@ -360,13 +454,18 @@ def place_adsorbate_for_start(slab, adsorbate_atoms, site_position, *, height_A:
 def build_sei_config_grid(candidate_id, interaction, surface_id, surface, molecule, *, settings: SolutionSettings):
     from helpers.config_search import Configuration
 
-    height_A = adsorption_height_for_surface(surface_id, settings=settings)
     base_mask = surface_active_mask(surface, settings=settings)
     configs = []
     for site in adsorption_site_candidates(surface, settings=settings):
         for orientation in adsorption_orientation_names(candidate_id, interaction, surface_id, molecule):
             adsorbate_atoms = build_oriented_adsorbate(molecule, orientation)
             for rotation_deg in settings.adsorption_azimuth_angles_deg:
+                height_A = adsorption_height_for_start(
+                    surface,
+                    site,
+                    adsorbate_atoms,
+                    settings=settings,
+                )
                 atoms = place_adsorbate_for_start(
                     surface,
                     adsorbate_atoms,

@@ -41,15 +41,9 @@ Its qualitative basis is that useful electrolyte additives can preferentially fo
 
 Useful background references:
 
-- ["Electrolyte additives for improved lithium-ion battery performance and
-  overcharge protection"](https://www.sciencedirect.com/science/article/pii/S2451910320300089),
-  2020.
-- ["Review on modeling of the anode solid electrolyte interphase (SEI) for
-  lithium-ion batteries"](https://www.nature.com/articles/s41524-018-0064-0),
-  2018.
-- ["The Sabatier Principle in
-  Electrocatalysis"](https://www.frontiersin.org/journals/energy-research/articles/10.3389/fenrg.2021.654460/full),
+- ["Electrolyte additives for improved lithium-ion battery performance and overcharge protection"](https://www.sciencedirect.com/science/article/pii/S2451910320300089), 2020.
+- ["Review on modeling of the anode solid electrolyte interphase (SEI) for lithium-ion batteries"](https://www.nature.com/articles/s41524-018-0064-0) 2018.
+- ["The Sabatier Principle in Electrocatalysis"](https://www.frontiersin.org/journals/energy-research/articles/10.3389/fenrg.2021.654460/full),
   2021.
-- ["Determination of thermodynamic parameters in adsorption studies: a
-  review"](https://link.springer.com/article/10.1007/s11696-025-04218-x),
+- ["Determination of thermodynamic parameters in adsorption studies: a review"](https://link.springer.com/article/10.1007/s11696-025-04218-x),
   2025.
