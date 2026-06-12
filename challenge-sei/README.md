@@ -6,21 +6,16 @@ The bundled molecules are a starter panel, not a closed set: participants may ad
 
 The grader is intentionally model-free. It reads `outputs/challenge_submission.csv` and optionally `outputs/raw_component_energies.csv`; it does not import ALCHEMI, Torch, ASE, or any MLIP package.
 
-## Files
+## Relevant Files
 
 - `sei-pareto-challenge.ipynb` - participant notebook with fill-in code blocks.
-- `sei-pareto-challenge-solution.ipynb` - one completed solution path for instructors.
-- `pyproject.toml` and `UV_SETUP.md` - local `uv` environment setup.
 - `data/molecule_manifest.csv` - starter molecules and roles.
-- `data/custom_molecule_manifest_template.csv` - template for optional literature molecules.
+- `data/custom_molecule_manifest_template.csv` - template for literature molecules.
 - `data/surface_manifest.csv` - reactive/passivating surface metadata.
 - `data/class_surface_lookup.csv` - molecule-class to SEI proxy mapping.
 - `challenge_utils/pareto.py` - shared Pareto-front and hypervolume helpers.
 - `challenge_utils/rewards.py` - shared SEI reward functions and rubric constants.
-- `scripts/grade_submission.py` - model-free grader.
 
-The bundled molecule structures and surface metadata are compact teaching inputs for a bootcamp exercise. Surface slabs should be built from bulk structures in the notebooks, not loaded from toy proxy files. 
-These models should not be reported as scientific predictions.
 
 ## Adding Literature Molecules
 
