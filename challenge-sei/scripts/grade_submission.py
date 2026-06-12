@@ -197,6 +197,10 @@ def grade_submission(path: Path, raw_path: Optional[Path] = None) -> dict[str, o
 
     if not selected:
         raise GradeError("Exactly one additive must be marked selected; found none.")
+    if len(selected) != 1:
+        raise GradeError(
+            f"Exactly one additive must be marked selected; found {len(selected)}."
+        )
     selected_roles = {
         row["candidate_id"]: row["role"].strip().lower()
         for row in rows

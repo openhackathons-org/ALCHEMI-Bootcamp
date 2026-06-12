@@ -2,6 +2,4 @@ molecule_class,passivating_surface_id,rationale
 fluorinated,LiF,fluorinated additives are mapped to a LiF-rich SEI proxy
 carbonate,Li2CO3,carbonate solvents/additives are mapped to a lithium-carbonate-rich SEI proxy
 phosphate,Li3PO4,phosphate additives are mapped to a Li3PO4-like SEI proxy
-borate,Li3BO3,borate additives are mapped to a lithium borate SEI proxy
-sulfite,Li2SO3,sulfite or sulfone-like additives are mapped to a sulfite-rich SEI proxy
 nitrile,Li3N,nitrile additives are mapped to an N-rich inorganic SEI proxy

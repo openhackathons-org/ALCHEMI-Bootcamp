@@ -5,6 +5,7 @@ import math
 import os
 import re
 import hashlib
+import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Literal
@@ -122,6 +123,16 @@ def _make_renderer(
     )
 
 
+def _ovito_import_file(location, **params):
+    """Import a structure file across OVITO wheels with different io exports."""
+    try:
+        from ovito.io import import_file
+    except ImportError:
+        from ovito.io._import_file_func import import_file
+
+    return import_file(location, **params)
+
+
 def _apply_particle_colors(data, particle_colors) -> None:
     """Apply explicit particle colours and mirror uniform colours onto OVITO types."""
     import numpy as np
@@ -221,22 +232,42 @@ def render_structure_ovito(
 
     Returns the path to the rendered image.
     """
-    from ovito.io.ase import ase_to_ovito
+    from ase.io import write as ase_write
+    from ovito.modifiers import PythonModifier
     from ovito.vis import Viewport
-    from ovito.pipeline import StaticSource, Pipeline
 
     if wrap_periodic_cell is None:
         wrap_periodic_cell = show_cell
     clean = _clean_atoms_for_ovito(atoms, wrap_periodic_cell=bool(wrap_periodic_cell))
 
-    data = ase_to_ovito(clean)
-    _apply_particle_colors(data, particle_colors)
-    _style_ovito_data(data, show_cell=show_cell)
-
     if isolate_scene:
         _clear_ovito_scene()
 
-    pipeline = Pipeline(source=StaticSource(data=data))
+    path = Path(output_path)
+    if "outputs/precomputed" in path.as_posix() and not _allow_artifact_overwrite():
+        if path.exists():
+            return str(path)
+        raise FileExistsError(
+            f"Refusing to create official saved render without refresh enabled: {path}. "
+            "Use a live-run output path or set REFRESH_SAVED_RESULTS = True."
+        )
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(
+        prefix=f".{path.stem}-ovito-input-",
+        suffix=".extxyz",
+        dir=str(path.parent),
+    )
+    os.close(fd)
+    tmp_path = Path(tmp_name)
+    ase_write(tmp_path, clean, format="extxyz")
+
+    pipeline = _ovito_import_file(str(tmp_path))
+
+    def _style_frame(frame, data):
+        _apply_particle_colors(data, particle_colors)
+        _style_ovito_data(data, show_cell=show_cell)
+
+    pipeline.modifiers.append(PythonModifier(function=_style_frame))
     pipeline.add_to_scene()
 
     vp = Viewport(type=Viewport.Type.Perspective)
@@ -247,15 +278,6 @@ def render_structure_ovito(
         _set_custom_camera(vp, camera)
 
     ovito_renderer = _make_renderer(renderer, samples_per_pixel=samples_per_pixel)
-    path = Path(output_path)
-    if "outputs/precomputed" in path.as_posix() and not _allow_artifact_overwrite():
-        if path.exists():
-            return str(path)
-        raise FileExistsError(
-            f"Refusing to create official saved render without refresh enabled: {path}. "
-            "Use a live-run output path or set REFRESH_SAVED_RESULTS = True."
-        )
-    path.parent.mkdir(parents=True, exist_ok=True)
     try:
         vp.render_image(
             filename=str(path),
@@ -265,6 +287,10 @@ def render_structure_ovito(
         )
     finally:
         pipeline.remove_from_scene()
+        try:
+            tmp_path.unlink()
+        except OSError:
+            pass
         if isolate_scene:
             _clear_ovito_scene()
     return str(path)
@@ -377,9 +403,11 @@ def create_interactive_view(
     """
     try:
         import ipywidgets
+        import ovito.nonpublic
         from ovito.io.ase import ase_to_ovito
         from ovito.pipeline import StaticSource, Pipeline
         from ovito.gui import create_ipywidget
+        from ovito.vis import Viewport
     except ImportError:
         return None
 
@@ -393,11 +421,25 @@ def create_interactive_view(
     _style_ovito_data(data, show_cell=show_cell)
 
     pipeline = Pipeline(source=StaticSource(data=data))
+    scene = ovito.nonpublic.Scene()
+    scene.children.append(ovito.nonpublic.SceneNode(pipeline=pipeline))
+    viewport = Viewport(scene=scene, type=Viewport.Type.Perspective)
+    size = (
+        _css_px_int(width, default=600),
+        _css_px_int(height, default=400),
+    )
+    _set_surface_focused_camera(viewport, clean, size=size)
+    try:
+        viewport.zoom_all(size=size)
+    except Exception:
+        viewport.zoom_all()
 
     widget = create_ipywidget(
-        pipeline,
+        viewport,
         layout=ipywidgets.Layout(width=width, height=height),
     )
+    widget._ovito_pipeline = pipeline
+    widget._ovito_viewport = viewport
     return widget
 
 
@@ -576,12 +618,11 @@ def _create_trajectory_pipeline_widget(
     try:
         import ipywidgets
         from ovito.gui import create_ipywidget
-        from ovito.io import import_file
         from ovito.modifiers import PythonModifier
     except ImportError:
         return None
 
-    pipeline = import_file(str(trajectory))
+    pipeline = _ovito_import_file(str(trajectory))
     if not show_cell:
         def _hide_cell(frame, data):
             _style_ovito_data(data, show_cell=False)
@@ -734,13 +775,12 @@ def _trajectory_rendered_image_widget(
 ):
     try:
         import ipywidgets
-        from ovito.io import import_file
         from ovito.modifiers import PythonModifier
     except ImportError:
         return None
 
     trajectory_path = Path(trajectory)
-    pipeline = import_file(str(trajectory_path))
+    pipeline = _ovito_import_file(str(trajectory_path))
 
     def _style_frame(frame, data):
         if data.particles is not None:
@@ -1076,9 +1116,7 @@ def _trajectory_pairs_from_table(trajectory_paths) -> list[TrajectoryRenderPair]
 
 
 def _trajectory_frame_count(path: Path) -> int:
-    from ovito.io import import_file
-
-    pipeline = import_file(str(path))
+    pipeline = _ovito_import_file(str(path))
     return int(pipeline.source.num_frames)
 
 
@@ -1258,11 +1296,10 @@ def _render_trajectory_mp4(
 ) -> dict[str, Any]:
     import time
 
-    from ovito.io import import_file
     from ovito.vis import Viewport
 
     start_time = time.perf_counter()
-    pipeline = import_file(str(trajectory_path))
+    pipeline = _ovito_import_file(str(trajectory_path))
     frame_count = int(pipeline.source.num_frames)
     every_nth = _frame_stride_for_target(frame_count, target_frames)
     _style_trajectory_pipeline(pipeline, show_cell=True)

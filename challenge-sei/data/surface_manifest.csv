@@ -3,6 +3,4 @@ Li_metal,lithium metal reactive anode proxy,reactive,Li,0,1,data/surfaces/Li_met
 LiF,lithium fluoride passivating proxy,passivating,LiF,0,1,data/surfaces/LiF.extxyz,idealized rocksalt-like LiF teaching slab with vacuum
 Li2CO3,lithium carbonate passivating proxy,passivating,Li2CO3,0,1,data/surfaces/Li2CO3.extxyz,idealized stoichiometric carbonate teaching slab with vacuum
 Li3PO4,lithium phosphate passivating proxy,passivating,Li3PO4,0,1,data/surfaces/Li3PO4.extxyz,idealized stoichiometric phosphate teaching slab with vacuum
-Li3BO3,lithium borate passivating proxy,passivating,Li3BO3,0,1,data/surfaces/Li3BO3.extxyz,idealized stoichiometric borate teaching slab with vacuum
-Li2SO3,lithium sulfite passivating proxy,passivating,Li2SO3,0,1,data/surfaces/Li2SO3.extxyz,idealized stoichiometric sulfite teaching slab with vacuum
 Li3N,lithium nitride passivating proxy,passivating,Li3N,0,1,data/surfaces/Li3N.extxyz,idealized stoichiometric nitride teaching slab with vacuum

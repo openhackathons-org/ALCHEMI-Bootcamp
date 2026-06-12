@@ -67,6 +67,7 @@ class RelaxationBackendConfig:
     toolkit_dt: float = 0.01
     toolkit_n_steps: int = 5000
     toolkit_fmax: float = 0.05
+    toolkit_fire2_maxstep: float | None = None
     toolkit_d3bj: ToolkitD3BJConfig | None = None
     toolkit_require_d3bj: bool = True
 
@@ -539,6 +540,9 @@ class ToolkitBackend:
         data_list = [self._to_atomic_data(payload) for payload in atoms_list]
         batch = self.api.Batch.from_data_list(data_list, device=self.device)
         optimizer_cls = self.api.FIRE2VariableCell if cellopt else self.api.FIRE2
+        optimizer_kwargs = {}
+        if self.config.toolkit_fire2_maxstep is not None:
+            optimizer_kwargs["maxstep"] = self.config.toolkit_fire2_maxstep
         optimizer = optimizer_cls(
             model=self.model,
             dt=self.config.toolkit_dt,
@@ -548,6 +552,7 @@ class ToolkitBackend:
                 source_status=0,
                 target_status=1,
             ),
+            **optimizer_kwargs,
         )
         for hook in self.model.make_neighbor_hooks():
             optimizer.register_hook(hook)
@@ -623,6 +628,9 @@ def run_toolkit_relaxation_with_trajectory(
     data_list = [backend._to_atomic_data(payload) for payload in atoms_list]
     batch = backend.api.Batch.from_data_list(data_list, device=backend.device)
     optimizer_cls = backend.api.FIRE2VariableCell if cellopt else backend.api.FIRE2
+    optimizer_kwargs = {}
+    if backend.config.toolkit_fire2_maxstep is not None:
+        optimizer_kwargs["maxstep"] = backend.config.toolkit_fire2_maxstep
     optimizer = optimizer_cls(
         model=backend.model,
         dt=backend.config.toolkit_dt,
@@ -632,6 +640,7 @@ def run_toolkit_relaxation_with_trajectory(
             source_status=0,
             target_status=1,
         ),
+        **optimizer_kwargs,
     )
     for hook in backend.model.make_neighbor_hooks():
         optimizer.register_hook(hook)
