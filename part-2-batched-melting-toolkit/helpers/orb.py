@@ -461,9 +461,9 @@ class OrbV3Wrapper(nn.Module, BaseModelMixin):
             n_graphs = 1
 
         energy = model_output["energy"].detach().reshape(n_graphs, 1)
-        forces = model_output[self.orbff.grad_forces_name]
+        forces = model_output[self.orbff.grad_forces_name].detach()
         stress_voigt = model_output[self.orbff.grad_stress_name]
-        stress_3x3 = _voigt6_to_3x3(torch.atleast_2d(stress_voigt))
+        stress_3x3 = _voigt6_to_3x3(torch.atleast_2d(stress_voigt)).detach()
 
         mapped = {"energy": energy, "forces": forces, "stress": stress_3x3}
         return super().adapt_output(mapped, data)
