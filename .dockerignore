@@ -15,10 +15,11 @@ tmp*/
 
 # Per-part transient/local artefacts (compose bind-mounts still expose them
 # at runtime; this keeps them out of the baked image only).
-part-1-nim/outputs/
-part-2-toolkit/outputs/
-part-2-toolkit/logs/
-part-2-toolkit/assets/
+part-1-batched-adsorption-toolkit/outputs/
+part-1-batched-adsorption-toolkit/logs/
+part-2-batched-melting-toolkit/outputs/
+part-2-batched-melting-toolkit/logs/
+part-2-batched-melting-toolkit/assets/
 
 # Generated notebooks (regenerated on-demand)
 *-with_outputs.ipynb

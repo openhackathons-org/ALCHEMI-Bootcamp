@@ -5,23 +5,25 @@
 # apt-get system libs. See dev/Dockerfile and dev/README.md for the
 # full install sequence.
 
-# nvalchemi-toolkit-ops pinned to git HEAD AHEAD of nvalchemi-toolkit so the
-# direct-URL spec is satisfied before toolkit's transitive resolution
-# would otherwise pull a PyPI wheel for `nvalchemi-toolkit-ops[torch]>=0.3.1`.
-# Without this explicit entry, the build silently risks installing a
-# PyPI snapshot that may pre-date critical NPT fixes (PR #77's strain-rate
-# semantics + eta_dots removal); the compat shim in helpers/compat.py
-# detects the eta_dots signature shift to decide whether to strip the
-# legacy positional arg, so a PyPI-snapshot install with eta_dots still
-# present silently produces different physics.
-nvalchemi-toolkit-ops[torch] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git
+# Toolkit packages pinned to current main commits for a reproducible updated
+# environment. The Dockerfile installs with `--no-sources-package
+# nvalchemi-toolkit-ops` because current nvalchemi-toolkit still carries an
+# older `tool.uv.sources` pin for toolkit-ops; the direct URL below is the
+# intended source of truth for this image.
+nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@2b7c3c3adfb1ca84b886eecbf14bc60ff6ba1dc2
 
 # Toolkit (Part 2 core; pulls in ase as a transitive)
-nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git
+nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@01c99d5cde6f63d6f662b071a9f408d3bfc12b0a
+
+# cuEquivariance compiled Torch ops for the CUDA 13 runtime. This matches the
+# cuequivariance/cuequivariance-torch 0.10.0 stack pulled by mace-torch and
+# prevents the MACE path from falling back to the naive implementation.
+cuequivariance-ops-torch-cu13==0.10.0
 
 # ORB-v3 foundation model (Part 2; resolved by `--model orb` in the drivers
 # via `orb_models.forcefield.pretrained.orb_v3_conservative_inf_omat`).
-orb-models
+orb-models==0.7.0
+loguru
 
 # Part 1 scientific stack
 pymatgen>=2024.1.1
