@@ -14,12 +14,13 @@ tmp*/
 .Trash-*
 
 # Per-part transient/local artefacts (compose bind-mounts still expose them
-# at runtime; this keeps them out of the baked image only).
+# at runtime; this keeps them out of the baked image only). Keep tracked
+# tutorial assets in the image for Enroot/Pyxis runs without bind mounts.
 part-1-batched-adsorption-toolkit/outputs/
 part-1-batched-adsorption-toolkit/logs/
 part-2-batched-melting-toolkit/outputs/
 part-2-batched-melting-toolkit/logs/
-part-2-batched-melting-toolkit/assets/
+part-2-batched-melting-toolkit/assets/images/.anim_cache/
 
 # Generated notebooks (regenerated on-demand)
 *-with_outputs.ipynb
