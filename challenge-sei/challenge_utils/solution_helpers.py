@@ -18,7 +18,6 @@ import numpy as np
 import pandas as pd
 from ase.data import covalent_radii, vdw_radii
 from ase.geometry import find_mic
-from ase.io import read as ase_read
 from ase.io import write as ase_write
 
 
@@ -73,10 +72,6 @@ C C 0.00000 0.06570 0.25000
 O1 O 0.00000 0.32130 0.25000
 O2 O 0.14590 -0.06350 0.31270
 """
-
-
-def load_atoms(relative_path: str | Path, *, base_dir: str | Path = "."):
-    return ase_read(Path(base_dir) / relative_path)
 
 
 def gas_box(atoms, *, settings: SolutionSettings):

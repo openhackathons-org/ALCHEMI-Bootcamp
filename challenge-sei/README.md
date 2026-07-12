@@ -9,17 +9,36 @@ The grader is intentionally model-free. It reads `outputs/challenge_submission.c
 ## Relevant Files
 
 - `sei-pareto-challenge.ipynb` - participant notebook with fill-in code blocks.
-- `data/molecule_manifest.csv` - starter molecules and roles.
-- `data/custom_molecule_manifest_template.csv` - template for literature molecules.
+- `data/molecule_manifest.csv` - starter molecules and roles (metadata only).
+- `data/custom_molecule_manifest_template.csv` - metadata template for literature molecules.
+- `custom_molecules_template.py` - template for registering literature geometries in code.
 - `data/surface_manifest.csv` - reactive/passivating surface metadata.
 - `data/class_surface_lookup.csv` - molecule-class to SEI proxy mapping.
+- `challenge_utils/molecules.py` - in-code starter geometries and the molecule registry.
 - `challenge_utils/pareto.py` - shared Pareto-front and hypervolume helpers.
 - `challenge_utils/rewards.py` - shared SEI reward functions and rubric constants.
 
+## Structures Are Built In Code (No Structure Files)
+
+The challenge reads **no structure files**. Surfaces are constructed with pymatgen
+(`Structure.from_spacegroup` for bcc Li and rocksalt LiF, an inline COD 9008283 CIF for
+Li2CO3) and cut with `SlabGenerator`. The starter molecules are idealized geometries
+embedded in `challenge_utils/molecules.py` and constructed as `ase.Atoms` by
+`build_molecule(candidate_id)` (provenance: SMILES + RDKit ETKDGv3/MMFF94, generated
+once and baked in). Every geometry is MLIP-relaxed by the notebook before any energy is
+used, so idealized starting points are exactly as good as the previous xyz files.
 
 ## Adding Literature Molecules
 
-Create `data/custom_molecule_manifest.csv` with the same columns as `data/molecule_manifest.csv`, place the corresponding structures under `data/molecules/`. 
+No xyz files: register the geometry in code and add a metadata row.
+
+1. Copy `custom_molecules_template.py` to `custom_molecules.py` and register each
+   molecule as an `ase.Atoms` (inline coordinates from a cited source,
+   `ase.build.molecule` for G2 species, or a pymatgen `Molecule`) under its
+   `candidate_id` via `challenge_utils.molecules.register_molecule`.
+2. Create `data/custom_molecule_manifest.csv` with the same columns as
+   `data/molecule_manifest.csv` (copy the template) using the same `candidate_id`.
+
 Use molecule classes from `data/class_surface_lookup.csv` so the notebook can select the passivating SEI proxy automatically. 
 
 The notebook follows the public ALCHEMI Toolkit workflow documented at https://nvidia.github.io/nvalchemi-toolkit/: atomistic structures are represented as Toolkit data objects, packed into batches, evaluated by model wrappers, and relaxed with Toolkit dynamics/optimizer components.

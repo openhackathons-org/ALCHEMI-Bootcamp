@@ -1,2 +1,2 @@
-candidate_id,display_name,role,molecule_class,formula,charge,multiplicity,structure_path,provenance
-my_literature_additive,replace with literature molecule name,additive,fluorinated,replace_formula,0,1,data/molecules/my_literature_additive.xyz,replace with citation DOI/source and how the starting geometry was prepared
+candidate_id,display_name,role,molecule_class,formula,charge,multiplicity,provenance
+my_literature_additive,replace with literature molecule name,additive,fluorinated,replace_formula,0,1,replace with citation DOI/source and how the geometry was prepared; register the ase.Atoms in custom_molecules.py via challenge_utils.molecules.register_molecule (no structure files)

@@ -1,7 +1,7 @@
-candidate_id,display_name,role,molecule_class,formula,charge,multiplicity,structure_path,provenance
-EC,ethylene carbonate,baseline,carbonate,C3H4O3,0,1,data/molecules/EC.xyz,idealized teaching geometry for bootcamp MLIP relaxation
-EMC,ethyl methyl carbonate,baseline,carbonate,C4H8O3,0,1,data/molecules/EMC.xyz,idealized teaching geometry for bootcamp MLIP relaxation
-FEC,fluoroethylene carbonate,additive,fluorinated,C3H3FO3,0,1,data/molecules/FEC.xyz,idealized teaching geometry for bootcamp MLIP relaxation
-VC,vinylene carbonate,additive,carbonate,C3H2O3,0,1,data/molecules/VC.xyz,idealized teaching geometry for bootcamp MLIP relaxation
-TMP,trimethyl phosphate,additive,phosphate,C3H9O4P,0,1,data/molecules/TMP.xyz,idealized teaching geometry for bootcamp MLIP relaxation
-succinonitrile,succinonitrile,additive,nitrile,C4H4N2,0,1,data/molecules/succinonitrile.xyz,idealized teaching geometry for bootcamp MLIP relaxation
+candidate_id,display_name,role,molecule_class,formula,charge,multiplicity,provenance
+EC,ethylene carbonate,baseline,carbonate,C3H4O3,0,1,built in code by challenge_utils.molecules.build_molecule (SMILES C1COC(=O)O1; RDKit ETKDGv3+MMFF94 idealized geometry embedded as ase.Atoms; MLIP-relaxed in the notebook)
+EMC,ethyl methyl carbonate,baseline,carbonate,C4H8O3,0,1,built in code by challenge_utils.molecules.build_molecule (SMILES CCOC(=O)OC; RDKit ETKDGv3+MMFF94 idealized geometry embedded as ase.Atoms; MLIP-relaxed in the notebook)
+FEC,fluoroethylene carbonate,additive,fluorinated,C3H3FO3,0,1,built in code by challenge_utils.molecules.build_molecule (SMILES FC1COC(=O)O1; RDKit ETKDGv3+MMFF94 idealized geometry embedded as ase.Atoms; MLIP-relaxed in the notebook)
+VC,vinylene carbonate,additive,carbonate,C3H2O3,0,1,built in code by challenge_utils.molecules.build_molecule (SMILES C1=COC(=O)O1; RDKit ETKDGv3+MMFF94 idealized geometry embedded as ase.Atoms; MLIP-relaxed in the notebook)
+TMP,trimethyl phosphate,additive,phosphate,C3H9O4P,0,1,built in code by challenge_utils.molecules.build_molecule (SMILES COP(=O)(OC)OC; RDKit ETKDGv3+MMFF94 idealized geometry embedded as ase.Atoms; MLIP-relaxed in the notebook)
+succinonitrile,succinonitrile,additive,nitrile,C4H4N2,0,1,built in code by challenge_utils.molecules.build_molecule (SMILES N#CCCC#N; RDKit ETKDGv3+MMFF94 idealized geometry embedded as ase.Atoms; MLIP-relaxed in the notebook)
