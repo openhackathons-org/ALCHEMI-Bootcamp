@@ -18,9 +18,11 @@ tmp*/
 # tutorial assets in the image for Enroot/Pyxis runs without bind mounts.
 part-1-batched-adsorption-toolkit/outputs/
 part-1-batched-adsorption-toolkit/logs/
+part-1-water-hydrogen-bonding-toolkit/outputs/
 part-2-batched-melting-toolkit/outputs/
 part-2-batched-melting-toolkit/logs/
 part-2-batched-melting-toolkit/assets/images/.anim_cache/
+part-3-toolkit-foundations/outputs/
 
 # Generated notebooks (regenerated on-demand)
 *-with_outputs.ipynb

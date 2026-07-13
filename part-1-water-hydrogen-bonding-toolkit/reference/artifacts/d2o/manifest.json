@@ -1,0 +1,86 @@
+{
+  "arrays": {
+    "file": "ir_arrays.npz",
+    "sha256": "91972053eb7254d4a5ad105b9dee240102403a41e1da47d2df659c3af4db7e3b"
+  },
+  "artifact_id": "b97-3c-d2o-91972053eb7254d4",
+  "engine": {
+    "name": "Psi4",
+    "version": "1.11"
+  },
+  "format": {
+    "name": "alchemi.psi4-b97-3c-ir",
+    "version": 1
+  },
+  "mode_conventions": {
+    "imaginary_frequency_encoding": "negative magnitude in cm^-1",
+    "imaginary_threshold_cm-1": 10.0,
+    "mass_weighted_modes": "shape (n_modes,N,3); rows are q=M^1/2*x eigenvectors, Euclidean-orthonormal when flattened, and aligned exactly with frequencies_cm1 and ir_intensities_km_mol",
+    "mass_weighted_modes_max_orthonormality_error": 4.440892098500626e-16,
+    "order": "ascending Psi4 projected vibrational mode order",
+    "rotation_projection": true,
+    "translation_projection": true
+  },
+  "model_chemistry": {
+    "basis": "def2-mTZVP",
+    "basis_is_explicit_psi4_1_11_workaround": true,
+    "finite_difference_points": 3,
+    "finite_difference_step_bohr": 0.005,
+    "hessian_source": "central differences of full Cartesian gradients",
+    "method": "B97-3c"
+  },
+  "molecule": {
+    "charge": 0,
+    "label": "d2o",
+    "multiplicity": 1
+  },
+  "normal_modes": {
+    "array": "mass_weighted_modes",
+    "convention": "q_equals_sqrt_mass_times_cartesian",
+    "normalization": "orthonormal_rows",
+    "ordering": "frequencies_and_ir_intensities"
+  },
+  "provenance": {
+    "density_convergence": 1e-10,
+    "dft_grid": {
+      "radial_points": 99,
+      "spherical_points": 590
+    },
+    "dispersion": "D3(BJ)-ATM",
+    "energy_convergence": 1e-10,
+    "generator": "reference/b97_3c_ir.py",
+    "geometry_convergence": "gau_verytight",
+    "optimizer": "geometric",
+    "optimizer_coordinate_system": "tric",
+    "scf_initial_accelerator": "NONE",
+    "scf_type": "pk",
+    "short_range_basis_correction": "mctc-gcp B97-3c"
+  },
+  "reference_scope": "Full canonical B97-3c endpoint; not a termwise decomposition of the AIMNet residual and external two-body D3.",
+  "units": {
+    "dipole_derivative": "atomic_unit_dipole_per_bohr",
+    "frequencies": "cm^-1",
+    "geometry": "angstrom",
+    "hessian": "hartree_per_bohr2",
+    "ir_intensities": "km_per_mol",
+    "masses": "unified_atomic_mass_unit"
+  },
+  "validation": {
+    "changed_entries_are_hydrogen_masses_only": true,
+    "covalent_graph_preserved": true,
+    "gradient_max_abs_Eh_per_bohr": 7.188592143457517e-07,
+    "gradient_max_abs_limit_Eh_per_bohr": 1e-05,
+    "gradient_rms_Eh_per_bohr": 2.708986375234371e-07,
+    "initial_is_single_water_ring": false,
+    "is_minimum_within_threshold": true,
+    "optimized_all_oxygens_have_two_hydrogens": true,
+    "optimized_hydrogen_bond_count": 0,
+    "optimized_is_single_water_ring": false,
+    "raw_hessian_max_antisymmetry_relative": 4.212484667086273e-05,
+    "raw_hessian_max_antisymmetry_relative_limit": 0.001,
+    "reference_ready": true,
+    "same_geometry_hessian_and_dipole_derivative_for_isotopes": true,
+    "significant_imaginary_modes": [],
+    "status": "passed"
+  }
+}

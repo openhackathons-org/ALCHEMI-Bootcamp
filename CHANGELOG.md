@@ -3,6 +3,62 @@
 High-level history of the ALCHEMI Playbook. Dates are first-creation dates from
 the Git history.
 
+## v2 — 2026-07-09
+
+**Part 1 rebuild slice — predicted-charge water IR**
+
+- Added the full live 5,000-step NVT + 50,000-step NVE workflow for batched
+  H₂O/D₂O monomers and cyclic-hexamer seeds using AIMNet2-2025 B97-3c residual,
+  explicit pairwise D3(BJ), and the official finite-molecule `simple`
+  all-pairs 1/r electrostatics convention.
+- Added an `AFTER_STEP` predicted-charge dipole hook with one shared model call
+  per fused step, mass-only isotope substitution, 5 ps Welch spectra, and
+  charge/energy/cluster-integrity diagnostics.
+- Added checksummed H₂O/D₂O/cyclic-H₆/D₆ B97-3c harmonic references and exact
+  source/artifact acceptance on an H100 in CL job `3087665`. Topology and
+  thermal-state gates withhold comparisons that the production trajectories do
+  not support.
+- Added six accessible stage cards and 14 live, persisted progress cards around
+  every target-H100 wait of at least five seconds. All 14 accepted widget states
+  finish as `COMPLETE`; early FIRE convergence reports steps used against the
+  declared limit without a partially filled completion rail.
+- Added four 2880×1440 Water IR banner candidates and one shared visual system
+  for the hero, lesson summary, semantic headings, callouts, placeholders,
+  progress states, and plots. The default hero uses real HTML text over art-only
+  imagery for sharp rendering and accessibility.
+- Moved tutorial mechanics into focused `aux/` modules with no package-level
+  re-export surface, while keeping Toolkit conversion, batching, neighbors,
+  pipeline composition, FIRE2, fused dynamics, hooks, reductions, and Zarr
+  persistence visible in learner cells.
+- Pinned both AIMNet and D3 runtime assets by SHA-256, disabled implicit D3
+  download, and kept the D3 tensor outside the distributable repository pending
+  confirmation of its redistribution rights.
+
+**Part 3 prototype — Toolkit foundations**
+
+- Added a bounded live-compute notebook covering `AtomicData`, homogeneous and
+  heterogeneous `Batch` objects, CPU/GPU throughput, neighbor-buffer capacity,
+  Toolkit-Ops segmented reduction, and a custom model wrapper.
+- Added official Warp Tape computational graphs comparing one heterogeneous
+  model call with three homogeneous size-bucket calls, plus NVTX labels for
+  optional NVIDIA Nsight Systems profiling.
+- Added a charge-aware AIMNet2 ωB97M-D3 composition example: AIMNet core +
+  pairwise D3(BJ) + full nonperiodic Coulomb, with explicit pipeline wiring,
+  charge conservation, batch/order parity, and force finite-difference checks.
+- Added a checksummed, CC BY-attributed 90-structure NCI Atlas subset: three
+  ten-point frozen-monomer interaction curves evaluated by all four official
+  ensemble members against near-matched ωB97M-D3(BJ)/def2-TZVPPD totals and
+  independent CCSD(T)/CBS interaction energies.
+- Kept adsorption and periodic Ewald/PME out of Part 3; they require separate
+  model-domain and reference validation.
+
+**Runtime**
+
+- Advanced Toolkit Core and Toolkit-Ops to the exact commits required by the
+  new pipeline API; pinned AIMNet and PhysicsNeMo explicitly.
+- Updated the Docker image, Compose mounts, README, and build-time import gate
+  to expose Part 3 while retaining Parts 1 and 2.
+
 ## v1 — 2026-06-17
 
 Major changes since initial creation, including a bug fix.

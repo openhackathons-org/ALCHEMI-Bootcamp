@@ -11,6 +11,11 @@
 !part-1-batched-adsorption-toolkit/assets/
 !part-1-batched-adsorption-toolkit/assets/images/
 !part-1-batched-adsorption-toolkit/assets/images/**
+# Art-only banner candidates embedded in the rebuilt Water IR notebook
+!part-1-water-hydrogen-bonding-toolkit/assets/
+!part-1-water-hydrogen-bonding-toolkit/assets/images/
+!part-1-water-hydrogen-bonding-toolkit/assets/images/banner_candidates/
+!part-1-water-hydrogen-bonding-toolkit/assets/images/banner_candidates/**
 # Banner + figures + partner logos embedded in the Part 2 notebook
 !part-2-batched-melting-toolkit/assets/images/
 !part-2-batched-melting-toolkit/assets/images/*.jpg
@@ -18,9 +23,8 @@
 !part-2-batched-melting-toolkit/assets/images/logos/
 !part-2-batched-melting-toolkit/assets/images/logos/**
 part-2-batched-melting-toolkit/assets/images/.anim_cache/
-# Banner + partner logos embedded in the notebooks are force-added (the
-# **/assets/ exclusion above blocks a plain re-include); once tracked they stay
-# tracked. New files under assets/images/ need `git add -f`.
+# New notebook image directories need an explicit re-include above before they
+# can be staged.
 # tools/assets is a convenience symlink to ../assets (not tracked)
 part-2-batched-melting-toolkit/tools/assets
 # Reference PDFs (cited by DOI in the notebook; not redistributed)
