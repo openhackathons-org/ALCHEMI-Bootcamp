@@ -1,0 +1,60 @@
+
+Host: s4124-0096
+
+Timers On : Mon Jul 13 10:28:29 2026
+Timers Off: Mon Jul 13 10:28:57 2026
+
+Wall Time:       27.90 seconds
+
+                                                       Time (seconds)
+Module                                       User      System        Wall        Calls
+V: Grid                             :     88.283u      9.150s      1.831w     24 calls
+build grid                          :     36.567u      3.533s      0.754w     24 calls
+post-process grid                   :     51.583u      5.600s      1.072w     24 calls
+Total PK formation time             :    159.883u     13.833s      3.443w     24 calls
+Libint2ERI::Libint2ERI              :    103.567u     12.017s      2.349w    792 calls
+HF: Form core H                     :     14.000u      1.450s      0.299w     24 calls
+HF: Form S/X                        :      1.733u      0.300s      0.051w     24 calls
+HF: Guess                           :     61.117u      8.100s      1.404w     24 calls
+SAD Guess                           :     59.967u      8.033s      1.379w     24 calls
+HF: Form G                          :    259.450u      3.933s      4.998w    289 calls
+RV: Form V                          :    247.367u      2.433s      4.728w    289 calls
+Properties                          :     25.796p                         514990 calls
+Functional                          :     34.688p                         514990 calls
+V_xc                                :     81.971p                         514990 calls
+JK: D                               :      0.900u      0.150s      0.028w    289 calls
+JK: USO2AO                          :      0.117u      0.033s      0.001w    289 calls
+JK: JK                              :      8.800u      1.133s      0.206w    289 calls
+PK computes JK                      :      8.683u      1.083s      0.204w    289 calls
+JK: AO2USO                          :      0.033u      0.000s      0.001w    289 calls
+HF: Form F                          :      1.433u      0.233s      0.036w    289 calls
+HF: Form D                          :      0.133u      0.033s      0.006w    289 calls
+HF: DIIS                            :     25.600u      3.550s      0.600w    265 calls
+HF: Form C                          :      7.300u      0.950s      0.173w    265 calls
+
+--------------------------------------------------------------------------------------
+V: Grid                             :     88.283u      9.150s      1.831w     24 calls
+| build grid                        :     36.567u      3.533s      0.754w     24 calls
+| post-process grid                 :     51.583u      5.600s      1.072w     24 calls
+Total PK formation time             :    159.883u     13.833s      3.443w     24 calls
+| Libint2ERI::Libint2ERI            :    103.567u     12.017s      2.349w    792 calls
+HF: Form core H                     :     14.000u      1.450s      0.299w     24 calls
+HF: Form S/X                        :      1.733u      0.300s      0.051w     24 calls
+HF: Guess                           :     61.117u      8.100s      1.404w     24 calls
+| SAD Guess                         :     59.967u      8.033s      1.379w     24 calls
+HF: Form G                          :    259.450u      3.933s      4.998w    289 calls
+| RV: Form V                        :    247.367u      2.433s      4.728w    289 calls
+| | Properties                      :     25.796p                         514990 calls
+| | Functional                      :     34.688p                         514990 calls
+| | V_xc                            :     81.971p                         514990 calls
+| JK: D                             :      0.900u      0.150s      0.028w    289 calls
+| JK: USO2AO                        :      0.117u      0.033s      0.001w    289 calls
+| JK: JK                            :      8.800u      1.133s      0.206w    289 calls
+| | PK computes JK                  :      8.683u      1.083s      0.204w    289 calls
+| JK: AO2USO                        :      0.033u      0.000s      0.001w    289 calls
+HF: Form F                          :      1.433u      0.233s      0.036w    289 calls
+HF: Form D                          :      0.133u      0.033s      0.006w    289 calls
+HF: DIIS                            :     25.600u      3.550s      0.600w    265 calls
+HF: Form C                          :      7.300u      0.950s      0.173w    265 calls
+
+**************************************************************************************

@@ -1,0 +1,7 @@
+{
+  "calculation_source": {
+    "status": "not retained",
+    "note": "The complete numerical run directory is retained and recursively hashed, but the exact generator source hash for this earlier local calculation was not recorded."
+  },
+  "schema": "alchemi.b97-3c-run-source-provenance.v1"
+}

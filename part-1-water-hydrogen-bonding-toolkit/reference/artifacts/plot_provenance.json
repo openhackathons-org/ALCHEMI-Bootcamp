@@ -1,0 +1,21 @@
+{
+  "completed_at": "2026-07-13T17:38:34-04:00",
+  "consumer_artifact_ids": {
+    "d2o": "b97-3c-d2o-91972053eb7254d4",
+    "d6": "b97-3c-d6-75a130196113794d",
+    "h2o": "b97-3c-h2o-d61eed00843bda71",
+    "h6": "b97-3c-h6-10138fbfcda149e3"
+  },
+  "helpers_ir_reference_sha256": "389094b5ba95323e4ddc9010e3e9e06b7caf474cbca9dc1faa54825647c9c516",
+  "image": {
+    "path": "b97_3c_ir_reference.png",
+    "sha256": "753c693cfc7a6d2facde1c792893d006785ae52055d9db8f59ad420f2de89f21"
+  },
+  "matplotlib": "3.11.0",
+  "numpy": "2.4.4",
+  "plot_artifacts_sha256": "6204a68482911a82aaa5f981e5b88f9374057957459410bc70690576cf9ca086",
+  "reference_job_id": "3064553",
+  "render_scope": "presentation-only refresh from unchanged checksummed arrays",
+  "schema": "alchemi.b97-3c-plot-provenance.v2",
+  "shared_plotting_sha256": "b63c932b308d2765f4bf8250dae4482f88c34a60481a4c8c37f4a7cab0294a8f"
+}

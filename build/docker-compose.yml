@@ -16,7 +16,9 @@ services:
     # /workspace; build/, start-*, and dotfiles stay hidden.
     volumes:
       - ../part-1-batched-adsorption-toolkit:/workspace/part-1-batched-adsorption-toolkit
+      - ../part-1-water-hydrogen-bonding-toolkit:/workspace/part-1-water-hydrogen-bonding-toolkit
       - ../part-2-batched-melting-toolkit:/workspace/part-2-batched-melting-toolkit
+      - ../part-3-toolkit-foundations:/workspace/part-3-toolkit-foundations
       - ../README.md:/workspace/README.md:ro
       - ../LICENSE:/workspace/LICENSE:ro
     deploy:

@@ -1,0 +1,4 @@
+# orb-models 0.7.0 declares nvalchemi-toolkit-ops[torch] <0.4 even though the
+# playbook intentionally uses and validates Toolkit-Ops 0.4.0. Keep the exact
+# source pin authoritative when uv resolves the unified environment.
+nvalchemi-toolkit-ops @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c6fbe652315e0cebd4f57a6a25f626258f0dbbfd
