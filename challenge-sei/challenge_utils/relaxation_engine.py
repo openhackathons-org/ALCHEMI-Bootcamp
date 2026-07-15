@@ -197,8 +197,6 @@ class StepByStepRelaxationEngine:
     device: object
     dtype: object
     checkpoint: str
-    cache_dir: str = "outputs/cache_json"
-    use_cached_responses: bool = False
     dt: float = 0.005
     n_steps: int = 5000
     fmax: float = 0.05
@@ -206,7 +204,6 @@ class StepByStepRelaxationEngine:
     name: str = field(default="toolkit", init=False)
 
     def relax(self, atoms_list, label: str, *, cellopt: bool = False):
-        from helpers.cache import cache_exists, load_cache, save_cache
         from helpers.models import RelaxationBatchResult
 
         if cellopt:
@@ -214,25 +211,17 @@ class StepByStepRelaxationEngine:
                 "The step-by-step challenge engine relaxes at fixed cell; "
                 "see Part 1's FIRE2VariableCell for cell optimisation."
             )
-        if self.use_cached_responses:
-            if cache_exists(self.cache_dir, label):
-                print(f"  Loading cached response: {label}")
-                return load_cache(self.cache_dir, label, RelaxationBatchResult)
-            raise RuntimeError(f"No cached Toolkit response for '{label}' in {self.cache_dir}.")
 
         results = relax_batch(
             self.model, list(atoms_list), self.device, self.dtype,
             dt=self.dt, n_steps=self.n_steps, fmax=self.fmax, maxstep=self.maxstep,
         )
-        reply = RelaxationBatchResult(
+        return RelaxationBatchResult(
             atoms=results,
             status="Success",
             info=(f"step-by-step FIRE2 batch relaxation; label={label}; "
                   f"checkpoint={self.checkpoint}; device={self.device}"),
         )
-        save_cache(self.cache_dir, label, reply)
-        print(f"  Cached response saved: {label}")
-        return reply
 
     async def async_relax(self, atoms_list, label: str, *, cellopt: bool = False,
                           session: object | None = None):
@@ -242,8 +231,7 @@ class StepByStepRelaxationEngine:
 def build_step_by_step_engine(*, checkpoint: str, device: str = "auto",
                               dtype: str = "float32", enable_cueq: bool = False,
                               compile_model: bool = False, d3bj=None,
-                              cache_dir: str = "outputs/cache_json",
-                              use_cached_responses: bool = False, dt: float = 0.005,
+                              dt: float = 0.005,
                               n_steps: int = 5000, fmax: float = 0.05,
                               maxstep: float | None = 0.04) -> StepByStepRelaxationEngine:
 
@@ -253,6 +241,5 @@ def build_step_by_step_engine(*, checkpoint: str, device: str = "auto",
     model = assemble_pipeline(mlip, device_obj, d3bj=d3bj)                   # Step 3
     return StepByStepRelaxationEngine(                                       # Step 6
         model=model, device=device_obj, dtype=dtype_obj, checkpoint=checkpoint,
-        cache_dir=cache_dir, use_cached_responses=use_cached_responses,
         dt=dt, n_steps=n_steps, fmax=fmax, maxstep=maxstep,
     )

@@ -1,7 +1,7 @@
 # SEI Pareto Challenge
 
 This folder contains a challenge problem for the Part 1 batched adsorption tutorial.
-Participants use the ALCHEMI Toolkit workflow pattern to relax small molecule/surface systems, compute binding energies, convert them into two challenge scores, and choose the additive that gives the largest Pareto hypervolume improvement. 
+Participants use the ALCHEMI Toolkit workflow pattern to relax small molecule/surface systems, compute binding energies, convert them into two challenge scores, and choose the additive that gives the largest Pareto hypervolume improvement (ties are broken in favour of non-dominated additives, never alphabetically). 
 The bundled molecules are a starter panel, not a closed set: participants may add electrolyte or additive molecules from the literature and submit results for those molecules too.
 
 ## Relevant Files
@@ -37,8 +37,8 @@ The notebook follows the public ALCHEMI Toolkit workflow documented at https://n
 The challenge scores are deterministic reward functions in `challenge_utils/rewards.py`. 
 They use adsorption strength, `max(0, -E_bind)`, rather than a single arbitrary target binding energy.
 
-- `seeding_score` rewards moderate Li-metal adsorption: full reward for strengths from 0.8 to 1.5 eV, tapering to zero below 0.5 eV and above 2.0 eV.
-- `passivation_score` rewards weak adsorption on the passivating SEI proxy: full reward for strengths at or below 0.3 eV, tapering to zero by 0.8 eV.
+- `seeding_score` rewards moderate Li-metal adsorption: full reward for strengths from 1.4 to 1.8 eV, tapering to zero below 1.0 eV and above 3.0 eV.
+- `passivation_score` rewards weak adsorption on the passivating SEI proxy: full reward for strengths at or below 0.6 eV, tapering to zero by 1.3 eV.
 
 Its qualitative basis is that useful electrolyte additives can preferentially form protective films, useful SEI layers should passivate further electrolyte reduction, and surface activity often follows a Sabatier-style "neither too weak nor too strong" adsorption tradeoff.
 

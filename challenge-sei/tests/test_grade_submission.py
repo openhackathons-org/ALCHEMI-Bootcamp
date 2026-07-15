@@ -31,15 +31,17 @@ def _write_csv(path: Path, rows: list[dict[str, object]]) -> Path:
 
 def _base_rows(selected: str = "FEC", *, tie: bool = False) -> list[dict[str, object]]:
     grader = _load_grader()
+    # E_bind that place scores in the reward windows (rewards.py) with a clear
+    # hypervolume winner (FEC); VC a lesser additive, TMP dominated.
     rows = [
-        ("EC", "baseline", "carbonate", "Li2CO3", -0.90, -0.40),
-        ("EMC", "baseline", "carbonate", "Li2CO3", -0.60, -0.20),
-        ("FEC", "additive", "fluorinated", "LiF", -0.80, -0.05),
-        ("VC", "additive", "carbonate", "Li2CO3", -0.40, 0.00),
-        ("TMP", "additive", "phosphate", "Li3PO4", -0.95, -0.60),
+        ("EC", "baseline", "carbonate", "Li2CO3", -2.10, -1.125),
+        ("EMC", "baseline", "carbonate", "Li2CO3", -2.70, -0.775),
+        ("FEC", "additive", "fluorinated", "LiF", -1.60, -0.50),
+        ("VC", "additive", "carbonate", "Li2CO3", -1.20, -0.95),
+        ("TMP", "additive", "phosphate", "Li3PO4", -2.70, -1.125),
     ]
     if tie:
-        rows[3] = ("VC", "additive", "carbonate", "Li2CO3", -0.80, -0.05)
+        rows[3] = ("VC", "additive", "carbonate", "Li2CO3", -1.60, -0.50)
 
     points = []
     for _, _, _, _, e_li, e_pass in rows:
@@ -69,6 +71,32 @@ def _base_rows(selected: str = "FEC", *, tie: bool = False) -> list[dict[str, ob
             "selected": candidate_id == selected,
         })
     return output
+
+
+def _load_rewards():
+    spec = importlib.util.spec_from_file_location(
+        "rewards", ROOT / "challenge_utils" / "rewards.py"
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_grader_scoring_matches_rewards_module():
+    """The grader's inline reward formulas must stay identical to
+    challenge_utils/rewards.py (the scoring source of truth)."""
+    grader = _load_grader()
+    rewards = _load_rewards()
+    # sweep -3.0 .. +1.0 eV, dense enough to hit every window edge and taper
+    for i in range(-300, 101):
+        e_bind = i / 100.0
+        assert grader._score_from_li_binding(e_bind) == pytest.approx(
+            rewards.seeding_score(e_bind), abs=1e-12
+        ), f"seeding mismatch at E_bind={e_bind}"
+        assert grader._score_from_passivating_binding(e_bind) == pytest.approx(
+            rewards.passivation_score(e_bind), abs=1e-12
+        ), f"passivation mismatch at E_bind={e_bind}"
 
 
 def test_valid_submission_with_clear_hypervolume_winner_passes(tmp_path: Path):

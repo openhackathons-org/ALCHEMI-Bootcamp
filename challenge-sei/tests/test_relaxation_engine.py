@@ -35,13 +35,12 @@ FMAX = 0.05
 
 
 @pytest.fixture(scope="module")
-def engine(tmp_path_factory):
+def engine():
     try:
         return build_step_by_step_engine(
             checkpoint=CHECKPOINT,
             device="auto",
             dtype="float32",
-            cache_dir=str(tmp_path_factory.mktemp("engine_cache")),
             dt=0.005,
             n_steps=5000,
             fmax=FMAX,

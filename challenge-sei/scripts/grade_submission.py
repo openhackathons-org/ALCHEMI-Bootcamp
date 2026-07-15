@@ -63,12 +63,64 @@ def _float(row: dict[str, str], column: str) -> float:
         raise GradeError(f"Invalid numeric value for {column!r} in {ident!r}") from exc
 
 
+# Reward windows -- kept identical to challenge_utils/rewards.py (the scoring
+# source of truth); duplicated so this grader stays standalone.
+SEEDING_WEAK_EDGE_EV = 1.00
+SEEDING_IDEAL_LOW_EV = 1.40
+SEEDING_IDEAL_HIGH_EV = 1.80
+SEEDING_STRONG_EDGE_EV = 3.00
+PASSIVATION_FULL_REWARD_EV = 0.60
+PASSIVATION_ZERO_REWARD_EV = 1.30
+
+
+def _clip01(value: float) -> float:
+    return min(1.0, max(0.0, float(value)))
+
+
+def _binding_strength(e_bind: float) -> float:
+    """Exothermic adsorption-strength magnitude: strength = max(0, -E_bind)."""
+    return max(0.0, -float(e_bind))
+
+
 def _score_from_li_binding(e_bind: float) -> float:
-    return max(0.0, 1.0 - abs(e_bind - (-1.0)) / 1.0)
+    """Seeding score: Sabatier window on adsorption strength (see rewards.py).
+
+    Full reward for strengths 0.8-1.5 eV, linear tapers to zero below 0.5 eV
+    and above 2.0 eV.
+    """
+    strength = _binding_strength(e_bind)
+    if strength <= SEEDING_WEAK_EDGE_EV:
+        return 0.0
+    if strength < SEEDING_IDEAL_LOW_EV:
+        return _clip01(
+            (strength - SEEDING_WEAK_EDGE_EV)
+            / (SEEDING_IDEAL_LOW_EV - SEEDING_WEAK_EDGE_EV)
+        )
+    if strength <= SEEDING_IDEAL_HIGH_EV:
+        return 1.0
+    if strength < SEEDING_STRONG_EDGE_EV:
+        return _clip01(
+            (SEEDING_STRONG_EDGE_EV - strength)
+            / (SEEDING_STRONG_EDGE_EV - SEEDING_IDEAL_HIGH_EV)
+        )
+    return 0.0
 
 
 def _score_from_passivating_binding(e_bind: float) -> float:
-    return min(1.0, max(0.0, e_bind + 1.0))
+    """Passivation score: weak-adsorption reward on strength (see rewards.py).
+
+    Full reward for strength <= 0.3 eV, linear taper to zero by 0.8 eV.
+    """
+    strength = _binding_strength(e_bind)
+    if strength <= PASSIVATION_FULL_REWARD_EV:
+        return 1.0
+    if strength >= PASSIVATION_ZERO_REWARD_EV:
+        return 0.0
+    return _clip01(
+        1.0
+        - (strength - PASSIVATION_FULL_REWARD_EV)
+        / (PASSIVATION_ZERO_REWARD_EV - PASSIVATION_FULL_REWARD_EV)
+    )
 
 
 def _dominates(a: tuple[float, float], b: tuple[float, float]) -> bool:

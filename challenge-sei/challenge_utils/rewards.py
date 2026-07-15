@@ -16,15 +16,18 @@ where ``strength = max(0, -E_bind)``.
 from __future__ import annotations
 
 
-# Weak-to-moderate adsorption window for Li-metal seeding.
-SEEDING_WEAK_EDGE_EV = 0.50
-SEEDING_IDEAL_LOW_EV = 0.80
-SEEDING_IDEAL_HIGH_EV = 1.50
-SEEDING_STRONG_EDGE_EV = 2.00
+# Sabatier window for Li-metal seeding, on the vacuum binding-energy scale of
+# these systems (chemisorption on reactive Li metal is ~1.5-2 eV per molecule).
+SEEDING_WEAK_EDGE_EV = 1.00
+SEEDING_IDEAL_LOW_EV = 1.40
+SEEDING_IDEAL_HIGH_EV = 1.80
+SEEDING_STRONG_EDGE_EV = 3.00
 
-# Weak adsorption window for compatibility with an already-passivating SEI proxy.
-PASSIVATION_FULL_REWARD_EV = 0.30
-PASSIVATION_ZERO_REWARD_EV = 0.80
+# Weak-adsorption window for compatibility with an already-passivating SEI proxy,
+# on the same vacuum binding-energy scale (oxide interactions here are ~0.7-1.0 eV
+# per molecule).
+PASSIVATION_FULL_REWARD_EV = 0.60
+PASSIVATION_ZERO_REWARD_EV = 1.30
 
 
 def _clip01(value: float) -> float:
@@ -41,7 +44,7 @@ def seeding_score(e_bind_li_eV: float) -> float:
     """Score Li-metal SEI seeding from the Li-surface binding energy.
 
     Full reward is assigned for moderate chemisorption-like strengths
-    (0.8--1.5 eV), with linear tapers to zero below 0.5 eV and above 2.0 eV.
+    (1.4--1.8 eV), with linear tapers to zero below 1.0 eV and above 3.0 eV.
     This implements a Sabatier-style objective: the additive should interact
     strongly enough with reactive Li metal to plausibly seed interphase
     formation, but extremely strong binding is penalized.
@@ -68,7 +71,7 @@ def passivation_score(e_bind_passivating_eV: float) -> float:
     """Score compatibility with a passivating SEI proxy surface.
 
     Full reward is assigned for weak or endothermic adsorption
-    (strength <= 0.3 eV). The score decreases linearly to zero by 0.8 eV,
+    (strength <= 0.6 eV). The score decreases linearly to zero by 1.3 eV,
     reflecting the challenge assumption that a good passivating layer should
     discourage continued strong molecule-surface interaction.
     """

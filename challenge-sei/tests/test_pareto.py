@@ -31,16 +31,18 @@ def test_hypervolume_2d_uses_reference_origin():
 
 
 def test_seeding_score_rewards_moderate_li_binding():
-    assert seeding_score(-0.4) == 0.0
-    assert abs(seeding_score(-0.65) - 0.5) < 1e-12
-    assert seeding_score(-1.0) == 1.0
-    assert abs(seeding_score(-1.75) - 0.5) < 1e-12
-    assert seeding_score(-2.2) == 0.0
+    # windows: weak edge 1.0, ideal plateau 1.4-1.8, strong edge 3.0 eV (strength = -E_bind)
+    assert seeding_score(-0.8) == 0.0                    # strength 0.8, below weak edge
+    assert abs(seeding_score(-1.2) - 0.5) < 1e-12        # lower taper midpoint
+    assert seeding_score(-1.6) == 1.0                    # inside ideal plateau
+    assert abs(seeding_score(-2.4) - 0.5) < 1e-12        # upper taper midpoint
+    assert seeding_score(-3.5) == 0.0                    # strength 3.5, above strong edge
 
 
 def test_passivation_score_rewards_weak_binding():
+    # windows: full reward for strength <= 0.6, tapering to zero by 1.3 eV
     assert binding_strength(0.2) == 0.0
-    assert passivation_score(0.2) == 1.0
-    assert passivation_score(-0.3) == 1.0
-    assert abs(passivation_score(-0.55) - 0.5) < 1e-12
-    assert passivation_score(-0.8) == 0.0
+    assert passivation_score(0.2) == 1.0                 # positive E_bind -> strength 0
+    assert passivation_score(-0.6) == 1.0                # strength 0.6 at full-reward edge
+    assert abs(passivation_score(-0.95) - 0.5) < 1e-12   # taper midpoint
+    assert passivation_score(-1.3) == 0.0                # strength 1.3 at zero edge
