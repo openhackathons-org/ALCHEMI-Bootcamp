@@ -28,7 +28,6 @@ class SolutionSettings:
     surface_height_tolerance_A: float = 1.2
     gas_box_A: float = 20.0
     adsorption_site_limit: int = 3
-    adsorption_azimuth_angles_deg: tuple[float, ...] = (0.0,)
     max_surface_displacement_A: float = 1.5
     frozen_surface_fraction: float = 0.5
     li_bcc_a: float = 3.51
@@ -435,10 +434,8 @@ def surface_normal_from_cell(slab) -> np.ndarray:
     return normal / np.linalg.norm(normal)
 
 
-def place_adsorbate_for_start(slab, adsorbate_atoms, site_position, *, height_A: float, rotation_deg: float):
+def place_adsorbate_for_start(slab, adsorbate_atoms, site_position, *, height_A: float):
     ads = adsorbate_atoms.copy()
-    if abs(rotation_deg) > 1e-6:
-        ads.rotate(float(rotation_deg), "z", center=(0.0, 0.0, 0.0))
     ads.translate(np.asarray(site_position, dtype=float) + height_A * surface_normal_from_cell(slab))
     combined = slab.copy() + ads
     combined.set_cell(slab.cell)
@@ -454,35 +451,33 @@ def build_sei_config_grid(candidate_id, interaction, surface_id, surface, molecu
     for site in adsorption_site_candidates(surface, settings=settings):
         for orientation in adsorption_orientation_names(candidate_id, interaction, surface_id, molecule):
             adsorbate_atoms = build_oriented_adsorbate(molecule, orientation)
-            for rotation_deg in settings.adsorption_azimuth_angles_deg:
-                height_A = adsorption_height_for_start(
-                    surface,
-                    site,
-                    adsorbate_atoms,
-                    settings=settings,
-                )
-                atoms = place_adsorbate_for_start(
-                    surface,
-                    adsorbate_atoms,
-                    site["position"],
-                    height_A=height_A,
-                    rotation_deg=rotation_deg,
-                )
-                label = (
-                    f"{candidate_id}_{interaction}_{surface_id}_"
-                    f"{site['site_label']}_{orientation}_rot{int(rotation_deg)}_h{height_A:.1f}"
-                )
-                configs.append(Configuration(
-                    label=label,
-                    host=surface_id,
-                    adsorbate=candidate_id,
-                    site=site["site_label"],
-                    orientation=orientation,
-                    rot_deg=float(rotation_deg),
-                    height=float(height_A),
-                    atoms=atoms,
-                    active_mask=base_mask + [True] * len(adsorbate_atoms),
-                ))
+            height_A = adsorption_height_for_start(
+                surface,
+                site,
+                adsorbate_atoms,
+                settings=settings,
+            )
+            atoms = place_adsorbate_for_start(
+                surface,
+                adsorbate_atoms,
+                site["position"],
+                height_A=height_A,
+            )
+            label = (
+                f"{candidate_id}_{interaction}_{surface_id}_"
+                f"{site['site_label']}_{orientation}_h{height_A:.1f}"
+            )
+            configs.append(Configuration(
+                label=label,
+                host=surface_id,
+                adsorbate=candidate_id,
+                site=site["site_label"],
+                orientation=orientation,
+                rot_deg=0.0,
+                height=float(height_A),
+                atoms=atoms,
+                active_mask=base_mask + [True] * len(adsorbate_atoms),
+            ))
     return configs
 
 
@@ -547,7 +542,6 @@ def make_combined_jobs(run_systems_df, molecule_atoms, surface_meta, clean_surfa
                 "surface_id": row.surface_id,
                 "site_label": config.site,
                 "start_orientation": config.orientation,
-                "azimuth_deg": config.rot_deg,
                 "initial_adsorption_height_A": config.height,
                 "atoms": combined,
                 "active_mask": config.active_mask,
@@ -733,7 +727,7 @@ def select_lowest_energy_site_results(results):
 def selected_site_summary(selected_results) -> pd.DataFrame:
     columns = [
         "candidate_id", "interaction", "surface_id", "site_label", "start_orientation",
-        "azimuth_deg", "energy_eV", "fmax_eV_A", "surface_max_displacement_A",
+        "energy_eV", "fmax_eV_A", "surface_max_displacement_A",
     ]
     return pd.DataFrame(selected_results)[columns].copy()
 
@@ -760,7 +754,6 @@ def component_energy_table(run_systems_df, gas_results, clean_surface_results, c
             "E_species_eV": gas_energy[row.candidate_id],
             "selected_site_label": selected.get("site_label", ""),
             "selected_start_orientation": selected.get("start_orientation", ""),
-            "selected_azimuth_deg": selected.get("azimuth_deg", np.nan),
         })
     return pd.DataFrame(rows)
 
