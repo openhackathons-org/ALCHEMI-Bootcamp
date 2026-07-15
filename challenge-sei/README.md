@@ -4,8 +4,6 @@ This folder contains a challenge problem for the Part 1 batched adsorption tutor
 Participants use the ALCHEMI Toolkit workflow pattern to relax small molecule/surface systems, compute binding energies, convert them into two challenge scores, and choose the additive that gives the largest Pareto hypervolume improvement. 
 The bundled molecules are a starter panel, not a closed set: participants may add electrolyte or additive molecules from the literature and submit results for those molecules too.
 
-The grader is intentionally model-free. It reads `outputs/challenge_submission.csv` and optionally `outputs/raw_component_energies.csv`; it does not import ALCHEMI, Torch, ASE, or any MLIP package.
-
 ## Relevant Files
 
 - `sei-pareto-challenge.ipynb` - participant notebook with fill-in code blocks.
@@ -14,28 +12,19 @@ The grader is intentionally model-free. It reads `outputs/challenge_submission.c
 - `custom_molecules_template.py` - template for registering literature geometries in code.
 - `data/surface_manifest.csv` - reactive/passivating surface metadata.
 - `data/class_surface_lookup.csv` - molecule-class to SEI proxy mapping.
-- `challenge_utils/molecules.py` - in-code starter geometries and the molecule registry.
+- `challenge_utils/molecules.py` - SMILES-only starter panel; `build_molecule` generates each geometry on demand with RDKit (`geometry_from_smiles`), plus the molecule registry.
+- `challenge_utils/relaxation_engine.py` - the step-by-step Toolkit relaxation engine.
 - `challenge_utils/pareto.py` - shared Pareto-front and hypervolume helpers.
 - `challenge_utils/rewards.py` - shared SEI reward functions and rubric constants.
 
-## Structures Are Built In Code (No Structure Files)
-
-The challenge reads **no structure files**. Surfaces are constructed with pymatgen
-(`Structure.from_spacegroup` for bcc Li and rocksalt LiF, an inline COD 9008283 CIF for
-Li2CO3) and cut with `SlabGenerator`. The starter molecules are idealized geometries
-embedded in `challenge_utils/molecules.py` and constructed as `ase.Atoms` by
-`build_molecule(candidate_id)` (provenance: SMILES + RDKit ETKDGv3/MMFF94, generated
-once and baked in). Every geometry is MLIP-relaxed by the notebook before any energy is
-used, so idealized starting points are exactly as good as the previous xyz files.
 
 ## Adding Literature Molecules
 
-No xyz files: register the geometry in code and add a metadata row.
-
 1. Copy `custom_molecules_template.py` to `custom_molecules.py` and register each
-   molecule as an `ase.Atoms` (inline coordinates from a cited source,
-   `ase.build.molecule` for G2 species, or a pymatgen `Molecule`) under its
-   `candidate_id` via `challenge_utils.molecules.register_molecule`.
+   molecule as an `ase.Atoms` (`challenge_utils.molecules.geometry_from_smiles("<SMILES>")`,
+   inline coordinates from a cited source, `ase.build.molecule` for G2 species, or a
+   pymatgen `Molecule`) under its `candidate_id` via
+   `challenge_utils.molecules.register_molecule`.
 2. Create `data/custom_molecule_manifest.csv` with the same columns as
    `data/molecule_manifest.csv` (copy the template) using the same `candidate_id`.
 

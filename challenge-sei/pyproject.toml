@@ -12,6 +12,7 @@ dependencies = [
     "pandas>=2.2",
     "matplotlib>=3.9",
     "ase>=3.24",
+    "rdkit>=2024.3",
     "pydantic>=2.8",
     "pymatgen>=2025.1",
     "ipywidgets>=8.1",
@@ -21,7 +22,8 @@ dependencies = [
 
 [project.optional-dependencies]
 alchemi = [
-    "nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@7fe7756bd1b13580a619cff39b69742145d416e1",
+    "nvalchemi-toolkit[ase,mace,aimnet]",
+    "nvalchemi-toolkit-ops",
     "torch>=2.9",
 ]
 dev = [
@@ -36,6 +38,8 @@ package = false
 
 [tool.uv.sources]
 torch = { index = "pytorch-cu130" }
+nvalchemi-toolkit = { git = "https://github.com/NVIDIA/nvalchemi-toolkit.git", branch = "main" }
+nvalchemi-toolkit-ops = { git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git", branch = "0.4.0-rc" }
 
 [[tool.uv.index]]
 name = "pytorch-cu130"
