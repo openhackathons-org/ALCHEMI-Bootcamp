@@ -167,7 +167,7 @@ export HF_HOME="$RUN_ROOT/cache/huggingface"
 export TORCH_HOME="$RUN_ROOT/cache/torch"
 export AIMNET_CACHE_DIR="$SHARED_AIMNET_CACHE"
 export ALCHEMI_D3_PARAM_FILE="$D3_PARAMETER_FILE"
-export TMPDIR="$NODE_CACHE_ROOT/tmp"
+export NODE_CACHE_ROOT
 export WARP_CACHE_PATH="$NODE_CACHE_ROOT/warp"
 export CUDA_CACHE_PATH="$NODE_CACHE_ROOT/cuda"
 export LOCAL_AIMNET_CACHE
@@ -182,7 +182,8 @@ mkdir -p \
   "$HOME" "$XDG_CACHE_HOME" "$XDG_DATA_HOME" "$HF_HOME" "$TORCH_HOME" \
   "$SHARED_AIMNET_CACHE" "$INPUT_ROOT" "$RESULT_ROOT" "$RANK_ROOT" "$LOG_ROOT"
 srun --ntasks="$SLURM_NNODES" --ntasks-per-node=1 \
-  bash -c 'set -euo pipefail; mkdir -p "$TMPDIR" "$WARP_CACHE_PATH" "$CUDA_CACHE_PATH" "$LOCAL_AIMNET_CACHE"'
+  bash -c 'set -euo pipefail; mkdir -p "$NODE_CACHE_ROOT/tmp" "$WARP_CACHE_PATH" "$CUDA_CACHE_PATH" "$LOCAL_AIMNET_CACHE"'
+export TMPDIR="$NODE_CACHE_ROOT/tmp"
 
 test -x "$PYTHON"
 test -f "$PLAN_SCRIPT"
