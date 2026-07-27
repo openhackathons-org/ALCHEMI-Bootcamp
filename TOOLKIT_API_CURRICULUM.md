@@ -1,197 +1,201 @@
-# ALCHEMI v2 Toolkit API curriculum
+# ALCHEMI Toolkit API curriculum
 
-Status: current learner-facing API contract, updated 2026-07-13.
+This is the separate list of Toolkit capabilities that the playbook should
+teach. It is not a notebook plan and does not record compute-run history. The
+owner table below records where deferred APIs belong and whether that lesson is
+learner-ready.
 
-Working repository allocation: AIMNet2, explicit pairwise D3, finite
-electrostatics, GPU batching, FIRE2, fused dynamics, and predicted-charge IR
-form the rebuilt Part 1. The older adsorption notebook remains as legacy
-material but is not part of this molecular-model story. Part 2 is parked; the
-Part 3 foundations notebook remains a broader research and runtime-validation
-harness; it is not the polished learner-facing sequence.
+The current build targets Toolkit Core 0.2 and Toolkit-Ops 0.4. Verify every
+import against the versions pinned in `build/` before release.
 
-This is the standalone list of Toolkit capabilities and APIs that the v2
-tutorials should expose. It is a curriculum, not a dump of every public symbol:
-the core list contains APIs learners should understand and use directly; later
-sections capture useful extensions and ecosystem surfaces that should not crowd
-the main notebooks.
+## Coverage levels
 
-## Source baseline and labels
+- **Teach directly:** learners construct or call the API and inspect its output.
+- **Show once:** learners see the API in a focused example, but it is not the
+  main subject.
+- **Reference:** name the capability and link to its documentation without
+  expanding the main tutorial.
 
-The list was checked against four exact source states:
+## Product API map
 
-- Existing tutorial Toolkit pin:
-  [`01c99d5`](https://github.com/NVIDIA/nvalchemi-toolkit/tree/01c99d5cde6f63d6f662b071a9f408d3bfc12b0a).
-- Current v2 Toolkit Core pin:
-  [`b770ee6`](https://github.com/NVIDIA/nvalchemi-toolkit/tree/b770ee6963fd2f6137891e408c370012751918e2),
-  current `main` on 2026-07-08.
-- Existing tutorial Toolkit-Ops pin:
-  [`2b7c3c3`](https://github.com/NVIDIA/nvalchemi-toolkit-ops/tree/2b7c3c3adfb1ca84b886eecbf14bc60ff6ba1dc2),
-  reporting version 0.3.1.
-- Current v2 Toolkit-Ops pin:
-  [`c6fbe65`](https://github.com/NVIDIA/nvalchemi-toolkit-ops/tree/c6fbe652315e0cebd4f57a6a25f626258f0dbbfd),
-  `0.4.0-rc` on 2026-07-08.
+This map protects broad ecosystem coverage without making every notebook an API
+catalogue.
 
-Availability labels:
+| Product area | Main public namespace | Role in the playbook |
+|---|---|---|
+| Core data, batching, loading, and persistence | `nvalchemi.data` | Teach directly across the series |
+| Built-in model adapters and composition | `nvalchemi.models` | Teach selected paths; reference the rest |
+| Hooks, reporting, timing, and profiling | `nvalchemi.hooks` | Teach hooks; show diagnostics once |
+| Relaxation, dynamics, inflight work, data sinks, and distributed stage pipelines | `nvalchemi.dynamics` | Teach selected workflows across the series |
+| Spatial and domain decomposition | `nvalchemi.distributed` | Teach the high-level path once; reference lower-level adapters |
+| Training, fine-tuning, validation, and checkpoints | `nvalchemi.training` | Reference, then teach in a training tutorial |
+| Accelerated neighbors and rebuild detection | `nvalchemiops.torch.neighbors`, `nvalchemiops.jax.neighbors` | Teach one framework path; reference variants |
+| Differentiable segmented operations | `nvalchemiops.torch`, `nvalchemiops.jax.segment_ops` | Show one reduction; reference the family |
+| Dispersion and electrostatics kernels | `nvalchemiops.interactions` and framework bindings | Teach when a model or application needs them |
+| Low-level Warp dynamics and optimizers | `nvalchemiops.dynamics` | Reference |
+| GTO, harmonic, and B-spline helpers | `nvalchemiops.math` | Reference |
 
-- **P+T** — present at both the earlier tutorial pin and current v2 pin.
-- **T** — current v2 pin only.
-- **P → T rename** — the capability remains, but its public name changed.
+## Minimum learner outcomes
 
-The release image must still freeze exact passing commits. A symbol being
-present in source does not prove that its model/dependency combination works in
-the workshop image.
+A learner completing the playbook should be able to:
 
-Validation completed for this document:
+1. convert an atomistic structure to `AtomicData`;
+2. assemble and inspect a variable-size `Batch`;
+3. inspect a model adapter's inputs, outputs, precision, and neighbor needs;
+4. run one batched model evaluation and recover per-system results;
+5. attach neighbor, safety, logging, and snapshot hooks;
+6. run batched relaxation or dynamics;
+7. compose independent or dependent model contributions correctly;
+8. connect one external model through Toolkit's public adapter interface;
+9. distinguish ordinary batching, inflight processing, domain decomposition,
+   and distributed stages; and
+10. save results and reload them through the Toolkit data path.
 
-- The canonical imports for the existing Core/Ops pins resolve in the current
-  tutorial virtual environment.
-- The current v2 symbols and public export lists were checked against the
-  exact `b770ee6` / `c6fbe65` source trees.
-- Scientific execution source SHA-256
-  `5403dfcd42bb707e15527a443e76edaec38fe38a8888ab8d527433b1dbf8efc8`
-  was accepted on an H100 in CL job `3087665` with the exact pinned Core/Ops
-  commits. It exercised `AtomicData`, `Batch`, neighbors, AIMNet2 and D3
-  wrappers, a dependent pipeline, segmented reductions, compiled/eager
-  parity, FIRE2, fused NVT→NVE dynamics, hooks, `ZarrData`, and replay. All 31
-  code cells completed without error, all 14 progress cards persisted as
-  `COMPLETE`, and the exact 5,000 + 50,000 stage route passed.
-- The current learner-facing SHA-256
-  `81124de2e95e709a527522d026288a2c98d7e41b90ce7c4dd93e17a557b5a667`
-  is a presentation-only revision apart from one callout-state correction; it
-  has not been rerun on H100.
-- A clean Docker rebuild remains a release-image gate; the H100 run used the
-  pinned CL environment recorded in its manifest.
+## Essential APIs at a glance
 
-## Canonical roster at a glance
+| Capability | Public APIs | Coverage |
+|---|---|---|
+| One system | `AtomicData`, `AtomicData.from_atoms`, `AtomicData.from_structure` | Teach directly |
+| Variable-size batches | `Batch.from_data_list`, `batch_idx`, `batch_ptr`, `num_graphs`, `num_nodes_per_graph` | Teach directly |
+| Recover systems | `get_data`, `to_data_list`, `index_select` | Teach directly |
+| Data loading | `Dataset`, `InMemoryDataset`, `DataLoader` | Show once |
+| Model adapters | `AIMNet2Wrapper`, `MACEWrapper`, `LennardJonesModelWrapper`; `UMAWrapper` in reference | Teach selected wrappers across the playbook |
+| Model loading | wrapper `from_checkpoint(...)` methods | Teach directly |
+| Model configuration | `model_config`, `active_outputs`, `set_config`, `make_neighbor_hooks` | Teach directly |
+| Custom adapters | `BaseModelMixin`, `ModelConfig`, `NeighborConfig`, `NeighborListFormat` | Teach directly once |
+| Core neighbors | `compute_neighbors`, `NeighborListHook` | Teach directly |
+| Ops neighbors | `nvalchemiops.torch.neighbors.neighbor_list` and named algorithms | Part 2 shows the dispatcher once; keep variants in reference |
+| Model composition | additive model `+`, `PipelineModelWrapper`, `PipelineGroup`, `PipelineStep` | Teach directly |
+| Physical contributions | `DFTD3ModelWrapper`, `EwaldModelWrapper`, `PMEModelWrapper` | Teach when scientifically appropriate |
+| Relaxation | `FIRE2`, `ConvergenceHook.from_fmax` | Teach directly |
+| Dynamics | `initialize_velocities`, `NVTLangevin`, `NVE`, `FusedStage`, `stage.run(...)` | Teach directly |
+| Hooks | `FreezeAtomsHook`, `WrapPeriodicHook`, `NaNDetectorHook`, `EnergyDriftMonitorHook`, `LoggingHook`, `SnapshotHook`, `ConvergedSnapshotHook` | Teach selected hooks across the playbook; Part 3 owns snapshot hooks |
+| Reporting and profiling | `StageTimingHook`, `TorchProfilerHook`, `Reporter`, `RichReporter`, `TensorBoardReporter` | Show once or reference |
+| Inflight work | `SizeAwareSampler`, `GPUBuffer`, `HostMemory`, `FusedStage` | Part 1 teaches the queue; Part 3 owns `GPUBuffer` |
+| Distributed stages | `DistributedPipeline`, `BufferConfig` | Show public construction once |
+| Domain parallelism | `DistributedManager.initialize`, manager `rank` / `world_size` / `device`, `manager.initialize_mesh`, `DomainConfig`, optional `SpatialPartitioner` layout preview, `DomainParallel`, `partition`, `run`, `gather`, `DistributedManager.cleanup` | Teach the high-level path once |
+| Domain internals | `DistributedModel`, `DistributedPipelineModel`, `ShardedBatch`, halo and storage helpers | Reference |
+| Saved results | `ZarrData`, `AtomicDataZarrWriter`, `AtomicDataZarrReader` | Part 1 teaches `ZarrData`; Part 3 owns the reader and writer |
+| Segmented reductions | `segmented_sum` | Show once |
+| Training and fine-tuning | `TrainingStrategy`, `TrainingStage`, `FineTuningStrategy`, loss, optimizer, validation, and checkpoint APIs | Reference |
 
-These are the learner-facing essentials. The detailed sections below define
-why, where, and under which version each belongs.
+## Owners for deferred essential APIs
 
-- **Data:** `AtomicData`, `AtomicData.from_atoms`, `Batch`,
-  `Batch.from_data_list`, `batch_idx`, `batch_ptr`, `get_data`,
-  `to_data_list`, `index_select`.
-- **Model contract:** `MACEWrapper`, `AIMNet2Wrapper`,
-  `LennardJonesModelWrapper`, `model_config`, `active_outputs`, `set_config`,
-  `from_checkpoint`, `make_neighbor_hooks`.
-- **Neighbors:** `compute_neighbors`, `NeighborListHook`, and one direct
-  `nvalchemiops.torch.neighbors.neighbor_list` call.
-- **Relaxation/dynamics:** `FIRE2`, `ConvergenceHook.from_fmax`,
-  `initialize_velocities`, `NVTLangevin`, `NVE`, `FusedStage`, `run`.
-- **Hooks:** `FreezeAtomsHook`, `WrapPeriodicHook`, `NaNDetectorHook`,
-  `EnergyDriftMonitorHook`, `LoggingHook`, `SnapshotHook`,
-  `ConvergedSnapshotHook`, `BiasedPotentialHook`, `StageTimingHook`.
-- **Composition:** `DFTD3ModelWrapper`, `EwaldModelWrapper`,
-  `PMEModelWrapper`, `PipelineModelWrapper`, `PipelineGroup`, `PipelineStep`,
-  and additive model `+`.
-- **Persistence/replay:** `ZarrData`, `AtomicDataZarrWriter`,
-  `AtomicDataZarrReader`, `Dataset`, `DataLoader`.
-- **Demonstrate once:** `FIRE2VariableCell`, `NPT`, `SizeAwareSampler`,
-  `GPUBuffer`, `HostMemory`, stress/Hessian/embedding outputs,
-  `segmented_sum`.
-- **Map only:** JAX mirrors, `DistributedPipeline`, training/fine-tuning,
-  `UMAWrapper`, raw Warp/Ops dynamics, multipoles, and compilation tuning.
+Part 1 remains focused on its current seven-stage progression. The following
+APIs belong to later active tutorials. A name appearing in a reference example
+does not make Part 1 the teaching owner.
 
-## The minimum learner contract
+| Essential API | Curriculum owner | Current status | Required learner-facing use |
+|---|---|---|---|
+| `SnapshotHook`, `ConvergedSnapshotHook` | Part 3: OLED melting-point workflow | `SnapshotHook` is present in the current notebook. The Part 3 remaster and validation with the current Toolkit versions are still pending; `ConvergedSnapshotHook` remains planned. | Register the hook visibly, save selected dynamics or completed-system states, and inspect what was written. |
+| `nvalchemiops.torch.neighbors.neighbor_list(...)` | Part 2: batched adsorption | Planned for the Part 2 remaster; not yet learner-ready or validated with the current Toolkit versions. | Call the automatic dispatcher on a materials batch, inspect the returned neighbor representation, and explain why the dispatcher was selected instead of a named low-level algorithm. |
+| `GPUBuffer` | Part 3: OLED melting-point workflow | Planned for the Part 3 remaster; not yet learner-ready or validated with the current Toolkit versions. | Use it in a bounded inflight workflow and compare its device-resident role with `HostMemory` and distributed-stage transfer buffers. |
+| `AtomicDataZarrReader`, `AtomicDataZarrWriter` | Part 3: OLED melting-point workflow | `AtomicDataZarrReader` is already used by a Part 3 helper. A direct writer-and-reader lesson and validation with the current Toolkit versions are still pending. | Write complete systems with stable IDs, reload one system and a batch, and repeat analysis without rerunning the expensive simulation. |
 
-Every learner completing v2 should be able to explain and perform these seven
-operations:
+## 1. Data and batching
 
-1. Convert an ASE structure into `AtomicData` and assemble a heterogeneous
-   `Batch`.
-2. Inspect a model adapter's declared inputs, outputs, and neighbor-list
-   requirements.
-3. Run one real batched model call and one batched relaxation or dynamics stage.
-4. Attach public hooks for neighbors, physical constraints, safety,
-   observability, and snapshots.
-5. Compose independent or dependent physical/model contributions correctly.
-6. Persist results to Zarr/CSV/`.extxyz` and replay them through the data
-   pipeline.
-7. Identify when Core, Toolkit-Ops, or the external model ecosystem is doing
-   the work.
-
-## 1. Data and batching — must teach directly
-
-Canonical imports:
+Core imports:
 
 ```python
 from nvalchemi.data import AtomicData, Batch
 ```
 
-| API | Availability | Learner outcome |
-|---|---|---|
-| `AtomicData.from_atoms(...)` | P+T | Convert an ASE `Atoms` object without handwritten coordinate blocks. |
-| `AtomicData.from_structure(...)` | P+T | Convert a pymatgen structure when that is the natural generated input. |
-| `AtomicData.use_default_masses()` | P+T | Populate masses before velocity initialization or dynamics. |
-| `AtomicData.use_default_velocities()` | P+T | Create an explicit velocity field before initialization. |
-| `AtomicData.use_default_categories()` | P+T | Prepare category-based constraints without private storage edits. |
-| `AtomicData.add_node_property(...)` | P+T | Add per-atom fields such as velocities or categories. |
-| `AtomicData.add_system_property(...)` | P+T | Add graph-level charge, multiplicity, identity, or conditions. |
-| `AtomicData.chemical_hash()` | P+T | Give generated inputs a reproducible identity. |
-| `AtomicData.to(...)` | P+T | Move data explicitly across device/dtype boundaries. |
-| `Batch.from_data_list(...)` | P+T | Combine independent systems into one model call. |
-| `Batch.batch_idx` / `Batch.batch_ptr` | P+T | Understand atom-to-system membership and segment boundaries. |
-| `Batch.num_graphs` / `Batch.num_nodes_per_graph` | P+T | Inspect actual batch shape and heterogeneous system sizes. |
-| `Batch.get_data(i)` / `Batch.to_data_list()` | P+T | Recover inspectable per-system results. |
-| `Batch.index_select(...)` | P+T | Select failed, converged, or scientifically interesting systems. |
+Teach these operations directly:
 
-Fields learners must see at least once:
+| API | Learner outcome |
+|---|---|
+| `AtomicData.from_atoms(...)` | Convert ASE structures without handwritten coordinate blocks. |
+| `AtomicData.from_structure(...)` | Convert pymatgen structures through the public path. |
+| `add_node_property(...)` | Add per-atom values such as masses, velocities, or categories. |
+| `add_system_property(...)` | Add graph-level values such as charge, multiplicity, or stable ID. |
+| `AtomicData.to(...)` | Move data across device or dtype boundaries explicitly. |
+| `data.use_default_masses()`, `data.use_default_categories()` | Add standard atom properties without tutorial-local lookup tables. |
+| `data.use_default_velocities()` | Add zero velocities. This does not sample a thermal distribution; use `initialize_velocities(...)` for temperature-based initialization. |
+| `data.chemical_hash` | Fingerprint atomic numbers, geometry, PBC, and cell for one structure state; it is not stable across relaxation or dynamics. |
+| `Batch.from_data_list(...)` | Combine independent systems in one model call. |
+| `batch_idx` and `batch_ptr` | Map atoms to systems and identify segment boundaries. |
+| `num_graphs` and `num_nodes_per_graph` | Inspect the actual batch shape. |
+| `get_data(i)` and `to_data_list()` | Recover individual systems and outputs. |
+| `index_select(...)` | Select converged, failed, or scientifically interesting systems. |
 
-- `positions`, `atomic_numbers`, `atomic_masses`
-- `cell`, `pbc`
-- `energy`, `forces`, `stress`
-- `charge` and, where relevant, `mult`
-- `velocities`, categories, and a stable `system_id`
+Show important fields when they matter: `positions`, `atomic_numbers`, `cell`,
+`pbc`, `energy`, `forces`, `stress`, `charge`, `mult`, and `velocities`.
+Workflow code may add status, labels, or stable IDs as system properties; do
+not present them as fixed built-in schema fields.
 
-Avoid presenting batching as a detached speed benchmark. The batch dimension
-must correspond to the scientific comparison: structures, conditions,
-restraint windows, temperatures, timesteps, or model replicas.
+Batching must answer a real question. Do not teach it only as a tensor-shape or
+speed exercise.
 
-Homogeneous and heterogeneous workloads use the same public `Batch` API. Teach
-the performance tradeoff with one fixed set of structures evaluated as one
-mixed batch and as size-homogeneous buckets. Report model calls, atoms, valid
-neighbors, allocated neighbor slots, wall time, atoms/s, and structures/s;
-there is no universal fastest layout.
+### Fixed-capacity batch operations in the pinned release
 
-## 2. Model adapter contract — must teach directly
+Core 0.2 exposes `Batch.empty(...)`, `batch.add_key(...)`, `batch.put(...)`,
+`batch.defrag()`, and `batch.zero()` for fixed-capacity active batches. Keep
+these calls in the reference for the pinned build: the current segmented
+`put`/`defrag` path handles float32 fields but can skip required integer fields
+such as `atomic_numbers` and `status`. Do not present that path as a complete
+learner workflow and do not patch around the limitation. Re-evaluate it against
+a later public release before teaching it directly.
 
-Canonical imports:
+## 2. Model adapters and configuration
+
+Selected built-in adapters:
 
 ```python
-from nvalchemi.models import AIMNet2Wrapper, LennardJonesModelWrapper, MACEWrapper
-from nvalchemi.models.base import ModelConfig, NeighborConfig, NeighborListFormat
+from nvalchemi.models import (
+    AIMNet2Wrapper,
+    LennardJonesModelWrapper,
+    MACEWrapper,
+)
 ```
 
-| API | Availability | Learner outcome |
-|---|---|---|
-| `MACEWrapper.from_checkpoint(...)` | P+T | Load a materials/surface model through a public Toolkit adapter. |
-| `AIMNet2Wrapper.from_checkpoint(...)` | P+T | Load a molecular, charged, or spin-aware model through the same contract. |
-| `LennardJonesModelWrapper(...)` | P+T | Use a transparent analytical model for composition and dynamics validation. |
-| `model.model_config` | P+T | Inspect declared outputs, required inputs, PBC support, and neighbors. |
-| `model.model_config.active_outputs` | P+T | Request only the properties required by the calculation. |
-| `model.set_config("active_outputs", {...})` | P+T | Change energy/force/stress/Hessian selection explicitly. |
-| `model.make_neighbor_hooks()` | P+T | Let an adapter or composed pipeline provide its compatible neighbor hooks. |
-| `model.compute_embeddings(...)` | P+T | Inspect learned representations as an optional interpretability exercise. |
-| `model.embedding_shapes` | P+T | Discover embedding layout before allocating downstream analysis. |
+Load supported published checkpoints through the wrapper's public constructor,
+for example `AIMNet2Wrapper.from_checkpoint(...)` or
+`MACEWrapper.from_checkpoint(...)`, rather than rebuilding a wrapper around a
+private model object.
 
-The notebook must show, not hide:
+For adapters around third-party learned models, Toolkit owns the wrapper API.
+The model implementation, checkpoint, training data, and their license terms
+come from the external model project. Present those sources separately.
 
-- checkpoint name, exact revision, hash, license, device, and dtype;
-- `outputs`, `active_outputs`, `required_inputs`, `optional_inputs`;
-- neighbor cutoff, matrix/COO format, half/full-list convention;
-- the model's applicability domain and unsupported chemistry.
+The learner should inspect rather than assume:
 
-MACE exposes `energy`, `forces`, `stress`, and `hessian` through the current
-wrapper. AIMNet2 exposes `energy`, `forces`, `stress`, predicted `charges`, and
-`spin_charges` for NSE checkpoints. Those are model capabilities, not a license
-to make claims outside the checkpoint's training domain.
+- `model.model_config`;
+- available and active outputs;
+- required and optional inputs;
+- precision and device;
+- cutoff, neighbor format, and half-list or full-list convention;
+- charge, spin, cell, and periodic support.
 
-Use the exact output keys above: singular `stress` and `hessian`, plural
-`forces`, `charges`, and `spin_charges`. AIMNet2-NSE consumes the system field
-`mult` for multiplicity; do not invent a `spin` input.
+Use `set_config("active_outputs", {...})` to request only the values required by
+the calculation. Use `make_neighbor_hooks()` for iterative workflows when the
+adapter or composed model should supply its compatible neighbor hooks.
 
-## 3. Neighbor lists — must teach Core; show Ops once
+A custom adapter lesson should expose:
 
-For a one-shot model evaluation:
+```python
+from nvalchemi.models.base import (
+    BaseModelMixin,
+    ModelConfig,
+    NeighborConfig,
+    NeighborListFormat,
+)
+```
+
+The adapter must declare its capabilities, translate Toolkit inputs, make one
+native model call, and map supported outputs back to Toolkit names. Compare its
+energy and forces with the native model before using it downstream.
+
+A concrete `BaseModelMixin` subclass provides `model_config`,
+`embedding_shapes`, and `compute_embeddings(...)`. An external adapter normally
+implements `adapt_input(...)` and `adapt_output(...)` for its data mapping. Use
+`direct_derivative_keys()` only when the model itself returns analytical forces
+or stress inside an autograd composition group.
+
+## 3. Neighbor lists
+
+### Core workflow
+
+Use the Core dispatcher for a one-shot evaluation:
 
 ```python
 from nvalchemi.neighbors import compute_neighbors
@@ -199,40 +203,94 @@ from nvalchemi.neighbors import compute_neighbors
 compute_neighbors(batch, config=model.model_config.neighbor_config)
 ```
 
-For iterative relaxation or dynamics, prefer the model-generated hooks:
+Use model-provided or explicit hooks for relaxation and dynamics:
 
 ```python
 for hook in model.make_neighbor_hooks():
     dynamics.register_hook(hook)
 ```
 
-The explicit Core hook remains important when teaching the mechanism:
-
 ```python
 from nvalchemi.hooks import NeighborListHook
 ```
 
-One short Toolkit-Ops cell should expose the accelerated primitive:
+### Toolkit-Ops variants
+
+The ordinary learner path should use the high-level dispatcher:
 
 ```python
 from nvalchemiops.torch.neighbors import neighbor_list
 ```
 
-Teach these arguments and outputs:
+Keep the complete variant map in this reference:
 
-- `positions`, `cutoff`, `cell`, `pbc`
-- `batch_idx`, `batch_ptr`
-- matrix output versus COO with `return_neighbor_list=True`
-- periodic shifts and fill values
-- automatic method selection versus an explicitly requested method
+| Workload | Public Toolkit-Ops API | Main distinction |
+|---|---|---|
+| Automatic selection | `neighbor_list(...)` | Selects a supported implementation from geometry and options. |
+| One-system naive | `naive_neighbor_list(...)` | Direct all-pairs search. |
+| Batched naive | `batch_naive_neighbor_list(...)` | Independent contiguous systems with batch metadata. |
+| One-system cell list | `cell_list(...)` | Spatial binning for larger systems. |
+| Batched cell list | `batch_cell_list(...)` | Cell-list search across independent systems. |
+| One-system cluster tile | `cluster_tile_neighbor_list(...)` | CUDA-oriented tiled search with stricter layout and option requirements. |
+| Batched cluster tile | `batch_cluster_tile_neighbor_list(...)` | Tiled search for contiguous batched systems. |
+| One-system dual cutoff | `naive_neighbor_list_dual_cutoff(...)` | Produces naive lists at two cutoffs. |
+| Batched dual cutoff | `batch_naive_neighbor_list_dual_cutoff(...)` | Batched two-cutoff naive search. |
+| Method planning | `suggest_neighbor_list_method(...)`, `estimate_neighbor_list_costs(...)` | Explains or estimates dispatcher choices. |
+| Capacity estimation | `estimate_cell_list_sizes(...)`, `estimate_batch_cell_list_sizes(...)` | Estimates fixed capacities for cell-list execution. |
+| Rebuild detection | `neighbor_list_needs_rebuild(...)`, `batch_neighbor_list_needs_rebuild(...)`, `cell_list_needs_rebuild(...)`, `batch_cell_list_needs_rebuild(...)` | Checks whether moved atoms require neighbor reconstruction. |
+| Inline pair function | `CompiledPairFn`, `compile_pair_fn(...)` | Compiles a Warp pair function for fixed-shape pair energy or force evaluation during neighbor enumeration; these pair outputs are forward-only. |
 
-Do not make learners choose low-level naive, cell-list, or cluster-tile kernels
-in the main path. That is an implementation/performance topic, not the normal
-workflow contract.
+Teach these inputs and outputs once: positions, cell, PBC, cutoff, batch
+metadata, matrix versus COO output, periodic shifts, fill values, and the
+dispatcher options `target_indices`, `return_distances`, `return_vectors`,
+`rebuild_flags`, and `pair_fn` when they are relevant.
 
-## 4. Relaxation and dynamics — must teach directly
+The rebuild checks are available from
+`nvalchemiops.torch.neighbors.rebuild_detection`. Keep them in the reference
+unless an iterative workflow needs to explain when neighbor data is reused.
 
-Canonical imports:
+Do not imply that one algorithm is universally fastest. Compare methods only
+with equal geometry, cutoff, output format, precision, and requested work.
+
+## 4. Model composition
+
+Selected public APIs:
+
+```python
+from nvalchemi.models import (
+    DFTD3ModelWrapper,
+    EwaldModelWrapper,
+    PMEModelWrapper,
+    PipelineGroup,
+    PipelineModelWrapper,
+    PipelineStep,
+)
+```
+
+Teach two distinct patterns:
+
+```python
+combined = short_range_model + independent_contribution
+```
+
+```python
+pipeline = PipelineModelWrapper(
+    groups=[PipelineGroup(steps=[producer, consumer], use_autograd=True)]
+)
+```
+
+The first adds independent contributions. In the second,
+`PipelineStep(..., wire=...)` and step order describe data dependencies.
+`PipelineGroup(..., use_autograd=True)` sums the group energies and derives
+forces or stress from that sum.
+
+Show `PipelineStep(..., wire=...)` only when source and destination keys differ.
+Introduce `neighbor_adaptation` only after learners understand why composed
+models may require different cutoffs or neighbor formats.
+
+## 5. Relaxation, dynamics, and hooks
+
+Core workflow APIs:
 
 ```python
 from nvalchemi.dynamics import (
@@ -245,153 +303,176 @@ from nvalchemi.dynamics import (
 )
 ```
 
-| API | Availability | Required use |
-|---|---|---|
-| `FIRE2(...)` | P+T | Live batched geometry relaxation. |
-| `ConvergenceHook.from_fmax(...)` | P+T | Per-system force convergence with explicit status transitions. |
-| `BaseDynamics.register_hook(...)` | P+T | Attach behavior without wrapping the engine in tutorial-specific code. |
-| `BaseDynamics.run(...)` | P+T | Execute a bounded, visible stage. |
-| `initialize_velocities(...)` | P+T | Reproducible, mass-aware velocity initialization. |
-| `NVTLangevin(...)` | P+T | Short controlled-temperature dynamics. |
-| `NVE(...)` | P+T | Energy-conservation and timestep validation. |
-| `stage_a + stage_b` / `FusedStage` | P+T | Compose multi-stage workflows with per-system progression. |
-| per-graph temperature/timestep/conditions | P+T | Make the batch answer a scientific or numerical question. |
+Teach:
 
-The core notebook should execute relaxation followed by at least one live MD
-stage. If NVE is measured, force clamping must be disabled because it destroys
-the conservation test.
+- live batched `FIRE2` relaxation;
+- per-system convergence through `ConvergenceHook.from_fmax(...)`;
+- mass-aware, seeded velocity initialization;
+- at least one controlled-temperature stage and one conservation-oriented
+  stage when the science requires both;
+- `FusedStage` as compatible dynamics methods sharing one active `Batch` and
+  one model evaluation per step, with each system's status selecting its
+  current method;
+- hook registration through the public dynamics interface.
 
-`initialize_velocities(...)` receives velocity, mass, temperature, and batch
-metadata tensors; it does not receive a `Batch` as one opaque argument. Show
-that data flow once rather than hiding it in a helper.
+`FusedStage` takes the shared model from its first sub-stage. The `+` operator
+does not switch models; fused sub-stages must be intended to use the same model
+and device path.
 
-## 5. Hooks, safety, and observability — must teach directly
-
-Shared hooks:
+Important hooks include:
 
 ```python
-from nvalchemi.hooks import (
-    BiasedPotentialHook,
-    DynamicsContext,
-    Hook,
-    NeighborListHook,
-    WrapPeriodicHook,
-)
-```
-
-Dynamics hooks:
-
-```python
+from nvalchemi.hooks import BiasedPotentialHook, Hook, NeighborListHook, WrapPeriodicHook
 from nvalchemi.dynamics.hooks import (
     ConvergedSnapshotHook,
     EnergyDriftMonitorHook,
     FreezeAtomsHook,
     LoggingHook,
-    MaxForceClampHook,
     NaNDetectorHook,
     SnapshotHook,
 )
 ```
 
-| API | Availability | Curriculum role |
-|---|---|---|
-| `NeighborListHook` | P+T | Rebuild/update model inputs before compute. |
-| `FreezeAtomsHook` | P+T | Enforce a physically stated frozen-region constraint. |
-| `WrapPeriodicHook` | P+T | Keep periodic trajectories consistent. |
-| `NaNDetectorHook` | P+T | Fail visibly on numerical corruption. |
-| `MaxForceClampHook` | P+T | Defensive/recovery mode only; never silently alter the headline result. |
-| `EnergyDriftMonitorHook` | P+T | Quantify NVE integration quality. |
-| `LoggingHook` | P+T | Produce inspectable per-system CSV observables. |
-| `SnapshotHook` | P+T | Save full trajectories or periodic checkpoints. |
-| `ConvergedSnapshotHook` | P+T | Save systems as they leave an inflight workflow. |
-| `BiasedPotentialHook` | P+T | Add one readable restraint or collective-variable bias. |
-| `Hook` + `DynamicsContext` | P+T | Define one small structural hook protocol implementation without subclassing dynamics. |
-
-Profiling migration:
+Use these public APIs when teaching a custom hook, reporting, or profiling:
 
 ```python
-# Existing tutorial pin only
-from nvalchemi.dynamics.hooks import ProfilerHook
-
-# Current v2 pin
-from nvalchemi.dynamics.hooks import StageTimingHook, TorchProfilerHook
-```
-
-`ProfilerHook` is a **P → T rename/split**. V2 should use
-`StageTimingHook` for readable per-stage timing and reserve
-`TorchProfilerHook` for trace capture. Do not add a compatibility alias to the
-learner-facing notebook.
-
-The current v2 pin declares `nvidia-physicsnemo>=2.0.0` and imports
-`TorchProfilerHook` through the public hooks package. The pinned H100
-environment resolves that dependency. A clean release-image import smoke is
-still required; source presence alone is insufficient.
-
-`run()` automatically enters and exits registered context-manager hooks, so a
-registered `LoggingHook` is flushed and closed even if the loop raises. Use an
-explicit `with LoggingHook(...)` only around a manual `step()` loop; wrapping a
-hook that is also registered with `run()` would enter it twice.
-
-## 6. Model composition — must teach directly in Part 1
-
-Canonical imports:
-
-```python
-from nvalchemi.models import (
-    DFTD3ModelWrapper,
-    EwaldModelWrapper,
-    PipelineGroup,
-    PipelineModelWrapper,
-    PipelineStep,
-    PMEModelWrapper,
+from nvalchemi.hooks import (
+    DynamicsContext,
+    Hook,
+    Reporter,
+    RichReporter,
+    StageTimingHook,
+    TensorBoardReporter,
+    TorchProfilerHook,
 )
 ```
 
-Two distinct patterns must be named correctly:
+Show the reporting and profiling APIs once in a diagnostics or performance
+lesson rather than requiring them in every dynamics example.
 
-1. Independent additive contributions:
+Use hooks to teach one responsibility at a time: neighbors, constraints,
+periodic wrapping, failure detection, conservation checks, logging, or saved
+states. Do not hide the registration point.
 
-   ```python
-   combined = short_range_model + dispersion_model
-   ```
+## 6. Inflight and distributed execution
 
-2. Dependent wiring, such as predicted charges feeding electrostatics:
+Inflight APIs:
 
-   ```python
-   pipeline = PipelineModelWrapper(
-       groups=[
-           PipelineGroup(
-               steps=[aimnet2, coulomb],
-               use_autograd=True,
-           )
-       ]
-   )
-   ```
+```python
+from nvalchemi.dynamics import GPUBuffer, HostMemory, SizeAwareSampler
+```
 
-Part 1 uses a focused tutorial `DirectCoulombWrapper` because the public Core
-pin exposes periodic Ewald/PME wrappers but not AIMNet's finite-molecule
-`simple` all-pairs convention. The wrapper implementation stays in `aux`; its
-construction, `charges` dependency, `PipelineGroup(use_autograd=True)`, and
-official-calculator parity remain visible. Use
-`PipelineStep(model, wire={"output": "required_input"})` only when source and
-destination keys genuinely differ.
+`SizeAwareSampler` builds and refills active batches within graph, atom, and
+edge limits. Learners should track stable IDs as systems converge, leave the
+active batch, and are replaced.
 
-Learners should understand:
+Distributed APIs:
 
-- why dependent charge wiring is different from adding fixed-energy terms;
-- how `PipelineGroup(use_autograd=True)` preserves derivative paths;
-- why each component may require a different neighbor format/cutoff;
-- why D3 parameters must match the reference functional;
-- why adding D3 to a checkpoint whose reference already contains nonlocal
-  dispersion is double counting;
-- when Ewald/PME periodic-image and net-charge conventions affect the claim;
-- `EwaldModelWrapper.invalidate_cache()` and
-  `PMEModelWrapper.invalidate_cache()` as explicit cache-reset APIs when cell
-  state changes outside normal automatic detection.
+```python
+from nvalchemi.dynamics import DistributedPipeline
+from nvalchemi.dynamics.base import BufferConfig
+```
 
-## 7. Artifacts and replay — must teach directly
+Keep the distinction explicit:
 
-Dataset imports:
+- `FusedStage` shares a batch and model evaluation across compatible methods;
+  systems select their current method through status and may advance at
+  different times;
+- `stage_a | stage_b` creates distributed stages with data transfer between
+  workers;
+- `GPUBuffer` and `HostMemory` collect results; they are not the communication
+  buffers between distributed stages.
+
+Teach the public construction with a small example. Scaling claims require a
+separate equal-work benchmark that includes setup, fill, drain, and collection.
+
+For the classic stage pipeline, teach these behaviors explicitly:
+
+- each dynamics stage runs on one rank;
+- the launch world size matches the stage count;
+- converged systems move between adjacent stages;
+- `pipeline.run()` takes no input batch;
+- the normal sequence is construct the stages, enter the context, call
+  `pipeline.run()`, and close; it has no `partition` or `gather` call;
+- `BufferConfig` configures communicating stages;
+- `synchronized=True` is a pipeline option that adds a per-step barrier for
+  debugging; and
+- each communicating dynamics stage sets its own `comm_mode`: `sync`,
+  `async_recv`, or `fully_async`. The Toolkit 0.2 default is `async_recv`; do not
+  pass `comm_mode` to `DistributedPipeline`.
+
+This is pipeline parallelism. It does not automatically split one model
+evaluation across GPUs.
+
+Do not confuse a distributed stage pipeline with domain parallelism. `DistributedPipeline`
+moves independent batches through workflow stages. `DomainParallel` partitions
+one large periodic system across devices.
+
+Teach the high-level domain path once:
+
+```python
+from nvalchemi.distributed import DistributedManager, DomainConfig, DomainParallel
+
+DistributedManager.initialize()
+manager = DistributedManager()
+mesh = manager.initialize_mesh(
+    mesh_shape=(manager.world_size,),
+    mesh_dim_names=("domain",),
+)
+full_batch = build_batch(manager.device) if manager.rank == 0 else None
+
+config = DomainConfig(cutoff=cutoff, skin=skin, mesh=mesh)
+with DomainParallel(dynamics=inner, config=config, n_steps=n_steps) as run:
+    local_batch = run.partition(full_batch)
+    local_batch = run.run(local_batch)
+    total_energy = local_batch.energy.detach().clone()
+    full_result = run.gather(local_batch, dst=0)
+
+DistributedManager.cleanup()
+```
+
+`DomainParallel` selects the distributed model adapter, spatial partitioner,
+sharded storage, halo exchange, and output consolidation needed by supported
+built-in wrappers. Learners should not reproduce that work with a custom
+distributed loop. A world size of one follows the same high-level calls but
+does not partition the system. In Toolkit 0.2, total energy is globally
+reduced and remains on each local result; `gather` reconstructs atom fields,
+including forces, on the destination rank. The Stage 7 example is neutral
+because the input system charge is not copied into each GPU region. Charged
+periodic systems need explicit supported charge handling.
+
+`DomainConfig.grid_dims` is a spatial cell-grid override, not a rank layout.
+Leave it as `None` to let the public `SpatialPartitioner` derive
+`cells_per_dim` and `rank_grid` from the cell, cutoff, and rank count.
+
+For a composed AIMNet2 checkpoint base, periodic PME, and D3 calculation in the
+Toolkit 0.2 source used by the lesson:
+
+- put AIMNet2 and PME in one two-step `PipelineGroup` with
+  `use_autograd=True`;
+- put D3 in a separate direct-force group;
+- keep the same compile setting across the one- and multi-GPU checks; the
+  current lesson uses `compile=False`;
+- pass the PME mesh dimensions returned for the requested accuracy,
+  real-space cutoff, safety factor, and cell, then record the dimensions and
+  resulting spacing;
+- use separate, right-sized neighbor lists when component cutoffs differ
+  substantially;
+- use the maximum component cutoff for `DomainConfig`;
+- add the Toolkit-tested D3 coordination-number margin to the halo, then
+  accept it only after the force-parity checks pass;
+- verify one- versus multi-GPU energy and force agreement on a smaller system;
+- record natural out-of-memory failures without manufacturing them; and
+- state that the Toolkit 0.2 version used here replicates the full charge mesh
+  and FFT work on each rank.
+
+Core 0.2 can also combine pipeline and domain dimensions with a two-dimensional
+device mesh. Keep that combined layout in the reference unless a later lesson
+needs both forms of parallelism at once.
+
+## 7. Saved results and replay
+
+Teach at least one Toolkit-native save and reload path:
 
 ```python
 from nvalchemi.data import (
@@ -399,324 +480,123 @@ from nvalchemi.data import (
     AtomicDataZarrWriter,
     DataLoader,
     Dataset,
+    InMemoryDataset,
 )
 from nvalchemi.dynamics import ZarrData
 ```
 
-| API | Availability | Learner outcome |
-|---|---|---|
-| `AtomicDataZarrWriter` | P+T | Persist `AtomicData`/`Batch` datasets outside a running dynamics stage. |
-| `AtomicDataZarrReader` | P+T | Read structured samples and metadata back. |
-| `Dataset` | P+T | Convert stored tensors back into `AtomicData` with device handling. |
-| `DataLoader` | P+T | Collate replayed structures into batches. |
-| `ZarrData` | P+T | Use a dynamics `DataSink` for snapshots and stage output. |
+The learner should be able to:
 
-Every headline result must carry:
+- save complete per-system outputs with stable IDs;
+- reload one system and a batch;
+- rerun analysis without repeating the expensive calculation;
+- connect saved data to `Dataset`, `InMemoryDataset`, and `DataLoader` where
+  appropriate.
 
-- exact input and final structures;
-- full short trajectory where dynamics are involved;
-- CSV observables and failure/status fields;
-- checkpoint and package revisions;
-- deterministic seed and calculation settings;
-- a manifest linking summary rows to `.extxyz`, Zarr, and plots.
+Also save ordinary inspectable outputs such as CSV tables and `.extxyz`
+structures when they are the most useful interchange formats.
 
-Cache is a classroom recovery path, not the unannounced source of the result.
+## 8. One direct Toolkit-Ops reduction
 
-## APIs to demonstrate once
-
-These matter to the ecosystem but should not all become core exercises.
-
-### Variable-cell and extended ensembles
-
-```python
-from nvalchemi.dynamics import (
-    FIRE2VariableCell,
-    NPH,
-    NPT,
-    NVTNoseHoover,
-)
-from nvalchemi.dynamics.hooks import AlignCellHook
-```
-
-- Use `FIRE2VariableCell` for a bounded 0 K energy/stress problem.
-- Use `NPT` only for a short barostat-response demonstration unless sampling is
-  long enough to support a thermodynamic claim.
-- Keep `NPH` and `NVTNoseHoover` as discoverable alternatives unless the chosen
-  science requires them.
-
-### Inflight processing and sinks
-
-```python
-from nvalchemi.dynamics import GPUBuffer, HostMemory, SizeAwareSampler
-```
-
-- `SizeAwareSampler.build_initial_batch()` and replacement requests explain how
-  large campaigns keep a bounded live batch.
-- `GPUBuffer` illustrates device-resident stage handoff.
-- `HostMemory` is a simple result sink, not a trajectory-file format.
-- Inflight behavior must preserve stable `system_id` values through refill and
-  sink round trips before it is used in the core tutorial.
-
-### Additional model outputs
-
-- `MACEWrapper` Hessians for a small vibrational example.
-- `compute_embeddings()` for a representation/disagreement atlas.
-- stress output for equation-of-state or variable-cell work.
-- AIMNet2 `charges`/`spin_charges` for scientifically matched checkpoints.
-
-### Pipeline neighbor adaptation — current v2 pin
-
-```python
-PipelineModelWrapper(
-    groups=...,
-    neighbor_adaptation="auto",  # or "always" / "never"
-    max_cutoff_ratio=1.5,
-)
-```
-
-This **T** policy controls whether composed models share and filter a larger
-source neighbor list or build exact lists for different cutoffs/formats. Show
-it once in an advanced lesson; do not expose private pipeline internals.
-
-### One direct Toolkit-Ops reduction
+Show the common batched reduction explicitly:
 
 ```python
 from nvalchemiops.torch import segmented_sum
 ```
 
-Use one transparent example to reduce per-atom values to per-system values.
-This explains a recurring batched primitive without turning the tutorial into a
-kernel course.
+Use it to reduce per-atom values to one value per system. Mention, but do not
+teach in the main path, the related public operations:
 
-The exact pin also exports `segmented_sum` from
-`nvalchemiops.torch.segment_ops`; both paths are public. The shorter top-level
-path matches the learner notebook.
+- `segmented_dot`
+- `segmented_matvec`
+- `segmented_mean`
+- `segmented_mul`
+- `segmented_rms_norm`
 
-## Toolkit-Ops reference surface
+For the pinned PyTorch API, `idx` is a one-dimensional `int32` segment map. The
+bindings cover scalar, 3-vector, and, where the operation requires it, 3-by-3
+matrix data. They support first- and second-order PyTorch gradients and work
+with `torch.compile`.
 
-The main workflow should normally use Core wrappers. This section identifies
-the important accelerated primitives underneath them.
+## 9. Reference-only capabilities
 
-### Neighbors
+Keep these discoverable without crowding the core tutorials:
+
+- JAX mirrors of neighbors, dispersion, electrostatics, and segmented
+  operations;
+- `UMAWrapper` and model-specific construction or secondary outputs;
+- additional ensembles and variable-cell dynamics;
+- reporting and profiling through `StageTimingHook`, `TorchProfilerHook`, and
+  the `Reporter` implementations;
+- low-level Ewald, PME, DSF, multipole, and slab-correction kernels;
+- raw Warp integrators and custom dynamics implementations;
+- compilation tuning, CUDA graphs, and detailed profiler integration;
+- lower-level domain adapters and two-dimensional pipeline/domain meshes; and
+- training and fine-tuning APIs.
+
+### Domain parallelism
 
 ```python
-from nvalchemiops.torch.neighbors import (
-    estimate_neighbor_list_costs,
-    neighbor_list,
-    suggest_neighbor_list_method,
+from nvalchemi.distributed import (
+    DomainConfig,
+    DomainParallel,
+    DistributedModel,
+    DistributedPipelineModel,
+    ShardedBatch,
+    SpatialPartitioner,
 )
 ```
 
-Explicit `naive_neighbor_list`, `cell_list`, `cluster_tile_neighbor_list`, and
-their `batch_*` variants are appendix material.
+`DomainConfig` and `DomainParallel` are taught through the public Part 1 call
+sequence. `SpatialPartitioner` appears only as an optional read-only layout
+preview. `DistributedModel`, `DistributedPipelineModel`, and `ShardedBatch`
+remain reference material for custom distributed model work. They are distinct
+from `nvalchemi.dynamics.DistributedPipeline`, which streams work through
+stages.
 
-### Dispersion
-
-```python
-from nvalchemiops.torch.interactions.dispersion import D3Parameters, dftd3
-```
-
-The public Core `DFTD3ModelWrapper` belongs in the learner workflow; the Ops
-call is useful for explaining what is accelerated and for validation.
-
-### Electrostatics
+### Training and fine-tuning
 
 ```python
-from nvalchemiops.torch.interactions.electrostatics import (
-    EwaldParameters,
-    PMEParameters,
-    compute_slab_correction,
-    dsf_coulomb,
-    estimate_ewald_parameters,
-    estimate_pme_parameters,
-    ewald_summation,
-    particle_mesh_ewald,
+from nvalchemi.training import (
+    CheckpointHook,
+    ComposedLossFunction,
+    FineTuningStrategy,
+    OptimizerConfig,
+    TrainingStage,
+    TrainingStrategy,
+    ValidationLoop,
+    load_checkpoint,
+    save_checkpoint,
 )
 ```
 
-- Ewald is the transparent small-periodic-system validation path.
-- PME is the scalable periodic path.
-- DSF is a finite-cutoff alternative, not a drop-in replacement for every
-  checkpoint's trained long-range convention.
-- Slab correction is conditional on a two-dimensional periodic problem.
-- Low-level real/reciprocal helpers, k-vector builders, PME mesh internals, and
-  multipole APIs belong in reference material.
+The product map should name this capability group even when the current
+workshop focuses on inference and simulation. Teach it in a separate training
+tutorial rather than reducing it to one unexplained call.
 
-### Segmented operations
+Move one of these into a tutorial when it serves a stated product-learning
+outcome and can be checked on the intended runtime.
 
-```python
-from nvalchemiops.torch.segment_ops import (
-    segmented_dot,
-    segmented_matvec,
-    segmented_mean,
-    segmented_mul,
-    segmented_rms_norm,
-    segmented_sum,
-)
-```
+## API rules for tutorial authors
 
-Only `segmented_sum` needs a learner-facing example. The rest should be named
-as differentiable building blocks. Do not list a `segmented_max_norm`; it is
-not exported by the audited Torch or JAX public modules.
+- Use public Core APIs for the main workflow and direct Toolkit-Ops calls only
+  when they teach an accelerated primitive.
+- Do not import private modules or inspect underscore-prefixed fields.
+- Do not present tutorial-local classes as Toolkit APIs.
+- Do not use compatibility shims or runtime patches to make removed names look
+  current.
+- Do not replace an intended Toolkit pipeline with an ad-hoc multiprocessing or
+  distributed loop.
+- Use the framework namespace, such as `nvalchemiops.torch.*` or
+  `nvalchemiops.jax.*`.
+- Keep model outputs singular or plural exactly as declared by the API.
+- Verify every learner-facing import and example in the pinned clean image.
 
-## Ecosystem map — mention, do not teach in the core
-
-### JAX parity
-
-The principal Ops imports have JAX mirrors:
-
-```python
-from nvalchemiops.jax.neighbors import neighbor_list
-from nvalchemiops.jax.interactions.dispersion import D3Parameters, dftd3
-from nvalchemiops.jax.interactions.electrostatics import (
-    ewald_summation,
-    particle_mesh_ewald,
-)
-from nvalchemiops.jax.segment_ops import segmented_sum
-```
-
-Keep JAX in a portability appendix. The workshop core should use one framework
-and one environment. JAX compilation requires static shape controls and
-`block_until_ready()` for honest timing.
-
-### Distributed execution
-
-```python
-from nvalchemi.dynamics import DistributedPipeline
-```
-
-The `stage_a | stage_b` operator, fixed communication buffers, `torchrun`, and
-multi-rank sinks are ecosystem capabilities, not single-GPU workshop
-requirements.
-
-### Training and fine-tuning — target only
-
-Current Toolkit main adds `nvalchemi.training`, including:
-
-- `TrainingStrategy`, `TrainingStage`, and `FineTuningStrategy`
-- `ComposedLossFunction` and energy/force/stress loss terms
-- `OptimizerConfig`
-- `CheckpointHook`, `DDPHook`, `EMAHook`, and `MixedPrecisionHook`
-- checkpoint save/load/validation and training CLI surfaces
-
-It also adds `InMemoryDataset`, multi-dataset/sampler features, reporting, and
-`UMAWrapper`. These are **T** capabilities. Mention them on the ecosystem map,
-but do not make the core tutorial depend on them until the release API,
-environment, model access, and license story are stable.
-
-### Raw Toolkit-Ops dynamics and kernels
-
-Raw Warp integrators, FIRE/FIRE2 step functions, explicit neighbor algorithms,
-PME internals, multipole kernels, and custom `BaseDynamics` implementations are
-developer/reference material. Learners should use Core dynamics classes and
-hooks.
-
-### Compilation
-
-`torch.compile`, JAX `jit`, cuEquivariance tuning, and CUDA graph capture are
-performance extensions. They are not required for the scientific result, and
-cold compilation time must be reported separately from warm execution.
-
-## Public APIs to avoid hiding or misnaming
-
-The v2 notebooks should remove these sources of confusion:
-
-- Do not present local `ToolkitRelaxationConfig`,
-  `get_toolkit_relaxation_engine`, `RelaxationEngine`, `.relax()`, or
-  `.async_relax()` as Toolkit APIs. They are tutorial helpers.
-- Do not import from private modules containing a leading underscore, including
-  `nvalchemi.dynamics._ops.*`, `nvalchemi._typing`, or private hook utilities.
-- Do not inspect private attributes such as `pipeline._models`, batch storage
-  groups, or underscore-prefixed neighbor state.
-- Do not retain the current Part 2 monkey-patch of neighbor-list behavior.
-- Do not teach deprecated `nvalchemiops.neighborlist` or unqualified
-  `nvalchemiops.neighbors` imports. Use the framework namespace:
-  `nvalchemiops.torch.*` or `nvalchemiops.jax.*`.
-- Do not invoke raw Warp kernels when a public Core wrapper answers the learner
-  question.
-- Do not use a compatibility shim to make a removed name appear current. Show
-  the chosen release API directly.
-- Do not use additive `model_a + model_b` when a predicted intermediate such as
-  charge must remain on the autograd path; use an explicit dependent pipeline.
-
-## Current notebook coverage
-
-### Part 1 — water interactions to predicted-charge IR
-
-Must expose:
-
-- `AtomicData.from_atoms`, `AtomicData.add_node_property`,
-  `AtomicData.add_system_property`, `Batch.from_data_list`, `get_data`,
-  `to_data_list`, `index_select`, and batch metadata;
-- `AIMNet2Wrapper`, `DFTD3ModelWrapper`, `model_config`, `active_outputs`,
-  `set_config`, and explicit checkpoint/D3 hashes;
-- `compute_neighbors` for one-shot inference and `make_neighbor_hooks()` for
-  relaxation and dynamics;
-- `PipelineGroup(use_autograd=True)`, the resulting `PipelineStep` objects,
-  `PipelineModelWrapper`, and `neighbor_adaptation="always"` for predicted
-  charges → finite Coulomb, followed by pairwise D3;
-- `FIRE2`, `ConvergenceHook.from_fmax`, `initialize_velocities`,
-  `NVTLangevin`, `NVE`, and `FusedStage`;
-- public hook registration, `NaNDetectorHook`, `LoggingHook`, one tutorial
-  recorder that structurally implements `Hook` and receives
-  `DynamicsContext`, and `segmented_sum`; the compact recorder implementation
-  stays in `aux`, while its registration and data path remain visible;
-- `ZarrData.zero`, `ZarrData.write`, `ZarrData.read`, raw trajectory
-  persistence, replay, per-system extraction, and a checksummed manifest.
-
-Optional extension:
-
-- `SizeAwareSampler` for a larger molecular campaign;
-- a VDOS contrast cell to separate density of states from IR activity;
-- stress/variable-cell relaxation only in a different, scientifically matched
-  model lesson.
-
-### Part 2 — live Toolkit laboratory
-
-Regardless of the final scientific system, it should add:
-
-- a different model/physical wrapper or explicit model composition
-- `PipelineModelWrapper` for dependent wiring when appropriate
-- `initialize_velocities`, NVT and/or NVE, and `FusedStage`
-- `EnergyDriftMonitorHook`, a custom diagnostic or `BiasedPotentialHook`
-- `ZarrData`, reader/dataset/dataloader replay
-- one direct `nvalchemiops.torch` cell
-- a bounded live result whose scientific route is not shortened implicitly
-
-If the ionic-crystal concept is chosen, Part 2 should additionally show
-`LennardJonesModelWrapper + EwaldModelWrapper`, variable-cell relaxation, and
-Ewald/PME validation. If the coherent-vibration concept is chosen, it should
-show MACE Hessians, NVE, mode projection, and timestep/energy-drift comparison.
-
-## Release acceptance checklist
-
-Before calling this API curriculum implemented:
-
-- [ ] Every learner-facing import resolves in the clean release image.
-- [x] The current v2 H100 environment imports its declared PhysicsNeMo
-      dependency and exact Toolkit pins.
-- [x] No Part 1 notebook import uses a private `_` module.
-- [x] The Core/Toolkit-Ops pair passes the model, composition, dynamics, and
-      Zarr smoke matrix.
-- [x] Every Part 1 `active_outputs` choice matches the downstream stage.
-- [x] Every Part 1 model supplies its required neighbor list automatically or through
-      a visible public hook.
-- [x] Predicted-charge electrostatics preserves the full force derivative path.
-- [x] D3 functional parameters and long-range conventions match the checkpoint.
-- [x] NVE validation runs without force clamping.
-- [x] Cold load/compile and warm compute are timed separately with device
-      synchronization.
-- [ ] Failed/OOM systems retain status, error, and partial artifacts.
-- [x] All used model/reference revisions, hashes, licenses, and citations are
-      recorded; the D3 tensor stays unbundled pending redistribution review.
-- [x] Cached replay is labeled and never substitutes silently for the live
-      headline calculation.
-
-## Primary references
+## Official references
 
 - [Toolkit user guide](https://nvidia.github.io/nvalchemi-toolkit/userguide/index.html)
-- [Toolkit supported-model matrix](https://nvidia.github.io/nvalchemi-toolkit/models/index.html)
-- [Toolkit example gallery](https://nvidia.github.io/nvalchemi-toolkit/examples/index.html)
+- [Toolkit supported models](https://nvidia.github.io/nvalchemi-toolkit/models/index.html)
+- [Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/index.html)
 - [Toolkit API reference](https://nvidia.github.io/nvalchemi-toolkit/modules/index.html)
 - [Toolkit-Ops user guide](https://nvidia.github.io/nvalchemi-toolkit-ops/userguide/index.html)
 - [Toolkit-Ops API reference](https://nvidia.github.io/nvalchemi-toolkit-ops/modules/index.html)

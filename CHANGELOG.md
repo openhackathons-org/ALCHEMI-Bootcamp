@@ -1,112 +1,100 @@
 # Changelog
 
-High-level history of the ALCHEMI Playbook. Dates are first-creation dates from
-the Git history.
+User-visible history of the ALCHEMI Playbook. Exact job records, checksums, and
+development failures belong beside the saved results they describe.
 
-## v2 — 2026-07-09
+## Unreleased - v2 remaster
 
-**Part 1 rebuild slice — predicted-charge water IR**
+### Documentation
 
-- Added the full live 5,000-step NVT + 50,000-step NVE workflow for batched
-  H₂O/D₂O monomers and cyclic-hexamer seeds using AIMNet2-2025 B97-3c residual,
-  explicit pairwise D3(BJ), and the official finite-molecule `simple`
-  all-pairs 1/r electrostatics convention.
-- Added an `AFTER_STEP` predicted-charge dipole hook with one shared model call
-  per fused step, mass-only isotope substitution, 5 ps Welch spectra, and
-  charge/energy/cluster-integrity diagnostics.
-- Added checksummed H₂O/D₂O/cyclic-H₆/D₆ B97-3c harmonic references and exact
-  source/artifact acceptance on an H100 in CL job `3087665`. Topology and
-  thermal-state gates withhold comparisons that the production trajectories do
-  not support.
-- Added six accessible stage cards and 14 live, persisted progress cards around
-  every target-H100 wait of at least five seconds. All 14 accepted widget states
-  finish as `COMPLETE`; early FIRE convergence reports steps used against the
-  declared limit without a partially filled completion rail.
-- Added four 2880×1440 Water IR banner candidates and one shared visual system
-  for the hero, lesson summary, semantic headings, callouts, placeholders,
-  progress states, and plots. The default hero uses real HTML text over art-only
-  imagery for sharp rendering and accessibility.
-- Moved tutorial mechanics into focused `aux/` modules with no package-level
-  re-export surface, while keeping Toolkit conversion, batching, neighbors,
-  pipeline composition, FIRE2, fused dynamics, hooks, reductions, and Zarr
-  persistence visible in learner cells.
-- Pinned both AIMNet and D3 runtime assets by SHA-256, disabled implicit D3
-  download, and kept the D3 tensor outside the distributable repository pending
-  confirmation of its redistribution rights.
+- Split the author guidance into general product-tutorial principles, an
+  ALCHEMI-specific curriculum and visual guide, and a separate Toolkit API map.
+- Reworked the root and tutorial READMEs around current setup, learning
+  outcomes, public APIs, expected outputs, and known limits.
+- Added a single third-party notice for software, models, checkpoints, and
+  datasets used across the tutorial tree.
 
-**Part 3 prototype — Toolkit foundations**
+### Part 1: Toolkit workflows from water interactions to IR
 
-- Added a bounded live-compute notebook covering `AtomicData`, homogeneous and
-  heterogeneous `Batch` objects, CPU/GPU throughput, neighbor-buffer capacity,
-  Toolkit-Ops segmented reduction, and a custom model wrapper.
-- Added official Warp Tape computational graphs comparing one heterogeneous
-  model call with three homogeneous size-bucket calls, plus NVTX labels for
-  optional NVIDIA Nsight Systems profiling.
-- Added a charge-aware AIMNet2 ωB97M-D3 composition example: AIMNet core +
-  pairwise D3(BJ) + full nonperiodic Coulomb, with explicit pipeline wiring,
-  charge conservation, batch/order parity, and force finite-difference checks.
-- Added a checksummed, CC BY-attributed 90-structure NCI Atlas subset: three
-  ten-point frozen-monomer interaction curves evaluated by all four official
-  ensemble members against near-matched ωB97M-D3(BJ)/def2-TZVPPD totals and
-  independent CCSD(T)/CBS interaction energies.
-- Kept adsorption and periodic Ewald/PME out of Part 3; they require separate
-  model-domain and reference validation.
+- Rebuilt Part 1 as a Toolkit-first lesson covering `AtomicData`, `Batch`,
+  neighbors, model configuration, serial and batched evaluation, composition,
+  relaxation, dynamics, hooks, inflight work, distributed stages, and saved
+  results.
+- Added a short PyTorch, JAX, and Warp primer using the same Toolkit-Ops
+  segmented reduction through both framework bindings and the lower-level Warp
+  path.
+- Added a 90-graph NCI Atlas example that restores the AIMNet2 checkpoint's
+  intended finite-molecule Coulomb and pairwise D3(BJ) contributions, then
+  compares the completed interaction curves with DFT-D3 and CCSD(T)/CBS.
+- Check component closure and graph-order invariance after the `AB − A − B`
+  reduction, using an absolute interaction-energy tolerance instead of a
+  relative tolerance on large molecular total energies. The lesson also keeps
+  the source formal charges for the ionic NCI example.
+- Added compatible B97-3c harmonic references and selected observed H2O/D2O
+  band positions. Electronic-structure, finite-temperature simulation, and
+  experiment remain visibly separate comparisons.
+- Added a custom Toolkit adapter for SevenNet-Omni on a small Cu(111) molecular
+  adsorption panel. The lesson checks energy and force mapping against the
+  model's native call and labels the structures as unrelaxed initial
+  placements.
+- Added CPU/GPU, homogeneous/heterogeneous batch, and inflight measurements.
+  The public `DistributedPipeline` layout is shown, but valid multi-GPU timing
+  remains not reported.
+- Corrected the offline `DistributedPipeline` example so its fixed-step FIRE2
+  work is wrapped in `FusedStage` and can graduate systems to the next worker.
+- Added a periodic Packmol box with equal numbers of the phenol and
+  N-methylacetamide molecules from the neutral NCI dimer lesson, completed the
+  periodic model with PME, and
+  added the public `DomainConfig`/`DomainParallel` sequence. The live
+  single-GPU call is labeled as an API demonstration without decomposition;
+  checked H100 capacity and multi-GPU results are loaded separately when
+  available.
+- Shortened the live molecular-dynamics segment for workshop pacing while
+  keeping its qualitative limits explicit.
+- Applied one notebook visual system for the hero, lesson summary, stage cards,
+  progress cards, callouts, plots, and accessible labels.
+- Moved data preparation, analysis, plotting, reference loading, and notebook UI
+  code into focused `aux/` modules while keeping reusable Toolkit calls visible.
 
-**Runtime**
+### Archived development notebook
 
-- Advanced Toolkit Core and Toolkit-Ops to the exact commits required by the
-  new pipeline API; pinned AIMNet and PhysicsNeMo explicitly.
-- Updated the Docker image, Compose mounts, README, and build-time import gate
-  to expose Part 3 while retaining Parts 1 and 2.
+- Incorporated the maintained NCI Atlas work into Part 1 and marked the former
+  Toolkit-foundations notebook as an unnumbered development record.
+- Retained the separate DESS66 research files and redistribution notice; they
+  are not part of the learner notebook.
 
-## v1 — 2026-06-17
+### Runtime
 
-Major changes since initial creation, including a bug fix.
+- Moved the main environment to pinned Toolkit Core 0.2 and Toolkit-Ops 0.4
+  source revisions with an H100-class CUDA 13 runtime.
+- Fixed Python at 3.12.13, required a `uv` version that supports the install
+  options used by the build, and recorded the resolved Conda and Python package
+  lists for the later exact-lock step.
+- Kept the setup test cache outside the staged source so the domain and notebook
+  jobs can enforce a clean checkout after setup.
+- Stored inflight predicted charges as one value per atom, matching Toolkit
+  `AtomicData` and `Batch` field shapes.
+- Made NCI subset regeneration require a clean checkout at the stated upstream
+  revision before reading source data.
+- Added the Toolkit-Ops JAX CUDA binding and disabled JAX bulk memory
+  preallocation so the JAX primer can share one notebook process with PyTorch.
+- Added build-time imports and checkpoint setup for the active tutorial model
+  paths.
+- Measured the six-cell NCI Atlas stage at 22.6 seconds on one H100 NVL and
+  checked its Toolkit force against the official AIMNet2 analytic and
+  total-energy finite-difference routes.
 
-**Bug fix**
-- Fixed a Part 1 OC20Dense import failure: on externally-managed ALCHEMI
-  environments the OC20Dense validation scripts (e.g.
-  `oc20dense_dft_reference_checks.py`) were missing, so importing them raised.
-  Restored the scripts and bake Part 1 into the Docker image so the validation
-  imports resolve with or without compose bind mounts.
+## v1 - 2026-06-17
 
-**Runtime & build**
-- Modernized the Docker image — current ALCHEMI Toolkit + Toolkit-Ops main
-  commits with explicit Git pins, OVITO 3.15.0 → 3.15.4, and the CUDA 13
-  cuEquivariance Torch ops so MACE uses the compiled cuEq path.
-- Added explicit neighbor-list dispatch for the pinned Toolkit / Toolkit-Ops
-  stack (both parts) so the model forward does not hit the host-only
-  `neighbor_list(method=None)` path.
-- Standardized on a single `alchemi-main` Jupyter kernel (removed `python3`,
-  `ovito-pro`, `alchemi-barebones`); JupyterLab now lands at the repo root
-  (`/workspace`) showing both parts; both tutorials are baked into the image so
-  they work with or without compose bind mounts.
-- Added a runtime snapshot document (base image, pinned commits, versions).
+- Added CPU/GPU batching to the original adsorption lesson.
+- Simplified the melting-point notebook and improved its OVITO animations and
+  cached-log plots.
+- Standardized the container on one Jupyter kernel and made both tutorial parts
+  available from the repository root.
+- Corrected the Part 1 OC20Dense reference import path in externally managed
+  environments.
 
-**Part 1 — batched adsorption search**
-- Added a CPU-vs-GPU batched-throughput demonstration.
-- Moved non-Toolkit plumbing into helpers while keeping the Toolkit API and
-  concepts visible in the narrative.
+## v0 - initial version
 
-**Part 2 — melting-point SLC**
-- Trimmed the narrative and extracted the melting-bracket figure into a helper.
-- Reworked OVITO rendering: VisRTX (GPU) with a graceful opengl → tachyon
-  fallback, browser-safe H.264/yuv420p MP4 output, an oblique camera, and
-  optional trajectory smoothing; longer melting and NPT-warmup animations.
-- Finalized notebook animation styling for the cached NPT warmup and 500 K
-  SLC renders: covalent-radius bonds, trajectory unwrap, bond-based cluster
-  unwrap, smoothing after the OVITO modifiers without minimum-image wrapping,
-  a horizon-aligned camera, 60-frame / 20 fps MP4 output, and adjacent NPT
-  plot/animation cells.
-- Improved cached-log diagnostic readability with thicker raw, rolling-mean,
-  and reference lines.
-- Corrected documentation to reflect the Orb-v3 (OMol) potential.
-
-**Repo**
-- Renamed tutorial directories to `*-toolkit`; refreshed README links
-  (GitHub, pip, ALCHEMI hub).
-
-## v0 — Initial creation
-
-- **Part 2 — melting-point SLC (naphthalene)** — Ryan — 2026-04-17
-- **Part 1 — batched adsorption-site search** — Nikita Fedik — 2026-05-30
+- Added the batched adsorption-site tutorial.
+- Added the naphthalene solid-liquid coexistence tutorial.

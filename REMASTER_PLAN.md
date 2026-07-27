@@ -1,28 +1,44 @@
 # ALCHEMI Playbook v2 remaster plan
 
-Status: Part 3 research prototype under redesign, 2026-07-10.
+This is a historical working plan. It does not define the current tutorial
+order, model selection, or package plan. It remains because it records earlier
+design work that may still be useful.
 
-## Working placement update: matched molecular Part 3
+## Current order decided after this plan
 
-For the current branch, preserve the existing tutorials and place the new
-molecular notebook as **Part 3**:
+1. **Part 1:** the water-centered, seven-stage Toolkit foundations notebook;
+2. **Part 2:** the original adsorption tutorial; and
+3. **Part 3:** the OLED/melting tutorial.
 
-1. **Part 1 — existing MACE adsorption tutorial.** A lean rebuild remains
-   future work; do not rename it during the Part 3 prototype.
-2. **Part 2 — existing Orb melting tutorial.** Its live-compute replacement and
-   data-license review remain future work.
-3. **Part 3 — AIMNet2 molecular composition and GPU batching.** Teach CPU/GPU
+Some directory names retain earlier numbers. `README.md` and the learner
+tutorial titles define the permanent order. The focused NCI Atlas composition
+lesson below is now integrated into Stage 3 of Part 1; the broader DESS work
+remains historical research.
+
+Current guidance lives in `README.md`,
+`part-1-scalable-atomistic-workflows/README.md`,
+`ALCHEMI_TUTORIAL_PRINCIPLES.md`, and `TOOLKIT_API_CURRICULUM.md`.
+
+## Historical 2026-07-10 NCI placement proposal
+
+At that point in development, the proposal preserved the existing tutorials
+and placed a new molecular notebook as Part 3. This numbering is obsolete:
+
+1. **Then Part 1 — existing MACE adsorption tutorial.** A lean rebuild remained
+   future work during the prototype.
+2. **Then Part 2 — existing Orb melting tutorial.** Its live-compute replacement
+   and data-license review remained future work.
+3. **Then Part 3 — AIMNet2 molecular composition and GPU batching.** Teach CPU/GPU
    execution, homogeneous and heterogeneous batching, checkpoint-matched
    D3(BJ), predicted charges, and finite nonperiodic Coulomb.
 4. **Later — periodic long-range physics.** Teach Ewald/PME only with a
    charge-aware model and a genuinely periodic system.
 
-This placement is provisional. Earlier proposals below that promote the
-molecular material to Part 1 or replace Part 2 are retained as design history,
-not the current repository layout.
+This placement was provisional and is now superseded. Earlier proposals below
+are also retained as design history, not the current repository layout.
 
-The primary Part 3 accuracy comparison is not each partial model versus
-S66 CCSD(T)/CBS. The selected checkpoint and reference family are now
+The prototype's primary accuracy comparison was not each partial model versus
+S66 CCSD(T)/CBS. The selected checkpoint and reference family were
 `aimnet2-wb97m-d3` and NCI Atlas:
 
 ```text
@@ -37,26 +53,25 @@ the training target, so this is near-matched rather than identical; NCI
 CCSD(T)/CBS is the independent completed-model comparison. See
 [`REFERENCE_DATA_PLAN.md`](REFERENCE_DATA_PLAN.md) for the measured selection
 and [`TUTORIAL_DESIGN_PRINCIPLES.md`](TUTORIAL_DESIGN_PRINCIPLES.md) for the
-tutorial patterns and publication rubric. Older B97-3c, DESS66, or Part-number
-assignments below are retained as design history and are superseded here.
+tutorial patterns. B97-3c, DESS66, and older part-number assignments below are
+retained as design history.
 
-Part 3 should still display all four component combinations—residual,
+The prototype was designed to display all four component combinations: residual,
 residual + Coulomb, residual + D3, and the complete model. The incomplete
 combinations are controlled ablations that expose the roles of explicit
 electrostatics and dispersion. They are not standalone DFT approximations, and
 only residual + Coulomb and the complete model receive matched DFT accuracy
 comparisons.
 
-## Implementation update
+## Historical prototype implementation
 
-The active research prototype is
-[`part-3-toolkit-foundations/alchemi-toolkit-foundations.ipynb`](part-3-toolkit-foundations/alchemi-toolkit-foundations.ipynb).
-Its AIMNet2/D3/Coulomb and Cu(111)/CO paths have both passed runtime smoke
-tests. They are now separated: Part 3 contains only the molecular NCI path;
-the existing adsorption and melting tutorials remain Parts 1 and 2. The complete
-nonvisual notebook path and the replacement Warp Tape graph have passed separate
-local runtime smokes; the exact rebuilt workshop image remains the release gate. The path
-name is temporary; do not infer the final part number from it.
+The research prototype was
+[`research-toolkit-foundations/alchemi-toolkit-foundations.ipynb`](research-toolkit-foundations/alchemi-toolkit-foundations.ipynb).
+Its AIMNet2/D3/Coulomb and Cu(111)/CO paths had both passed runtime smoke
+tests. At the time, the molecular NCI path was kept separate from the adsorption
+and melting tutorials. The complete nonvisual notebook path and the replacement
+Warp Tape graph passed separate local runtime smokes; the exact rebuilt workshop
+image was not tested. The directory name does not define a current part number.
 
 ## Archived earlier decision summary
 
@@ -78,14 +93,14 @@ than use it as an implementation detail inside two long scientific stories.
   Do not call a picosecond atomistic calculation a flame, ignition simulation,
   combustion rate, or mechanism.
 - Resolve package pins and third-party data licensing before notebook edits.
-  The current Part 2 contains CSD-derived files that should not be externally
+  The then-current Part 2 contained CSD-derived files that should not be externally
   redistributed without permission.
 
-## What the current tutorials actually do
+## What the tutorials looked like when this plan was written
 
 ### Part 1
 
-Current scale:
+Measured at the time:
 
 - 72 cells: 36 markdown and 36 code.
 - Approximately 5,250 markdown words.
@@ -103,13 +118,13 @@ hidden inside `helpers/relaxation_backends.py`.
 
 The scientific safeguards are valuable and should remain: matched references,
 multiple starting structures, frozen-layer conventions, geometry audits,
-convergence checks, desorption filtering, and inspectable trajectory artifacts.
+convergence checks, desorption filtering, and inspectable trajectory files.
 The breadth of the surface panel, repeated timing studies, and deep OC20Dense
 render/trajectory review do not all belong in the core learner path.
 
 ### Part 2
 
-Current scale:
+Measured at the time:
 
 - 85 cells: 47 markdown and 38 code.
 - Approximately 7,980 markdown words.
@@ -142,7 +157,7 @@ ASE/pymatgen structure
   → Toolkit-Ops-backed neighbors/interactions
   → optimizer or integrator
   → hooks, logging, and snapshots
-  → live scientific observable and inspectable artifact
+  → live scientific observable and inspectable result
 ```
 
 ## Toolkit capability and API curriculum
@@ -169,7 +184,7 @@ ALCHEMI has three distinct layers. The notebooks should name them correctly.
    - `batch_idx`, `batch_ptr`, `num_graphs`, `get_data`
    - Device, dtype, cell, PBC, charge/spin, and node/system-level fields
 
-2. **The model adapter contract**
+2. **The model adapter interface**
    - A built-in `MACEWrapper` or `AIMNet2Wrapper`
    - `ModelConfig`: supported outputs, required inputs, neighbor format
    - `model_config.active_outputs`
@@ -200,11 +215,11 @@ ALCHEMI has three distinct layers. The notebooks should name them correctly.
    - A fused stage using `+` where the selected pin supports it cleanly
    - Per-graph conditions such as different temperatures
 
-7. **Artifacts and replay**
+7. **Saved results and replay**
    - `ZarrData` or the public writer/reader surface
    - CSV logs and short `.extxyz` trajectories
    - Reload through `Dataset`/`DataLoader`
-   - Provenance next to every result
+   - Method, model, and source details next to every result
 
 ### Should show once or as a short extension
 
@@ -228,7 +243,7 @@ ALCHEMI has three distinct layers. The notebooks should name them correctly.
   hooks, and the training CLI. These are important current-main capabilities,
   but they are not in the existing tutorial pin or stable public release.
 - UMA. Current Toolkit requires a separate incompatible dependency environment,
-  and the weights are gated under the FAIR Chemistry License.
+  and access to the weights is restricted under the FAIR Chemistry License.
 
 ## Part 1: lean batched adsorption search
 
@@ -240,7 +255,7 @@ Target: 35–45 core cells, 45–60 minutes, one 24-start live screen. Preserve 
 1. **Three-cell orientation**
    - One ecosystem diagram: Toolkit, Toolkit-Ops, models, ASE/pymatgen, and
      outputs.
-   - One concrete learner goal and expected artifact.
+   - One concrete learner goal and expected output.
    - One bounded run configuration, defaulting to live compute.
 
 2. **Native API vertical slice**
@@ -254,7 +269,7 @@ Target: 35–45 core cells, 45–60 minutes, one 24-start live screen. Preserve 
    - Move the H2O saturation sweep, CPU/GPU crossover, and three-model matrix to
      an optional performance appendix.
 
-4. **Compact model sanity gate**
+4. **Compact model sanity check**
    - Keep two or three representative OC20Dense comparisons.
    - Show a concise ranking/geometry result, not a 92-video/image review.
    - State explicitly that this is a bounded sanity check, not validation over
@@ -275,7 +290,7 @@ Target: 35–45 core cells, 45–60 minutes, one 24-start live screen. Preserve 
    - Compute matched adsorption energies.
    - Filter failed, unconverged, or desorbed structures.
    - Save initial/final `.extxyz`, the trajectory, a result table, and a
-     manifest that maps every row to its artifacts.
+     manifest that maps every row to its saved files.
 
 ### Keep these scientific guardrails
 
@@ -295,17 +310,15 @@ Target: 35–45 core cells, 45–60 minutes, one 24-start live screen. Preserve 
 - Wide surface-science literature tour.
 - Hardware-specific optimization matrices.
 
-The current OC20Dense material accounts for most of Part 1’s data footprint.
+The OC20Dense material then accounted for most of Part 1’s data footprint.
 Keep only the small attributed subset needed by the core; publish any extended
 validation pack as an optional, versioned asset with its own license and
-provenance manifest.
+source manifest.
 
 ## Part 2 recommendation: composable charge-aware water clusters
 
-Working title:
-
-> **Composable Molecular Simulation with ALCHEMI Toolkit: Charges,
-> Electrostatics, Dynamics, and GPU-Native Trajectories**
+Working title: **Composable Molecular Simulation with ALCHEMI Toolkit: Charges,
+Electrostatics, Dynamics, and GPU-Native Trajectories**
 
 ### Scientific question
 
@@ -373,7 +386,7 @@ supported workshop GPU.
   30–120 s and approximately 2–4 GB after model load.
 - **Output:** component energies, charge-colored structures, hydrogen-bond
   network changes, temperature traces, and live trajectory replay.
-- **Scientific boundary:** finite clusters only; verify large-box Ewald
+- **Scientific scope:** finite clusters only; verify large-box Ewald
   convergence and do not infer bulk-liquid behavior.
 - **Risk:** low–medium science risk, high live reliability, very high Toolkit
   breadth.
@@ -392,7 +405,7 @@ for the elementary reaction OH + CH4 → H2O + CH3?
   up to roughly three minutes cold, and approximately 2–4 GB.
 - **Output:** animated H transfer, component-energy profile, charge/spin-charge
   evolution, and ensemble spread.
-- **Scientific boundary:** this is a restrained PES profile, not an ignition
+- **Scientific scope:** this is a restrained PES profile, not an ignition
   simulation, rate constant, free-energy barrier, IRC, or certified transition
   state. Validate endpoint connectivity, box-size convergence, and the profile
   against an independent reference before inclusion.
@@ -419,7 +432,7 @@ only our own computed plots and cite the numerical/reference source.
   about 1–5 minutes and 3–8 GB depending on the atom budget.
 - **Output:** energy/torsion maps, convergence timeline, before/after gallery,
   and model-ensemble uncertainty for finalists.
-- **Scientific boundary:** electronic-energy rankings are not solution-phase
+- **Scientific scope:** electronic-energy rankings are not solution-phase
   populations or free energies; preserve stereochemistry and deduplicate with
   symmetry-aware RMSD.
 - **Risk:** low science risk and high reliability, but it overlaps Part 1’s
@@ -437,7 +450,7 @@ only our own computed plots and cite the numerical/reference source.
   0.5–3 minutes and under 2 GB.
 - **Output:** synchronized animations, RDF/Q6 curves, thermostat behavior, and
   NVE energy drift.
-- **Scientific boundary:** call the result short-time order loss, not a melting
+- **Scientific scope:** call the result short-time order loss, not a melting
   point. It depends on finite size, density, cutoff, thermostat, and duration.
 - **Risk:** low science risk and very high live reliability, but it shows less
   of the external model ecosystem.
@@ -461,7 +474,7 @@ References:
 - [MACE foundation-model applications, including 100 ps H2 combustion](https://doi.org/10.1063/5.0297006)
 - [Cantera ignition-delay example](https://cantera.org/stable/examples/python/reactors/non_ideal_shock_tube.html)
 
-## Proposed workshop compute contract
+## Proposed workshop compute plan
 
 These are v2 design targets and must be replaced by measured numbers before
 release.
@@ -481,11 +494,11 @@ release.
   of the headline result.
 - Synchronize CUDA before/after timed regions and report cold load separately
   from warm compute.
-- Save partial results on OOM/failure with an explicit error and provenance.
+- Save partial results on OOM/failure with an explicit error and run details.
 
-## Version and compatibility gate
+## Version and compatibility checks
 
-The current tutorial pins are:
+The tutorial pins at the time were:
 
 - Toolkit core `01c99d5cde6f63d6f662b071a9f408d3bfc12b0a` (2026-06-15).
 - Toolkit-Ops `2b7c3c3adfb1ca84b886eecbf14bc60ff6ba1dc2`
@@ -497,7 +510,7 @@ As of 2026-07-09:
   10 commits ahead.
 - Toolkit-Ops `main` still points to the tutorial pin, while `0.4.0-rc` is
   `c6fbe652315e0cebd4f57a6a25f626258f0dbbfd`, 25 commits ahead.
-- Current Toolkit core explicitly targets Toolkit-Ops `0.4.0-rc`.
+- Toolkit core at the time explicitly targeted Toolkit-Ops `0.4.0-rc`.
 
 Current core adds training/fine-tuning, an in-memory data pipe, UMA, richer
 reporting, and model-pipeline neighbor adaptation. The existing pin already
@@ -528,7 +541,7 @@ Smoke matrix:
 - Clean container rebuild with no host cache, then offline replay from the
   staged model cache.
 
-## Licensing and redistribution gate
+## Licensing and redistribution review
 
 The root Apache-2.0 license covers repository code, not every embedded dataset,
 model, binary, image, or derived trajectory.
@@ -542,7 +555,7 @@ Confirmed:
 - ASE: LGPL-2.1-or-later.
 - RDKit, if used: BSD-3-Clause.
 - OC20/OC20Dense data: CC BY 4.0; attribution is required.
-- UMA code: MIT, but model weights are gated by the FAIR Chemistry License and
+- UMA code: MIT, but model-weight access is restricted by the FAIR Chemistry License and
   require a separate review. Do not bake them into the workshop image.
 
 Release blockers:
@@ -553,7 +566,7 @@ Release blockers:
    these files unless explicit permission covers this distribution.
 2. Treat trajectories and caches derived from CSD structures as requiring the
    same review; do not assume they are automatically redistributable.
-3. The OC20Dense subset records provenance but has no explicit data-license
+3. The OC20Dense subset records its source but has no explicit data-license
    notice in the repository. Add CC BY 4.0 attribution and source/checksum
    metadata.
 4. Add `THIRD_PARTY_NOTICES.md` plus a machine-readable asset manifest with:
@@ -572,7 +585,7 @@ Primary policy links:
 
 ## Implementation sequence
 
-### Phase 0 — gates
+### Phase 0 — required checks
 
 - Freeze and test the Toolkit/Toolkit-Ops pair.
 - Complete the third-party asset/license inventory.
@@ -585,15 +598,15 @@ Primary policy links:
 - Measure cold load, warm compute, synchronized wall time, and peak memory.
 - Spike the water-cluster core in a standalone script before making a notebook.
 - Spike the OH + CH4 profile separately; discard it if any scientific or
-  runtime acceptance gate fails.
+  runtime check fails.
 
 ### Phase 2 — lean Part 1
 
-- Preserve the current notebook as an archive/reference.
+- Preserve that notebook as an archive/reference.
 - Build the 24-start native-API core path.
 - Reduce the core validation assets and move the broad panel to an optional
   extension.
-- Keep every scientific safeguard and inspectable artifact.
+- Keep every scientific safeguard and inspectable saved result.
 
 ### Phase 3 — replacement Part 2
 
@@ -615,7 +628,7 @@ Primary policy links:
 - Recompute headline results from source structures; do not validate by merely
   rereading shipped CSVs.
 - Verify every summary row maps to initial/final `.extxyz`, trajectory, log, and
-  provenance metadata.
+  source and method metadata.
 - Test the recovery cache separately and label it visibly.
 - Rebuild the image from exact pins and test offline model access.
 - Update `README.md`, `RUNTIME_SNAPSHOT.md`, `CHANGELOG.md`, and third-party
@@ -650,8 +663,8 @@ Primary policy links:
   looks like tapering after initial construction, not evidence by itself of a
   project-health problem.
 - Historical hotspots and bug magnets overlap in `README.md` and the removed
-  OER notebook. For v2, start with the current Part 1/Part 2 notebooks and their
-  helper boundaries, not the historical OER surface.
+  OER notebook. The recommendation was to start with the Part 1/Part 2 notebooks and their
+  helper structure, not the historical OER surface.
 - One revert-style fix appears in 92 commits; there is no broad pattern of
   emergency rollback commits.
 - The clean v2 clone started at `bfb8ab94aa7b25ad05d270d275121baf3da8c693`
@@ -664,7 +677,7 @@ Approve or revise the proposed Part 2 core:
 1. **Recommended:** charge-aware water clusters as the guaranteed live core,
    with OH + CH4 as a conditional capstone.
 2. **More chemistry-forward:** make OH + CH4 the core only after the spike
-   passes every scientific/runtime gate; keep water clusters as fallback.
+   passes every scientific and runtime check; keep water clusters as fallback.
 3. **Lowest risk:** use the LJ argon order-loss map as the core and keep all
    MLIP/reaction examples optional.
 

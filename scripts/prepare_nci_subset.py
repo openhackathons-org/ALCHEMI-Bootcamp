@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the small NCI Atlas subset used by the Part 3 research notebook.
+"""Build the small NCI Atlas subset used by the unified Part 1 notebook.
 
 The source checkout is not modified. The output is a deterministic gzip CSV
 containing ten separation points and frozen AB/A/B records for three systems.
@@ -14,6 +14,7 @@ import hashlib
 import io
 import re
 from pathlib import Path
+import subprocess
 
 
 SOURCE_REVISION = "1816bfc72609d7deb1d4f93ab9e27eb13bb44bec"
@@ -60,6 +61,49 @@ FIELDNAMES = (
     "source_gradient_block",
     "source_geometry_file",
 )
+
+
+def verify_source_checkout(
+    source: Path,
+    *,
+    expected_revision: str = SOURCE_REVISION,
+) -> str:
+    """Require the clean NCI Atlas checkout used by this data selection."""
+
+    source = source.resolve()
+    if not source.is_dir():
+        raise FileNotFoundError(f"NCI Atlas checkout not found: {source}")
+
+    def run_git(*args: str) -> str:
+        try:
+            completed = subprocess.run(
+                ["git", "-C", str(source), *args],
+                check=False,
+                capture_output=True,
+                text=True,
+            )
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "git is required to verify the NCI Atlas source"
+            ) from exc
+        if completed.returncode != 0:
+            detail = completed.stderr.strip() or completed.stdout.strip()
+            raise ValueError(f"Cannot verify NCI Atlas checkout: {detail}")
+        return completed.stdout.strip()
+
+    observed_revision = run_git("rev-parse", "HEAD")
+    if observed_revision != expected_revision:
+        raise ValueError(
+            "NCI Atlas checkout is at "
+            f"{observed_revision}; expected {expected_revision}"
+        )
+
+    tracked_changes = run_git("status", "--short", "--untracked-files=no")
+    if tracked_changes:
+        raise ValueError(
+            "NCI Atlas checkout has modified tracked files; use a clean checkout"
+        )
+    return observed_revision
 
 
 def parse_header_value(header: str, key: str) -> str:
@@ -138,7 +182,9 @@ def build_rows(source: Path) -> list[dict[str, str | int | float]]:
 
     for selection in SELECTIONS:
         system_id = selection["system_id"]
-        curves = read_extended_xyz(gradient_root / selection["gradient_file"], system_id)
+        curves = read_extended_xyz(
+            gradient_root / selection["gradient_file"], system_id
+        )
         if len(curves) != 10:
             raise ValueError(f"Expected 10 scales for {system_id}, found {len(curves)}")
 
@@ -167,8 +213,12 @@ def build_rows(source: Path) -> list[dict[str, str | int | float]]:
                 "symbols": fragments["ab"]["symbols"][natoms_a:],
                 "positions": fragments["ab"]["positions"][natoms_a:],
             }
-            assert_same_geometry(fragments["a"], reconstructed_a, label=f"{system_id} A")
-            assert_same_geometry(fragments["b"], reconstructed_b, label=f"{system_id} B")
+            assert_same_geometry(
+                fragments["a"], reconstructed_a, label=f"{system_id} A"
+            )
+            assert_same_geometry(
+                fragments["b"], reconstructed_b, label=f"{system_id} B"
+            )
 
             for fragment in ("ab", "a", "b"):
                 record = fragments[fragment]
@@ -205,7 +255,9 @@ def write_deterministic_csv_gz(rows: list[dict], output: Path) -> str:
     with output.open("wb") as raw:
         with gzip.GzipFile(filename="", mode="wb", fileobj=raw, mtime=0) as zipped:
             with io.TextIOWrapper(zipped, encoding="utf-8", newline="") as text:
-                writer = csv.DictWriter(text, fieldnames=FIELDNAMES, lineterminator="\n")
+                writer = csv.DictWriter(
+                    text, fieldnames=FIELDNAMES, lineterminator="\n"
+                )
                 writer.writeheader()
                 writer.writerows(rows)
     return hashlib.sha256(output.read_bytes()).hexdigest()
@@ -217,11 +269,13 @@ def main() -> None:
     parser.add_argument("output", type=Path, help="Output .csv.gz path")
     args = parser.parse_args()
 
-    rows = build_rows(args.source.resolve())
+    source = args.source.resolve()
+    observed_revision = verify_source_checkout(source)
+    rows = build_rows(source)
     checksum = write_deterministic_csv_gz(rows, args.output.resolve())
     print(f"rows={len(rows)}")
     print(f"sha256={checksum}")
-    print(f"source_revision={SOURCE_REVISION}")
+    print(f"source_revision={observed_revision}")
 
 
 if __name__ == "__main__":

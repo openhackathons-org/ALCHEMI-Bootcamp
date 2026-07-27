@@ -3,32 +3,32 @@
 **/assets/
 **/_fullrun_status.log
 # Cache CSVs shipped to students for FAST_DEMO progress-replay
-!part-2-batched-melting-toolkit/assets/
-!part-2-batched-melting-toolkit/assets/naphthalene_long_2025/
-!part-2-batched-melting-toolkit/assets/naphthalene_long_2025/logs/
-!part-2-batched-melting-toolkit/assets/naphthalene_long_2025/logs/**
+!part-3-batched-melting-toolkit/assets/
+!part-3-batched-melting-toolkit/assets/naphthalene_long_2025/
+!part-3-batched-melting-toolkit/assets/naphthalene_long_2025/logs/
+!part-3-batched-melting-toolkit/assets/naphthalene_long_2025/logs/**
 # Banner + figures + partner logos embedded in the Part 1 notebook
-!part-1-batched-adsorption-toolkit/assets/
-!part-1-batched-adsorption-toolkit/assets/images/
-!part-1-batched-adsorption-toolkit/assets/images/**
+!part-2-batched-adsorption-toolkit/assets/
+!part-2-batched-adsorption-toolkit/assets/images/
+!part-2-batched-adsorption-toolkit/assets/images/**
 # Art-only banner candidates embedded in the rebuilt Water IR notebook
-!part-1-water-hydrogen-bonding-toolkit/assets/
-!part-1-water-hydrogen-bonding-toolkit/assets/images/
-!part-1-water-hydrogen-bonding-toolkit/assets/images/banner_candidates/
-!part-1-water-hydrogen-bonding-toolkit/assets/images/banner_candidates/**
+!part-1-scalable-atomistic-workflows/assets/
+!part-1-scalable-atomistic-workflows/assets/images/
+!part-1-scalable-atomistic-workflows/assets/images/banner_candidates/
+!part-1-scalable-atomistic-workflows/assets/images/banner_candidates/**
 # Banner + figures + partner logos embedded in the Part 2 notebook
-!part-2-batched-melting-toolkit/assets/images/
-!part-2-batched-melting-toolkit/assets/images/*.jpg
-!part-2-batched-melting-toolkit/assets/images/*.png
-!part-2-batched-melting-toolkit/assets/images/logos/
-!part-2-batched-melting-toolkit/assets/images/logos/**
-part-2-batched-melting-toolkit/assets/images/.anim_cache/
+!part-3-batched-melting-toolkit/assets/images/
+!part-3-batched-melting-toolkit/assets/images/*.jpg
+!part-3-batched-melting-toolkit/assets/images/*.png
+!part-3-batched-melting-toolkit/assets/images/logos/
+!part-3-batched-melting-toolkit/assets/images/logos/**
+part-3-batched-melting-toolkit/assets/images/.anim_cache/
 # New notebook image directories need an explicit re-include above before they
 # can be staged.
 # tools/assets is a convenience symlink to ../assets (not tracked)
-part-2-batched-melting-toolkit/tools/assets
+part-3-batched-melting-toolkit/tools/assets
 # Reference PDFs (cited by DOI in the notebook; not redistributed)
-part-2-batched-melting-toolkit/refs/
+part-3-batched-melting-toolkit/refs/
 __pycache__/
 *.pyc
 benchmarking/
@@ -43,3 +43,32 @@ matplotlib-*/
 tmp*/
 docker-compose.override.yml
 **/monitoring/grafana/data/
+
+# Retired Part 1 research kept locally for reference. These files used an older
+# patched Toolkit path and are not part of the learner tutorial or release run.
+part-1-scalable-atomistic-workflows/data/compute_lab_distributed_pipeline.provenance.md
+part-1-scalable-atomistic-workflows/data/compute_lab_distributed_pipeline/
+part-1-scalable-atomistic-workflows/aux/benchmark_results.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol_checks.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol_config.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol_wrapper.py
+part-1-scalable-atomistic-workflows/tests/test_distributed_benchmark_assembler.py
+part-1-scalable-atomistic-workflows/tests/test_distributed_benchmark_results.py
+part-1-scalable-atomistic-workflows/tests/test_distributed_failure_recorder.py
+part-1-scalable-atomistic-workflows/tests/test_orbmol_adapter.py
+part-1-scalable-atomistic-workflows/tests/test_orbmol_checks.py
+part-1-scalable-atomistic-workflows/tests/test_orbmol_config.py
+build/prewarm_mace.py
+build/prewarm_orbmol.py
+scripts/assemble_part1_distributed_benchmark.py
+scripts/benchmark_part1_distributed_pipeline.py
+scripts/part1_distributed_contract.py
+scripts/record_part1_distributed_failure.py
+scripts/regress_nvalchemi_buffer_put.py
+scripts/regress_nvalchemi_sustained_pipeline.py
+scripts/slurm_part1_buffer_regression.sbatch
+scripts/slurm_part1_distributed_benchmark.sbatch
+scripts/slurm_part1_sustained_pipeline_regression.sbatch
+scripts/patches/nvalchemi-toolkit-b770ee6-buffer-put-compat.patch
+scripts/patches/nvalchemi-toolkit-b770ee6-sustained-pipeline-compat.patch

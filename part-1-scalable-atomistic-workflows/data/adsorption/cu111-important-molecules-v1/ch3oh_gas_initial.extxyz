@@ -1,0 +1,8 @@
+6
+Properties=species:S:1:pos:R:3:is_adsorbate:L:1 structure_key=ch3oh_gas role=gas adsorbate=CH3OH surface=none geometry_status="ASE-generated initial placements; not model-relaxed" relaxed=F pbc="F F F"
+C        0.06009950       0.64843000       0.00000000  T
+O        0.06009950      -0.77451000       0.00000000  T
+H       -0.98576450       0.95382600       0.00000000  T
+H        0.98576450      -1.06441700       0.00000000  T
+H        0.54437550       1.06441700       0.89177200  T
+H        0.54437550       1.06441700      -0.89177200  T

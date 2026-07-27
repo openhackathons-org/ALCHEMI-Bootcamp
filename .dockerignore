@@ -16,13 +16,59 @@ tmp*/
 # Per-part transient/local artefacts (compose bind-mounts still expose them
 # at runtime; this keeps them out of the baked image only). Keep tracked
 # tutorial assets in the image for Enroot/Pyxis runs without bind mounts.
-part-1-batched-adsorption-toolkit/outputs/
-part-1-batched-adsorption-toolkit/logs/
-part-1-water-hydrogen-bonding-toolkit/outputs/
-part-2-batched-melting-toolkit/outputs/
-part-2-batched-melting-toolkit/logs/
-part-2-batched-melting-toolkit/assets/images/.anim_cache/
-part-3-toolkit-foundations/outputs/
+part-2-batched-adsorption-toolkit/outputs/
+part-2-batched-adsorption-toolkit/logs/
+part-1-scalable-atomistic-workflows/outputs/
+# Superseded Part 1 research paths. Keep them in the repository history, but
+# do not ship them in the learner image.
+part-1-scalable-atomistic-workflows/aux/benchmark_results.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol_checks.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol_config.py
+part-1-scalable-atomistic-workflows/aux/models/orbmol_wrapper.py
+part-1-scalable-atomistic-workflows/data/compute_lab_distributed_pipeline/
+part-1-scalable-atomistic-workflows/data/compute_lab_distributed_pipeline.provenance.md
+part-1-scalable-atomistic-workflows/assets/images/banner_candidates/README.md
+part-1-scalable-atomistic-workflows/assets/images/banner_candidates/water-ir-v2-01-hydrogen-bond-landscape.png
+part-1-scalable-atomistic-workflows/assets/images/banner_candidates/water-ir-v2-02-batched-water-systems.png
+part-1-scalable-atomistic-workflows/assets/images/banner_candidates/water-ir-v2-03-composed-potential.png
+
+# Keep only the four CPU-capable tests that the Dockerfile runs. The remaining
+# development tests include host-only jobs and the retired OrbMol lesson.
+part-1-scalable-atomistic-workflows/tests/*
+!part-1-scalable-atomistic-workflows/tests/test_notebook_contract.py
+!part-1-scalable-atomistic-workflows/tests/test_artifact_manifest.py
+!part-1-scalable-atomistic-workflows/tests/test_reference_data.py
+!part-1-scalable-atomistic-workflows/tests/test_experimental_reference.py
+
+# Keep compact files named by the published checksum indexes, but omit
+# unindexed calculation working files and duplicated consumer bundles.
+part-1-scalable-atomistic-workflows/reference/tests/test_b97_3c_ir.py
+part-1-scalable-atomistic-workflows/reference/artifacts/water_dimer_b97_3c/timer.dat
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.npy
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.npz
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.csv
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.xyz
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.out
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.dat
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/*.txt
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/diagnostics.json
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/**/run_config.json
+part-1-scalable-atomistic-workflows/reference/artifacts/provenance/h6/artifacts/
+
+part-3-batched-melting-toolkit/outputs/
+part-3-batched-melting-toolkit/logs/
+part-3-batched-melting-toolkit/assets/images/.anim_cache/
+research-toolkit-foundations/outputs/
+
+# The v2 image is a Part 1 image. Retained Part 2/3 material is available
+# through development bind mounts, but its historical scientific data is not
+# sent in the release build context. Keep only the small status READMEs.
+part-2-batched-adsorption-toolkit/**
+!part-2-batched-adsorption-toolkit/README.md
+part-3-batched-melting-toolkit/**
+!part-3-batched-melting-toolkit/README.md
+research-toolkit-foundations/**
 
 # Generated notebooks (regenerated on-demand)
 *-with_outputs.ipynb

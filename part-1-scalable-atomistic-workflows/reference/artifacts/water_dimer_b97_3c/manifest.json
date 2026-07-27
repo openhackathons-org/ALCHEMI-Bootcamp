@@ -1,0 +1,268 @@
+{
+  "artifact_id": "b97-3c-water-dimer-4c4ce09f73317837",
+  "created_utc": "2026-07-13T17:28:57.541523+00:00",
+  "engine": {
+    "name": "Psi4",
+    "version": "1.11"
+  },
+  "environment": {
+    "ase": "3.29.0",
+    "cpu_count": 48,
+    "dftd3_python": "1.4.0",
+    "gcp_correction": null,
+    "hostname": "s4124-0096",
+    "mctc_gcp_executable": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/alchemi-b973c-ir/bin/mctc-gcp",
+    "numpy": "2.5.1",
+    "platform": "Linux-6.17.0-35-generic-x86_64-with-glibc2.39",
+    "psi4": "1.11",
+    "python": "3.12.13",
+    "python_executable": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/alchemi-b973c-ir/bin/python",
+    "qcelemental": "0.50.4",
+    "qcengine": "0.50.0",
+    "s_dftd3_executable": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/alchemi-b973c-ir/bin/s-dftd3",
+    "slurm": {
+      "SLURM_CLUSTER_NAME": "computelab-sc-01",
+      "SLURM_CPUS_PER_TASK": "32",
+      "SLURM_JOB_ID": "3085760",
+      "SLURM_JOB_NUM_NODES": "1"
+    }
+  },
+  "files": [
+    {
+      "bytes": 3321,
+      "path": "interaction_curve.csv",
+      "sha256": "4c4ce09f733178370bcd420ddfd7a65cb40e82c13075112b0670dcd1613693cf"
+    },
+    {
+      "bytes": 239505,
+      "path": "psi4.out",
+      "sha256": "a10c1e19d92005851c0c2debc1c72ed8ec7fffeabcedbcb2f2b45a326742fecd"
+    },
+    {
+      "bytes": 4691,
+      "path": "run_config.json",
+      "sha256": "8707d88aef50d5f8e4fff80e7ec49f8eea1cfaaf95c219619d7a4d14fabc0a76"
+    },
+    {
+      "bytes": 13672,
+      "path": "structures.extxyz",
+      "sha256": "53d3533001d1cd88e6a4cc5bd43a5d4ae7caeb112448a4101c2fccd895f85435"
+    }
+  ],
+  "integrity": {
+    "checksum_index": "SHA256SUMS",
+    "checksum_index_covers_manifest": true,
+    "geometry_hash_definition": "SHA-256 of canonical compact JSON containing ordered symbols and round-trip-safe decimal float64 coordinates"
+  },
+  "license_and_data_boundary": {
+    "citation_request": "Cite the original B97-3c publication and Psi4 when using the calculated reference values.",
+    "generated_data": "New numerical results and deterministic tutorial structures; no third-party benchmark dataset or dependency binary is bundled.",
+    "generator_and_repository": "Apache-2.0; see the repository LICENSE recorded by SHA-256",
+    "runtime_dependencies_not_redistributed": {
+      "ASE": "LGPL-2.1-or-later; verify installed package metadata",
+      "Psi4": "LGPL-3.0; verify installed package metadata",
+      "dftd3-python_and_s-dftd3": "LGPL-3.0-or-later; verify installed package metadata",
+      "mctc-gcp": "LGPL-3.0-or-later; verify installed package metadata"
+    }
+  },
+  "method": {
+    "basis": "def2-mTZVP",
+    "basis_is_explicit_psi4_1_11_workaround": true,
+    "charge": 0,
+    "comparison_boundary": "Full B97-3c endpoint reference only. The aggregate Psi4 correction is not an AIMNet residual and is not termwise equivalent to an external pairwise D3 layer.",
+    "components": [
+      "modified B97 generalized-gradient density functional",
+      "canonical def2-mTZVP orbital basis",
+      "integrated D3(BJ) dispersion including ATM three-body terms",
+      "integrated geometrical counterpoise/short-range basis correction (gCP)"
+    ],
+    "counterpoise_policy": "No Boys-Bernardi ghost-basis counterpoise. Canonical B97-3c gCP remains included in each full endpoint energy.",
+    "geometry_policy": "Unrelaxed supermolecular scan. A and B are exact Cartesian slices of AB at every distance; all three totals are recomputed.",
+    "interaction_energy_definition": "E(AB) - E(A) - E(B)",
+    "method": "B97-3c",
+    "multiplicity": 1,
+    "psi4_model_chemistry": "b97-3c/def2-mtzvp",
+    "psi4_options": {
+      "d_convergence": 1e-10,
+      "dft_radial_points": 99,
+      "dft_spherical_points": 590,
+      "e_convergence": 1e-10,
+      "no_com": true,
+      "no_reorient": true,
+      "reference": "rhf",
+      "scf_initial_accelerator": "NONE",
+      "scf_type": "pk",
+      "symmetry": "c1"
+    },
+    "references": [
+      {
+        "citation": "Brandenburg, Bannwarth, Hansen, and Grimme, J. Chem. Phys. 148, 064104 (2018)",
+        "doi": "10.1063/1.5012601"
+      },
+      {
+        "title": "Psi4 1.11 integrated 3c-method documentation",
+        "url": "https://psicode.org/psi4manual/1.11.x/gcp.html"
+      }
+    ]
+  },
+  "scan": {
+    "all_declared_points_present": true,
+    "builder": "aux.structures.make_water_dimer_scan",
+    "distance_count": 8,
+    "distances_angstrom": [
+      2.5,
+      2.7,
+      2.9,
+      3.2,
+      3.5,
+      3.9,
+      4.4,
+      5.0
+    ],
+    "records": [
+      {
+        "a_geometry_sha256": "d930276c0f7e3dbed5a9aa1ea5c0a7add03e12c4cfe508c8f355f02fdde2144d",
+        "ab_geometry_sha256": "4c5484a64ebbfa3db661c9f9fd0e2c5e209868dce4c86ac5ed224ddd0a26fb57",
+        "b_geometry_sha256": "b0ad4a401b773bbc062742ee70e3ddca105a497a3e82724a7b4c059f567c2f29",
+        "energy_a_Eh": -76.39758055663903,
+        "energy_ab_Eh": -152.7948983087989,
+        "energy_b_Eh": -76.39758055663911,
+        "interaction_Eh": 0.0002628044792345463,
+        "interaction_kJ_mol": 0.6899930654840333,
+        "interaction_kcal_mol": 0.16491230054589703,
+        "measured_oo_distance_angstrom": 2.5,
+        "requested_oo_distance_angstrom": 2.5,
+        "scan_index": 0
+      },
+      {
+        "a_geometry_sha256": "666b265d3c1eb97b75c140c9922b89bf59b88ed5c46d60b0c1908e3c39120abe",
+        "ab_geometry_sha256": "c2217414beea7dabe01741838c1c90b3fc133fceb830911791129c0ecdfd781e",
+        "b_geometry_sha256": "19ffbe0fa89bac918efc3a59a3f58986348d5d08bdd758705fde138fd58e40e8",
+        "energy_a_Eh": -76.39758055663908,
+        "energy_ab_Eh": -152.80071793431202,
+        "energy_b_Eh": -76.39758055663923,
+        "interaction_Eh": -0.005556821033707138,
+        "interaction_kJ_mol": -14.589431620653029,
+        "interaction_kcal_mol": -3.486957844324338,
+        "measured_oo_distance_angstrom": 2.7,
+        "requested_oo_distance_angstrom": 2.7,
+        "scan_index": 1
+      },
+      {
+        "a_geometry_sha256": "7a06ba4c927e1d7292d6db34ba162fffce9a823d18f437d2300b4d8623bdffc7",
+        "ab_geometry_sha256": "7ad6f7205154cdeaa3bc23b96ae7fd14d6e00cedc3e328d88ee812ff6dbedef6",
+        "b_geometry_sha256": "b9304f9b07bfba1a6b89e8474066855dc5e82ea3e45cfbd3720b05cb9723d205",
+        "energy_a_Eh": -76.39758055663928,
+        "energy_ab_Eh": -152.8023781931022,
+        "energy_b_Eh": -76.39758055663933,
+        "interaction_Eh": -0.007217079823576,
+        "interaction_kJ_mol": -18.948440474897247,
+        "interaction_kcal_mol": -4.528785964363586,
+        "measured_oo_distance_angstrom": 2.9,
+        "requested_oo_distance_angstrom": 2.9,
+        "scan_index": 2
+      },
+      {
+        "a_geometry_sha256": "71e2414f8de4c3522e26582fbd4340b5c1316a4e745fabb28950c7b3421b4d18",
+        "ab_geometry_sha256": "ece38eb23512b1edc0bc804131d5bc7fc7cacaff36f2c7dd4ff8cde8fbb3412f",
+        "b_geometry_sha256": "6ea77f480d588ab13982ee0441d720997d79dca015a58f620199bc93d8fb6201",
+        "energy_a_Eh": -76.39758055663917,
+        "energy_ab_Eh": -152.8020500442041,
+        "energy_b_Eh": -76.3975805566392,
+        "interaction_Eh": -0.006888930925725845,
+        "interaction_kJ_mol": -18.0868856618959,
+        "interaction_kcal_mol": -4.32286942205925,
+        "measured_oo_distance_angstrom": 3.2,
+        "requested_oo_distance_angstrom": 3.2,
+        "scan_index": 3
+      },
+      {
+        "a_geometry_sha256": "ca9f08d86e726f524556c3fa25bc64b4d8b5520ee5156f7b23644850c6fb30c7",
+        "ab_geometry_sha256": "1ec813109c66d2cd6da14f9c26b81ee40831cd71fa074c7a3d448da6e873dcfe",
+        "b_geometry_sha256": "42e92e4b4cb0800c8557ded90a3230be1ff4b66972c803630413978e50cf311d",
+        "energy_a_Eh": -76.3975805566393,
+        "energy_ab_Eh": -152.8008582380823,
+        "energy_b_Eh": -76.39758055663923,
+        "interaction_Eh": -0.005697124803774045,
+        "interaction_kJ_mol": -14.95779911838138,
+        "interaction_kcal_mol": -3.574999789288093,
+        "measured_oo_distance_angstrom": 3.5,
+        "requested_oo_distance_angstrom": 3.5,
+        "scan_index": 4
+      },
+      {
+        "a_geometry_sha256": "d6b4b82f667506e9bbcee52b4d118b61ec95012cad42b750936682bb708cdbee",
+        "ab_geometry_sha256": "5df211a5d307bf4372abd84b47f546fc24f09a99c0274151e7d2bfe1d917d170",
+        "b_geometry_sha256": "fd9367c240c00d52a7efb8862fcba49d723b71a394c7075cecbbb3af0e92c656",
+        "energy_a_Eh": -76.3975805566392,
+        "energy_ab_Eh": -152.79931851841042,
+        "energy_b_Eh": -76.39758055663918,
+        "interaction_Eh": -0.004157405132033887,
+        "interaction_kJ_mol": -10.915265675327316,
+        "interaction_kcal_mol": -2.6088111078698173,
+        "measured_oo_distance_angstrom": 3.9,
+        "requested_oo_distance_angstrom": 3.9,
+        "scan_index": 5
+      },
+      {
+        "a_geometry_sha256": "8a08e93007b9309e0fa8a55a9e1f87eea55900d6a24d0fd6937a23bdd11f0bec",
+        "ab_geometry_sha256": "704a7e461ce69e0f30d7b20d205ecbaa362a0a08192e4b9f091fb3456ad90cab",
+        "b_geometry_sha256": "33be0f2bab02b0972d866532fd9e7ff045aef9e53d95d9d6f9c3209fd5b1c0c2",
+        "energy_a_Eh": -76.39758055663903,
+        "energy_ab_Eh": -152.79785322578098,
+        "energy_b_Eh": -76.39758055663927,
+        "interaction_Eh": -0.0026921125026859727,
+        "interaction_kJ_mol": -7.06814040524165,
+        "interaction_kcal_mol": -1.6893261006791707,
+        "measured_oo_distance_angstrom": 4.4,
+        "requested_oo_distance_angstrom": 4.4,
+        "scan_index": 6
+      },
+      {
+        "a_geometry_sha256": "7afaf11a93da3ecbe4dfe97ccdc3ba282ecdd7a9d960e4a03e8a495b201d2493",
+        "ab_geometry_sha256": "0373829a2f98003b81231327f1dd735af9abef300d7192f7f5bf8b15b4403070",
+        "b_geometry_sha256": "370b18dfa261c7147bcfc3a2813b6f3699c495e2d60840f99cb25ba7f57e7fe3",
+        "energy_a_Eh": -76.39758055663901,
+        "energy_ab_Eh": -152.79669682536976,
+        "energy_b_Eh": -76.39758055663924,
+        "interaction_Eh": -0.0015357120915098221,
+        "interaction_kJ_mol": -4.032011542604131,
+        "interaction_kcal_mol": -0.9636738868556718,
+        "measured_oo_distance_angstrom": 5.0,
+        "requested_oo_distance_angstrom": 5.0,
+        "scan_index": 7
+      }
+    ],
+    "single_point_count": 24
+  },
+  "schema": "alchemi.b97-3c-water-dimer-scan.v1",
+  "sources": {
+    "environment_spec": {
+      "path": "part-1-scalable-atomistic-workflows/reference/environment.yml",
+      "sha256": "f4f4d10038b11192f97467719e77385c5cf6d39ff7fc4de45dfefe6b5fd99f98"
+    },
+    "generator": {
+      "path": "part-1-scalable-atomistic-workflows/reference/water_dimer_b97_3c.py",
+      "sha256": "ef3c9a27d0608402e960ed7c52c5ac70639341d4f44518d6e9ffe5e5b4b0b8c5"
+    },
+    "geometry_builder": {
+      "path": "part-1-scalable-atomistic-workflows/aux/structures.py",
+      "sha256": "19f910ab40f5b5214e9bdc4a4cab07efa295332f623e3e2478e4627ec789563d"
+    },
+    "repository_license": {
+      "path": "LICENSE",
+      "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+    }
+  },
+  "status": "complete",
+  "units": {
+    "energy": "hartree",
+    "geometry": "angstrom",
+    "hartree_to_kJ_per_mol": 2625.4996394800105,
+    "hartree_to_kcal_per_mol": 627.5094740631,
+    "interaction_energy_presentations": [
+      "kcal/mol",
+      "kJ/mol"
+    ]
+  }
+}

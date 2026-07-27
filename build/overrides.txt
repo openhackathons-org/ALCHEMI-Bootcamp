@@ -1,4 +1,5 @@
-# orb-models 0.7.0 declares nvalchemi-toolkit-ops[torch] <0.4 even though the
-# playbook intentionally uses and validates Toolkit-Ops 0.4.0. Keep the exact
-# source pin authoritative when uv resolves the unified environment.
-nvalchemi-toolkit-ops @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c6fbe652315e0cebd4f57a6a25f626258f0dbbfd
+# Historical record only. The current Part 1 Docker image and Slurm setup do
+# not read this file. An earlier shared environment forced Toolkit-Ops 0.4.0
+# past orb-models 0.7.0's declared `<0.4` limit. Do not apply that override to
+# Part 1. The retained Orb notebook needs its separate historical environment.
+nvalchemi-toolkit-ops @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@e8e7a7464f6745277a156a3d6f433d06b58c60e3
