@@ -149,7 +149,11 @@ reconstructs pre-existing atom fields but not per-system values such as charge,
 stress, virial, dipole, graph embeddings, `info`, or custom metadata. Read the
 globally reduced energy from the local result; use `gather` for atom fields.
 Gathered atom rows are rank-contiguous rather than source-ordered. The campaign
-carries `source_atom_id` and sorts by it before comparing forces.
+keeps `source_atom_id` outside the Toolkit `Batch`, uses
+`SpatialPartitioner.assign_atoms_to_ranks` to reproduce Toolkit's stable
+rank-contiguous scatter order, and restores source order before comparing
+forces. Multi-GPU runs request one step, so no deferred atom migration changes
+that initial ownership before `gather`.
 
 The fixed 51,200-atom check is a 2 × 2 × 4 supercell. With the declared
 cutoff, Toolkit is expected to choose 1 × 1 × 2 ranks on two GPUs and

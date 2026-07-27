@@ -9308,7 +9308,7 @@ mesh = manager.initialize_mesh(
     mesh_dim_names=("domain",),
 )
 
-full = ... if manager.rank == 0 else None  # includes stable source_atom_id
+full = ... if manager.rank == 0 else None  # rank 0 supplies the full system
 periodic_model = ...  # checkpoint base + predicted-charge PME + D3
 config = DomainConfig(
     cutoff=domain_cutoff_a,
@@ -9337,9 +9337,9 @@ The total energy is summed across GPUs; `gather` collects atom-level fields on
 rank 0. Multi-GPU `DomainParallel` rebuilds neighbors inside each region; the
 one-GPU path uses the model's ordinary neighbor hooks.
 
-`SpatialPartitioner` previews ownership. Cell shape affects the rank layout,
-so the offline run records it for every input. `require_nondegenerate=True`
-rejects a run whose halos cover the full structure.
+`SpatialPartitioner` records the layout. The offline one-step check uses
+`assign_atoms_to_ranks(...)` to restore gathered rows before comparing forces.
+`require_nondegenerate=True` rejects halos that cover the full structure.
 
 | Layout | Role |
 |---|---|
