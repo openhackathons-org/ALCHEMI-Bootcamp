@@ -52,7 +52,7 @@ export PYTHONDONTWRITEBYTECODE=1
 #       "$DOMAIN_JOB"
 #   done
 #
-# The `bundle` command shown by the completed jobs combines the four result
+# The `bundle` command shown by the completed jobs combines the three result
 # directories. No GPU count runs the complete large-size ladder unnecessarily.
 
 : "${ALCHEMI_RUN_ROOT:?set ALCHEMI_RUN_ROOT to shared persistent storage}"
