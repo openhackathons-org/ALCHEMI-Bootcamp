@@ -609,9 +609,15 @@ def test_slurm_uses_local_caches_and_checks_each_phase() -> None:
         REPO_ROOT / "scripts" / "slurm_part1_domain_decomposition.sbatch"
     ).read_text(encoding="utf-8")
 
+    assert "export NODE_CACHE_ROOT" in source
     assert 'export TMPDIR="$NODE_CACHE_ROOT/tmp"' in source
     assert 'export WARP_CACHE_PATH="$NODE_CACHE_ROOT/warp"' in source
     assert 'export CUDA_CACHE_PATH="$NODE_CACHE_ROOT/cuda"' in source
+    bootstrap = source.index(
+        'bash -c \'set -euo pipefail; mkdir -p "$NODE_CACHE_ROOT/tmp"'
+    )
+    tmpdir_export = source.index('export TMPDIR="$NODE_CACHE_ROOT/tmp"')
+    assert bootstrap < tmpdir_export
     assert 'METHODOLOGY_CONFIG="$SHARED_REPO/' in source
     assert 'test -f "$METHODOLOGY_CONFIG"' in source
     assert "config.capacity_molecules_per_species" in source
