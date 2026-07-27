@@ -142,11 +142,14 @@ to improve in a fixed order.
 
 `AtomicData.charge` supplies one formal total charge for each whole system. It
 is a model input, not a set of atom-by-atom formal charges. AIMNet2 predicts
-geometry-dependent atomic charges whose sum matches that input total. Those
+geometry-dependent float32 atomic charges, and its internal charge correction
+targets that input total with a float32 reduction. Re-summing the returned
+charges in float64 can expose a small residual for a large system. The tutorial
+records that residual instead of treating it as a physical net charge. The
 predicted charges supply the Coulomb energy and the point-charge dipoles used
 later in the tutorial. The NCI graphs keep their source formal charges,
 including the charge −1 ammonia–benzoate complex and benzoate fragment. The
-Stage 7 phenol/N-methylacetamide periodic box is neutral.
+Stage 7 phenol/N-methylacetamide periodic box has formal charge zero.
 
 All three interaction classes use the same frozen-monomer definition:
 
@@ -202,6 +205,14 @@ charge on every molecule in the checked base box. Only the total box charge is
 constrained, so the molecular sums are saved and summarized as a model
 diagnostic, not treated as validated intermolecular charge transfer.
 
+The fixed 3,200-atom PME-versus-Ewald check requires the same predicted charge
+array in both solvers and applies the declared
+`|Σq − Qtarget| ≤ 1e-4 e` residual limit.
+Larger one-GPU runs save the float32 charge dtype, requested total, observed
+total, residual, and charge magnitudes as diagnostics. They do not reuse that
+small-box absolute limit. PME consumes the recorded predicted charges without a
+hidden charge adjustment.
+
 The notebook estimates PME parameters and walks through the public one-GPU
 `DomainParallel` call. One GPU has one domain, so this checks the API and finite
 outputs without spatial decomposition or a speed claim. The checked offline
@@ -218,8 +229,11 @@ The offline run also checks fixed-charge PME against Ewald and compares
 distributed forces and energies before reporting performance. Each multi-GPU
 count means the same number of nodes, ranks, and H100s. Toolkit 0.2 repeats the
 PME mesh and FFT workspace on every GPU, so domain decomposition does not
-divide all memory. This example is neutral because Toolkit 0.2 does not carry
-the input system charge into each GPU region.
+divide all memory. The input box has formal charge zero. Toolkit 0.2 does not
+expose the intermediate multi-rank predicted charges, so the recorded
+multi-GPU checks compare the supported energy and force outputs. These
+comparisons do not independently verify the global charge residual of the
+distributed prediction.
 
 Exact cutoffs, halo depth, tolerances, energy-reduction handling, and launch
 commands are in the

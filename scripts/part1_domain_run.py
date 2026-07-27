@@ -7,10 +7,11 @@ Toolkit construction:
 ``DistributedManager -> DeviceMesh -> DomainConfig -> DomainParallel ->
 partition -> run -> gather``.
 
-The Toolkit 0.2 version used here returns energy and forces but not
-the charge field from its AIMNet2-to-PME group. One-GPU references record the
-predicted charge sum; the separate ``electrostatics-validation`` mode also
-checks PME against Ewald on the same fixed charges.
+The Toolkit 0.2 version used here returns energy and forces but not the charge
+field from its distributed AIMNet2-to-PME group. One-GPU references record
+finite float32 charge diagnostics. The separate ``electrostatics-validation``
+mode applies the strict charge-residual limit and checks PME against Ewald on
+the same fixed charges.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ from aux.domain.config import DOMAIN_METHODOLOGY  # noqa: E402
 DOMAIN_METHODOLOGY_CONFIG_PATH = (
     PART_DIR / "aux" / "domain" / "config.py"
 ).resolve()
-RESULT_SCHEMA = "alchemi.part1-domain-case.v2"
+RESULT_SCHEMA = "alchemi.part1-domain-case.v3"
 RANK_SCHEMA = "alchemi.part1-domain-rank.v1"
 CORE_COMMIT = "331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409"
 OPS_COMMIT = "e8e7a7464f6745277a156a3d6f433d06b58c60e3"
@@ -525,6 +526,54 @@ def tensor_checksum(tensor: Any) -> str:
     digest.update(json.dumps(array.shape).encode())
     digest.update(array.tobytes())
     return digest.hexdigest()
+
+
+def charge_diagnostics(
+    charges: Any,
+    *,
+    target_sum_e: float,
+) -> dict[str, Any]:
+    """Summarize the exact predicted charge tensor passed to electrostatics."""
+
+    import torch
+
+    target = float(target_sum_e)
+    if not math.isfinite(target):
+        raise ValueError("charge target must be finite")
+    values = charges.detach()
+    if values.numel() <= 0:
+        raise ValueError("predicted charge tensor must not be empty")
+    finite = bool(torch.isfinite(values).all())
+    record: dict[str, Any] = {
+        "available": True,
+        "values": None,
+        "dtype": str(values.dtype).removeprefix("torch."),
+        "target_sum_e": target,
+        "shape": list(values.shape),
+        "sha256": tensor_checksum(values),
+        "finite": finite,
+        "sum_e": None,
+        "residual_e": None,
+        "abs_residual_per_atom": None,
+        "sum_abs_e": None,
+        "max_abs_e": None,
+    }
+    if not finite:
+        return record
+
+    values_float64 = values.to(torch.float64)
+    charge_sum = float(values_float64.sum().item())
+    residual = charge_sum - target
+    record.update(
+        {
+            "sum_e": charge_sum,
+            "residual_e": residual,
+            "abs_residual_per_atom": abs(residual) / values.numel(),
+            "sum_abs_e": float(values_float64.abs().sum().item()),
+            "max_abs_e": float(values_float64.abs().max().item()),
+        }
+    )
+    return record
 
 
 def tensor_bundle_checksum(fields: dict[str, Any]) -> str:
@@ -1175,7 +1224,11 @@ def run_electrostatics_validation(
     force_difference_max_norm = float(
         torch.linalg.vector_norm(force_difference_values, dim=1).max().item()
     )
-    charge_sum = float(charges.to(torch.float64).sum().item())
+    charge_record = charge_diagnostics(
+        charges,
+        target_sum_e=float(batch.charge.to(torch.float64).sum().item()),
+    )
+    charge_residual = charge_record["residual_e"]
     acceptance = {
         "declared_before_measurement": True,
         "absolute_energy_difference_ev_per_atom_max": (
@@ -1185,11 +1238,13 @@ def run_electrostatics_validation(
         "absolute_charge_sum_e_max": args.charge_sum_tol_e,
     }
     passed = (
-        energy_difference_per_atom
+        charge_record["finite"] is True
+        and charge_residual is not None
+        and energy_difference_per_atom
         <= acceptance["absolute_energy_difference_ev_per_atom_max"]
         and force_difference_max_norm
         <= acceptance["force_difference_max_norm_ev_a_max"]
-        and abs(charge_sum) <= acceptance["absolute_charge_sum_e_max"]
+        and abs(charge_residual) <= acceptance["absolute_charge_sum_e_max"]
     )
     row = {
         "schema": RESULT_SCHEMA,
@@ -1226,15 +1281,7 @@ def run_electrostatics_validation(
             "minimum_cell_length_a": minimum_cell_length_a,
             "compile_model": False,
         },
-        "charges": {
-            "available": True,
-            "shape": list(charges.shape),
-            "sha256": tensor_checksum(charges),
-            "sum_e": charge_sum,
-            "sum_abs_e": float(charges.to(torch.float64).abs().sum().item()),
-            "max_abs_e": float(charges.to(torch.float64).abs().max().item()),
-            "finite": bool(torch.isfinite(charges).all()),
-        },
+        "charges": charge_record,
         "pme": {
             "energy_ev": pme_energy,
             "forces": force_summary(pme_forces),
@@ -1695,6 +1742,20 @@ def run_capacity(
         # Toolkit 0.2 gathers atom-level fields. The globally reduced total
         # energy is already replicated on each rank before gather.
         energy_ev = float(replicated_energy.reshape(-1)[0].item())
+        assert full_batch is not None
+        target_charge_sum_e = float(
+            full_batch.charge.detach().to(torch.float64).sum().item()
+        )
+        one_gpu_charge_record = None
+        if world_size == 1:
+            one_gpu_charge_record = charge_diagnostics(
+                gathered.charges,
+                target_sum_e=target_charge_sum_e,
+            )
+            one_gpu_charge_record["reason"] = (
+                "Values are summarized rather than copied into JSON. PME used "
+                "this unmodified float32 charge tensor."
+            )
         row = {
             "schema": RESULT_SCHEMA,
             "created_utc": utc_now(),
@@ -1758,23 +1819,27 @@ def run_capacity(
                 ),
             },
             "charges": (
-                {
-                    "available": True,
-                    "values": None,
-                    "sum_e": float(gathered.charges.to(torch.float64).sum().item()),
-                    "sha256": tensor_checksum(gathered.charges),
-                    "finite": bool(torch.isfinite(gathered.charges).all()),
-                    "reason": "Values are summarized rather than copied into JSON.",
-                }
+                one_gpu_charge_record
                 if world_size == 1
                 else {
                     "available": False,
                     "values": None,
+                    "dtype": None,
+                    "target_sum_e": target_charge_sum_e,
+                    "shape": None,
+                    "sha256": None,
+                    "finite": None,
                     "sum_e": None,
+                    "residual_e": None,
+                    "abs_residual_per_atom": None,
+                    "sum_abs_e": None,
+                    "max_abs_e": None,
                     "reason": (
                         "The Toolkit 0.2 DistributedPipelineModel AIMNet2-to-PME "
                         "group returns energy and forces only. The same input's "
-                        "one-GPU reference records charge neutrality."
+                        "one-GPU reference records the float32 charge diagnostics; "
+                        "multi-GPU agreement is checked with forces and the "
+                        "distributed energies."
                     ),
                 }
             ),

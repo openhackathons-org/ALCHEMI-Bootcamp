@@ -43,11 +43,11 @@ DOMAIN_METHODOLOGY_CONFIG_PATH = (
 PLAN_SCHEMA = "alchemi.part1-domain-plan.v2"
 INPUT_SCHEMA = "alchemi.part1-domain-input.v2"
 BASE_BOX_SCHEMA = "alchemi.part1-domain-base-box.v1"
-RESULT_SCHEMA = "alchemi.part1-domain-case.v2"
-COLLECTION_SCHEMA = "alchemi.part1-domain-collection.v2"
-SELECTION_SCHEMA = "alchemi.part1-domain-selection.v2"
+RESULT_SCHEMA = "alchemi.part1-domain-case.v3"
+COLLECTION_SCHEMA = "alchemi.part1-domain-collection.v3"
+SELECTION_SCHEMA = "alchemi.part1-domain-selection.v3"
 DISTRIBUTED_PLAN_SCHEMA = "alchemi.part1-domain-distributed-plan.v2"
-BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v2"
+BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v3"
 PHASE_SUMMARY_SCHEMA = "alchemi.part1-domain-phase-summary.v1"
 CHECKPOINT_PREFLIGHT_SCHEMA = "alchemi.part1-domain-checkpoint-preflight.v1"
 
@@ -1431,6 +1431,167 @@ def _capacity_prefix(
     return rows
 
 
+def _finite_charge_value(
+    record: dict[str, Any],
+    name: str,
+    *,
+    context: str,
+) -> float:
+    value = record.get(name)
+    if isinstance(value, bool):
+        raise ValueError(f"{context} has an invalid {name}")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as error:
+        raise ValueError(f"{context} has an invalid {name}") from error
+    if not math.isfinite(number):
+        raise ValueError(f"{context} has a non-finite {name}")
+    return number
+
+
+def validated_charge_diagnostics(
+    record: Any,
+    *,
+    atom_count: int,
+    target_sum_e: float = 0.0,
+    context: str = "charge diagnostics",
+) -> dict[str, Any]:
+    """Validate finite charge metadata without limiting its residual size."""
+
+    if not isinstance(record, dict):
+        raise ValueError(f"{context} are missing")
+    if atom_count <= 0:
+        raise ValueError(f"{context} have an invalid atom count")
+    if record.get("available") is not True:
+        raise ValueError(f"{context} are unavailable")
+    if record.get("finite") is not True:
+        raise ValueError(f"{context} report non-finite predicted charges")
+    if record.get("dtype") != "float32":
+        raise ValueError(f"{context} must describe the float32 PME charge tensor")
+
+    expected_target = float(target_sum_e)
+    if not math.isfinite(expected_target):
+        raise ValueError(f"{context} have a non-finite expected target")
+    observed_target = _finite_charge_value(
+        record,
+        "target_sum_e",
+        context=context,
+    )
+    if observed_target != expected_target:
+        raise ValueError(f"{context} do not match the input total-charge target")
+
+    shape = record.get("shape")
+    if (
+        not isinstance(shape, list)
+        or not shape
+        or any(
+            isinstance(value, bool) or not isinstance(value, int) or value <= 0
+            for value in shape
+        )
+        or math.prod(shape) != atom_count
+    ):
+        raise ValueError(f"{context} have an inconsistent tensor shape")
+    checksum = record.get("sha256")
+    if not isinstance(checksum, str) or re.fullmatch(r"[0-9a-f]{64}", checksum) is None:
+        raise ValueError(f"{context} have an invalid tensor SHA-256")
+
+    charge_sum = _finite_charge_value(record, "sum_e", context=context)
+    residual = _finite_charge_value(record, "residual_e", context=context)
+    residual_per_atom = _finite_charge_value(
+        record,
+        "abs_residual_per_atom",
+        context=context,
+    )
+    sum_abs = _finite_charge_value(record, "sum_abs_e", context=context)
+    max_abs = _finite_charge_value(record, "max_abs_e", context=context)
+    if not math.isclose(
+        residual,
+        charge_sum - observed_target,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-15,
+    ):
+        raise ValueError(f"{context} have an inconsistent charge residual")
+    if not math.isclose(
+        residual_per_atom,
+        abs(residual) / atom_count,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-18,
+    ):
+        raise ValueError(f"{context} have an inconsistent residual per atom")
+    magnitude_slack = 1.0e-12 * max(1.0, sum_abs)
+    if (
+        residual_per_atom < 0.0
+        or sum_abs < 0.0
+        or max_abs < 0.0
+        or sum_abs + magnitude_slack < abs(charge_sum)
+        or max_abs > sum_abs + magnitude_slack
+    ):
+        raise ValueError(f"{context} have inconsistent charge magnitudes")
+
+    return {
+        "available": True,
+        "finite": True,
+        "dtype": "float32",
+        "target_sum_e": observed_target,
+        "sum_e": charge_sum,
+        "residual_e": residual,
+        "abs_residual_per_atom": residual_per_atom,
+        "sum_abs_e": sum_abs,
+        "max_abs_e": max_abs,
+        "shape": list(shape),
+        "sha256": checksum,
+    }
+
+
+def require_fixed_charge_validation_residual(
+    diagnostics: dict[str, Any],
+    *,
+    atom_count: int,
+    max_abs_residual_e: float,
+) -> None:
+    """Apply the strict charge limit only to the 3,200-atom solver check."""
+
+    if atom_count != BASE_ATOM_COUNT:
+        raise ValueError(
+            "the strict charge-residual limit is reserved for the checked "
+            f"{BASE_ATOM_COUNT:,}-atom PME-versus-Ewald validation"
+        )
+    limit = float(max_abs_residual_e)
+    if not math.isfinite(limit) or limit < 0.0:
+        raise ValueError("fixed-charge validation has an invalid residual limit")
+    if abs(float(diagnostics["residual_e"])) > limit:
+        raise ValueError(
+            "PME-versus-Ewald fixed-charge validation exceeds the declared "
+            "charge-residual limit"
+        )
+
+
+def capacity_charge_diagnostic_records(
+    rows: Iterable[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Normalize the one-GPU charge diagnostics saved with successful cases."""
+
+    records = []
+    for row in rows:
+        if not bool(row.get("success")):
+            continue
+        atom_count = int(row["atom_count"])
+        records.append(
+            {
+                "case_id": str(row["case_id"]),
+                "pair_count": int(row["pair_count"]),
+                "atom_count": atom_count,
+                "charge_diagnostics": validated_charge_diagnostics(
+                    row.get("charges"),
+                    atom_count=atom_count,
+                    target_sum_e=0.0,
+                    context=f"{row['case_id']} charge diagnostics",
+                ),
+            }
+        )
+    return records
+
+
 def _selected_input(
     *,
     input_root: Path,
@@ -1529,6 +1690,20 @@ def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
         )
     if validation["comparison"].get("passed") is not True:
         raise ValueError("PME-versus-Ewald fixed-charge validation did not pass")
+    validation_atom_count = int(validation["atom_count"])
+    validation_charge_diagnostics = validated_charge_diagnostics(
+        validation.get("charges"),
+        atom_count=validation_atom_count,
+        target_sum_e=0.0,
+        context="PME-versus-Ewald charge diagnostics",
+    )
+    require_fixed_charge_validation_residual(
+        validation_charge_diagnostics,
+        atom_count=validation_atom_count,
+        max_abs_residual_e=float(
+            measured_acceptance["absolute_charge_sum_e_max"]
+        ),
+    )
     validation_settings = validation["settings"]
     validation_geometry = validated_manifest_cell_geometry(
         validation["input"]["manifest"]
@@ -1606,6 +1781,7 @@ def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
     ):
         raise ValueError("electrostatics solver settings differ from the plan")
 
+    capacity_charge_diagnostics = capacity_charge_diagnostic_records(successful)
     parity_pair_count = int(args.parity_pairs)
     parity_rows = [
         row for row in successful if int(row["pair_count"]) == parity_pair_count
@@ -1615,15 +1791,11 @@ def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
             f"declared parity input {parity_pair_count} pairs did not complete "
             "on one GPU"
         )
-    parity_charges = parity_rows[0].get("charges", {})
-    if (
-        parity_charges.get("available") is not True
-        or parity_charges.get("finite") is not True
-        or abs(float(parity_charges.get("sum_e", math.inf))) > DEFAULT_CHARGE_SUM_TOL_E
-    ):
-        raise ValueError(
-            "the one-GPU parity reference did not return neutral finite charges"
-        )
+    parity_charge_diagnostics = next(
+        record["charge_diagnostics"]
+        for record in capacity_charge_diagnostics
+        if record["case_id"] == parity_rows[0]["case_id"]
+    )
     input_root = args.input_root.resolve()
     parity_reference_input = _selected_input(
         input_root=input_root,
@@ -1660,6 +1832,7 @@ def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
         "capacity_result_dir": str(result_dir),
         "capacity_attempted_case_ids": [row["case_id"] for row in rows],
         "capacity_attempted_pair_counts": [int(row["pair_count"]) for row in rows],
+        "capacity_charge_diagnostics": capacity_charge_diagnostics,
         "largest_success": {
             "case_id": largest_success["case_id"],
             "result_file": largest_success["result_file"],
@@ -1729,8 +1902,7 @@ def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
                 "force_atol_ev_a": DEFAULT_PARITY_FORCE_ATOL_EV_A,
                 "force_rtol": DEFAULT_PARITY_FORCE_RTOL,
             },
-            "charge_sum_e": float(parity_charges["sum_e"]),
-            "charge_sum_tolerance_e": DEFAULT_CHARGE_SUM_TOL_E,
+            "charge_diagnostics": parity_charge_diagnostics,
             "partition_check": parity_partition_check,
         },
         "electrostatics_validation": {
@@ -1738,6 +1910,7 @@ def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
             "result_file": validation["result_file"],
             "result_file_sha256": validation["result_file_sha256"],
             "input_file_sha256": validation["input"]["file_sha256"],
+            "charge_diagnostics": validation_charge_diagnostics,
             "charge_sha256": validation["charges"]["sha256"],
             "charge_sum_e": validation["charges"]["sum_e"],
             "pme_energy_ev": validation["pme"]["energy_ev"],
@@ -2481,6 +2654,56 @@ def build_bundle(args: argparse.Namespace) -> dict[str, Any]:
     )
     if validation_row["comparison"].get("passed") is not True:
         raise ValueError("PME-versus-Ewald validation did not pass")
+    expected_capacity_charge_diagnostics = capacity_charge_diagnostic_records(
+        capacity_rows
+    )
+    if (
+        selection.get("capacity_charge_diagnostics")
+        != expected_capacity_charge_diagnostics
+    ):
+        raise ValueError(
+            "capacity charge diagnostics differ from the selected result rows"
+        )
+    selected_parity_case_id = str(selection["parity_reference"]["case_id"])
+    try:
+        expected_parity_charge_diagnostics = next(
+            record["charge_diagnostics"]
+            for record in expected_capacity_charge_diagnostics
+            if record["case_id"] == selected_parity_case_id
+        )
+    except StopIteration as error:
+        raise ValueError(
+            "the selected parity case has no capacity charge diagnostics"
+        ) from error
+    if (
+        selection["parity_reference"].get("charge_diagnostics")
+        != expected_parity_charge_diagnostics
+    ):
+        raise ValueError(
+            "parity charge diagnostics differ from the selected capacity row"
+        )
+    validation_charge_diagnostics = validated_charge_diagnostics(
+        validation_row.get("charges"),
+        atom_count=int(validation_row["atom_count"]),
+        target_sum_e=0.0,
+        context="PME-versus-Ewald charge diagnostics",
+    )
+    require_fixed_charge_validation_residual(
+        validation_charge_diagnostics,
+        atom_count=int(validation_row["atom_count"]),
+        max_abs_residual_e=float(
+            validation_row["comparison"]["acceptance"][
+                "absolute_charge_sum_e_max"
+            ]
+        ),
+    )
+    if (
+        selection["electrostatics_validation"].get("charge_diagnostics")
+        != validation_charge_diagnostics
+    ):
+        raise ValueError(
+            "electrostatics charge diagnostics differ from the selected result"
+        )
     steady_timing_case = selection["steady_timing_case"]
     steady_timing_one_gpu = _read_case_result(
         capacity_dir / "results" / steady_timing_case["result_file"],
@@ -3625,6 +3848,7 @@ def build_bundle(args: argparse.Namespace) -> dict[str, Any]:
             "fixed_charges": True,
             "atom_count": int(validation_row["atom_count"]),
             "structure_sha256": validation_row["input"]["file_sha256"],
+            "charge_diagnostics": validation_charge_diagnostics,
             "charge_sum_e": electrostatics["charge_sum_e"],
             "charge_sum_tolerance_e": DEFAULT_CHARGE_SUM_TOL_E,
             "pme_energy_ev": electrostatics["pme_energy_ev"],
@@ -3654,6 +3878,12 @@ def build_bundle(args: argparse.Namespace) -> dict[str, Any]:
                 "pair_count"
             ],
             "parity_pair_count": selection["parity_reference"]["input"]["pair_count"],
+            "capacity_charge_diagnostics": selection[
+                "capacity_charge_diagnostics"
+            ],
+            "parity_charge_diagnostics": selection["parity_reference"][
+                "charge_diagnostics"
+            ],
             "successful_rescue_gpu_counts": list(successful_rescue_world_sizes),
         },
         "data": data_manifest,
@@ -3766,9 +3996,10 @@ def record_failure(args: argparse.Namespace) -> dict[str, Any]:
         "charges": {
             "available": False,
             "reason": (
-                "The Toolkit 0.2 distributed composite returns energy and forces "
-                "only. Charge neutrality is checked in the separate one-GPU "
-                "PME-versus-Ewald validation."
+                "This failed case returned no charge output. Successful one-GPU "
+                "capacity rows record the actual float32 charge diagnostics; "
+                "the strict residual limit applies only to the separate "
+                "3,200-atom PME-versus-Ewald validation."
             ),
         },
         "halo_counts": {

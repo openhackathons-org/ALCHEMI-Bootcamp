@@ -4,8 +4,9 @@ This directory is reserved for the recorded H100 results used by the final
 Part 1 scaling lesson. Until a complete result set passes the checks below, the
 notebook displays `NOT REPORTED`.
 
-The workload starts from one checked, neutral, three-dimensionally periodic
-box containing 128 phenol and 128 N-methylacetamide molecules (3,200 atoms).
+The workload starts from one checked, three-dimensionally periodic box
+containing 128 phenol and 128 N-methylacetamide molecules (3,200 atoms). Its
+input total-charge target is zero.
 The molecular geometries come from NCI Atlas system `1.041`, which is evaluated
 earlier in the notebook. Packmol placed the two kinds of molecule independently
 when this base box was prepared. The count is a 1:1 composition count, not a
@@ -75,11 +76,16 @@ energy offset only as a diagnostic.
   4-GPU energy must agree with it within `1e-4 eV/atom`. The raw
   one-GPU-to-multi-GPU energy offsets are recorded as diagnostics and do not
   determine acceptance.
-- Neutral finite predicted charges on that case's one-GPU reference.
+- Available finite float32 predicted charges on every successful one-GPU
+  capacity case. Each result records the input target, predicted sum, residual,
+  absolute residual per atom, absolute-charge statistics, dtype, shape, and
+  tensor hash. The residual is a diagnostic, not a large-system pass limit.
+  Toolkit passes the returned charge tensor to PME without another
+  renormalization.
 - A separate one-GPU fixed-charge PME-versus-Ewald check on the checked
   3,200-atom base box. It uses `estimate_ewald_parameters` at `2e-5`; the charge
   array must be identical in both solvers. The pass limits are declared before
-  the H100 results are inspected: `|sum(q)| <= 1e-4 e`,
+  the H100 results are inspected: `|Σq − Qtarget| <= 1e-4 e`,
   `|ΔE| / atom <= 1e-4 eV`, and `max |ΔF| <= 5e-3 eV/Å`.
 - The first planned size that naturally fails on one GPU, retried unchanged on
   two and four GPUs. These are cold out-of-memory retries: one
@@ -142,9 +148,14 @@ The public `DomainParallel` result exposes owned atoms through its returned
 local `Batch`. It does not expose exact halo counts, and this distributed
 composite returns energy and forces rather than the intermediate predicted
 charges. Those fields remain unavailable unless a later public API adds them.
-The Stage 7 box is neutral by design. Toolkit 0.2 does not carry the input
-system charge into each GPU region, and AIMNet2 defaults a missing charge
-to zero; this exact example must not be reused for a charged box. `gather`
+The Stage 7 input has a total-charge target of zero. AIMNet2 returns float32
+atomic charges, and its internal charge correction also reduces in float32.
+Re-summing the returned charges in float64 can expose a small residual for a
+large system. The campaign records that residual and passes the returned
+charges to PME without another adjustment. Toolkit 0.2 does not carry the input
+system charge into each GPU region, and AIMNet2 defaults a missing charge to
+zero; this exact
+example must not be reused for a charged box. `gather`
 reconstructs pre-existing atom fields but not per-system values such as charge,
 stress, virial, dipole, graph embeddings, `info`, or custom metadata. Read the
 globally reduced energy from the local result; use `gather` for atom fields.
@@ -154,6 +165,12 @@ keeps `source_atom_id` outside the Toolkit `Batch`, uses
 rank-contiguous scatter order, and restores source order before comparing
 forces. Multi-GPU runs request one step, so no deferred atom migration changes
 that initial ownership before `gather`.
+
+The distributed result does not expose the rank-local predicted charges for a
+second comparison. Rank consistency is therefore checked with source-ordered
+forces and the globally reduced distributed energies. The separate 3,200-atom
+PME-versus-Ewald calculation is the only place where
+`|Σq − Qtarget| <= 1e-4 e` is an acceptance rule.
 
 The fixed 51,200-atom check is a 2 × 2 × 4 supercell. With the declared
 cutoff, Toolkit is expected to choose 1 × 1 × 2 ranks on two GPUs and

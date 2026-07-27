@@ -266,7 +266,7 @@ def test_learner_path_stays_compact_and_starts_with_a_real_toolkit_result() -> N
     assert order.index("hello-world") < order.index("framework-primer")
     # Splitting the checked-box conversion and DomainConfig setup keeps each
     # Toolkit concept short even though it adds two visible cells. The Markdown
-    # budget includes the neutral-charge and gather limitations, plus the
+    # budget includes the zero-charge-target and gather limitations, plus the
     # BufferConfig sketch needed for the Toolkit 0.2 distributed lesson and the
     # compact multitask model sweep.
     assert len(visible_code) <= 55
@@ -1406,7 +1406,7 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
     for scientific_boundary in (
         "phenol and N-methylacetamide",
         "independent species",
-        "neutral 3,200-atom periodic box",
+        "3,200-atom periodic box with an input total-charge target of zero",
         "not a liquid-property calculation",
         "many independent graphs into one crowded periodic graph",
         "128 rigid copies of each",
@@ -1431,9 +1431,12 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
         "E_base = E_NN - E_Coulomb^SR",
         "E_composed = E_base + E_PME(q(R)) + E_D3",
         "Adding full PME gives `E_NN + E_Coulomb^LR` without double counting",
-        "`Batch.charge = 0` sets the total charge",
-        "geometry-dependent atomic charges",
-        "`PMEModelWrapper` consumes those charges",
+        "`Batch.charge = 0` supplies the model's total-charge target",
+        "returns float32 atomic charges",
+        "internal correction reduces in float32",
+        "re-summing a large system in float64",
+        "passes those charges to `PMEModelWrapper` unchanged",
+        "small residual",
         "fixed-charge PME forces",
         "response through the predicted charges",
         "`DomainParallel` then rebuilds neighbors for each GPU region",
@@ -1500,7 +1503,8 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
         "molecule_charge_tables(",
         "Predicted molecular charge sums",
         "Most negative and positive molecular charge sums",
-        "Only the total box charge is constrained",
+        "one total-charge target for the box",
+        "No additional renormalization is applied",
         "model-dependent sums",
         "not validated intermolecular charge transfer",
         "all 256",
@@ -1516,9 +1520,11 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
         "process mesh | assigns one worker process to each GPU",
         "spatial grid | assigns atoms to GPU regions",
         "PME grid | defines the electrostatics FFT repeated on every GPU",
-        "restricts this example to a neutral box",
-        "`gather` reconstructs declared atom fields such as forces",
+        "restricts this example to an input total-charge target of zero",
+        "passes AIMNet2 charges to PME unchanged",
+        "`gather` collects forces",
         "does not emit predicted atomic charges",
+        "Rank consistency is checked through source-ordered forces and distributed energies",
         "rebuilds neighbors inside each region",
         "one-GPU path uses the model's ordinary neighbor hooks",
     ):
@@ -1526,10 +1532,17 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
 
     inspect_text = " ".join(inspect.split())
     for result_check in (
-        "np.isfinite([domain_energy_ev, domain_fmax_ev_a, domain_charge_sum])",
-        "abs(domain_charge_sum) <= DOMAIN_CHARGE_SUM_TOLERANCE_E",
+        'domain_charge_dtype = str(domain_charge_values.dtype).removeprefix("torch.")',
+        "domain_charge_target_e = float(domain_batch.charge.to(torch.float64)",
+        "domain_charge_residual_e = domain_charge_sum - domain_charge_target_e",
+        "domain_charge_abs_residual_per_atom",
+        "domain_charge_finite",
         "assert domain_live_api_passed",
         '("spatially decomposed", False)',
+        '("predicted charge dtype", domain_charge_dtype)',
+        '("charge residual (e)", domain_charge_residual_e)',
+        "returned float32 charges to PME unchanged",
+        "numerical diagnostic, not a pass threshold",
         "raw model energy / atom for this fixed input",
         "not domain decomposition, a speedup, or a capacity measurement",
         "without changing its coordinates",
@@ -1538,6 +1551,8 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
         "equilibration before dynamics",
     ):
         assert result_check in inspect_text
+    assert "DOMAIN_CHARGE_SUM_TOLERANCE_E" not in inspect_text
+    assert "abs(domain_charge_sum) <=" not in inspect_text
 
 
 def test_domain_results_require_same_input_agreement_and_stable_timings() -> None:
@@ -1577,6 +1592,9 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
         "2-GPU distributed energy against 4",
         "raw 1-to-multi energy offset is diagnostic",
         "slowest-rank median and interquartile range (IQR)",
+        "actual float32 charges passed to PME",
+        "residual is reported, not limited",
+        "only to the separate 3,200-atom fixed-charge PME-versus-Ewald validation",
         "first OOM and its unchanged retries measure capacity",
         "separate one-GPU-fit input measures speed",
         "Missing files produce `NOT REPORTED`, never an estimate",
@@ -1603,6 +1621,8 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
     assert "speedup_by_gpu" in display_results
     for lesson_result in (
         "One-H100 capacity, including the first natural OOM",
+        "domain_view.charge_diagnostics_table.round(9)",
+        "One-H100 charge residuals passed to PME",
         '"measurement_role"].eq("rescue")',
         "The same first-OOM input on 2 and 4 H100s",
         '"measurement_role"].eq("steady_timing")',

@@ -501,13 +501,42 @@ def _write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
     )
 
 
+def _charge_diagnostics(
+    atom_count: int,
+    *,
+    charge_sum_e: float,
+    sha256: str,
+) -> dict[str, Any]:
+    target_sum_e = 0.0
+    residual_e = charge_sum_e - target_sum_e
+    return {
+        "available": True,
+        "finite": True,
+        "dtype": "float32",
+        "target_sum_e": target_sum_e,
+        "sum_e": charge_sum_e,
+        "residual_e": residual_e,
+        "abs_residual_per_atom": abs(residual_e) / atom_count,
+        "sum_abs_e": 0.25 * atom_count,
+        "max_abs_e": 0.5,
+        "shape": [atom_count],
+        "sha256": sha256,
+    }
+
+
 def _electrostatics_records() -> tuple[dict[str, Any], dict[str, Any]]:
+    charge_diagnostics = _charge_diagnostics(
+        PLANNED_ATOMS[0],
+        charge_sum_e=2.0e-7,
+        sha256=CHARGE_SHA256,
+    )
     manifest_record = {
         "status": "passed",
         "measurement_kind": "measured",
         "fixed_charges": True,
         "atom_count": PLANNED_ATOMS[0],
         "structure_sha256": STRUCTURE_SHA256_BY_ATOMS[PLANNED_ATOMS[0]],
+        "charge_diagnostics": charge_diagnostics,
         "charge_sum_e": 2.0e-7,
         "charge_sum_tolerance_e": CHARGE_SUM_TOLERANCE_E,
         "pme_energy_ev": -1.0,
@@ -530,11 +559,7 @@ def _electrostatics_records() -> tuple[dict[str, Any], dict[str, Any]]:
         "input": {
             "file_sha256": STRUCTURE_SHA256_BY_ATOMS[PLANNED_ATOMS[0]],
         },
-        "charges": {
-            "available": True,
-            "sha256": CHARGE_SHA256,
-            "sum_e": 2.0e-7,
-        },
+        "charges": json.loads(json.dumps(charge_diagnostics)),
         "pme": {
             "energy_ev": -1.0,
             "forces": {"sha256": PME_FORCE_SHA256},
@@ -683,6 +708,20 @@ def _raw_measurement_rows(
     for row in tables["capacity"].itertuples(index=False):
         raw = common(row, mode="capacity")
         if bool(row.success):
+            charge_sum_e = (
+                2.5e-5
+                if int(row.atom_count) == PLANNED_ATOMS[0]
+                else -4.67e-3
+            )
+            raw["charges"] = _charge_diagnostics(
+                int(row.atom_count),
+                charge_sum_e=charge_sum_e,
+                sha256=(
+                    "8" * 64
+                    if int(row.atom_count) == PLANNED_ATOMS[0]
+                    else "9" * 64
+                ),
+            )
             values = np.zeros((int(row.atom_count), 3), dtype=np.float32)
             if int(row.atom_count) == PLANNED_ATOMS[0]:
                 values[1, 0] = 1.0
@@ -836,6 +875,21 @@ def _seal_bundle(
         raw_tables,
         componentwise_parity_violation=componentwise_parity_violation,
     )
+    capacity_charge_diagnostics = [
+        {
+            "case_id": str(row["case_id"]),
+            "pair_count": int(row["pair_count"]),
+            "atom_count": int(row["atom_count"]),
+            "charge_diagnostics": json.loads(json.dumps(row["charges"])),
+        }
+        for row in raw_measurements
+        if row["mode"] == "capacity" and row["success"] is True
+    ]
+    parity_charge_diagnostics = next(
+        json.loads(json.dumps(record["charge_diagnostics"]))
+        for record in capacity_charge_diagnostics
+        if record["atom_count"] == PLANNED_ATOMS[0]
+    )
     tables = {name: table.copy(deep=True) for name, table in raw_tables.items()}
     if mutate_tables is not None:
         mutate_tables(tables)
@@ -926,6 +980,8 @@ def _seal_bundle(
             "parity_pair_count": (
                 PLANNED_ATOMS[0] // ATOMS_PER_COMPOSITION_UNIT
             ),
+            "capacity_charge_diagnostics": capacity_charge_diagnostics,
+            "parity_charge_diagnostics": parity_charge_diagnostics,
             "successful_rescue_gpu_counts": list(successful_rescue_gpus),
         },
         "data": data,
@@ -967,6 +1023,7 @@ def test_missing_results_are_explicitly_not_reported(tmp_path: Path) -> None:
     assert view.capacity_table["atom_count"].tolist() == list(PLANNED_ATOMS)
     assert view.capacity_table["success"].isna().all()
     assert view.capacity_table["torch_peak_allocated_gb"].isna().all()
+    assert view.charge_diagnostics_table.empty
     assert view.electrostatics_table.empty
     assert view.parity_table.empty
     assert view.distributed_table.empty
@@ -1003,6 +1060,32 @@ def test_complete_bundle_keeps_oom_and_returns_clear_plot_tables(
     assert view.capacity_table.iloc[-1]["failure_type"] == "CUDAOutOfMemoryError"
     assert view.capacity_table.iloc[-1]["torch_peak_allocated_gb"] == pytest.approx(
         79.0
+    )
+    assert list(view.charge_diagnostics_table.columns) == [
+        "atom_count",
+        "dtype",
+        "target_sum_e",
+        "charge_sum_e",
+        "residual_e",
+        "abs_residual_per_atom_e",
+    ]
+    assert view.charge_diagnostics_table["atom_count"].tolist() == [3200, 6400]
+    assert view.charge_diagnostics_table["dtype"].tolist() == [
+        "float32",
+        "float32",
+    ]
+    assert view.charge_diagnostics_table["target_sum_e"].tolist() == [0.0, 0.0]
+    assert view.charge_diagnostics_table["charge_sum_e"].tolist() == pytest.approx(
+        [2.5e-5, -4.67e-3]
+    )
+    assert view.charge_diagnostics_table["residual_e"].tolist() == pytest.approx(
+        [2.5e-5, -4.67e-3]
+    )
+    assert view.charge_diagnostics_table[
+        "abs_residual_per_atom_e"
+    ].tolist() == pytest.approx([2.5e-5 / 3200, 4.67e-3 / 6400])
+    assert abs(view.charge_diagnostics_table.iloc[-1]["residual_e"]) > (
+        CHARGE_SUM_TOLERANCE_E
     )
     assert view.electrostatics_table.iloc[0]["passed"]
     assert view.electrostatics_table.iloc[0]["charge_sum_e"] == pytest.approx(2.0e-7)
@@ -1607,6 +1690,145 @@ def test_loader_requires_steady_timing_size_to_equal_largest_capacity_success(
         load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
 
 
+@pytest.mark.parametrize(
+    "field",
+    ("capacity_charge_diagnostics", "parity_charge_diagnostics"),
+)
+def test_loader_requires_selection_charge_diagnostics(
+    tmp_path: Path,
+    field: str,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["selection"].pop(field)
+
+    root = _seal_bundle(
+        tmp_path / f"missing-{field}",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match=field):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_cross_checks_capacity_charge_diagnostics_to_raw_rows(
+    tmp_path: Path,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        diagnostics = manifest["selection"]["capacity_charge_diagnostics"][0][
+            "charge_diagnostics"
+        ]
+        diagnostics["sha256"] = "a" * 64
+
+    root = _seal_bundle(
+        tmp_path / "capacity-charge-mismatch",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match="do not match raw results"):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_requires_one_capacity_diagnostic_per_successful_row(
+    tmp_path: Path,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["selection"]["capacity_charge_diagnostics"].pop()
+
+    root = _seal_bundle(
+        tmp_path / "missing-capacity-charge-row",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(
+        DomainLessonResultsError,
+        match="every successful one-GPU capacity row",
+    ):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_requires_capacity_charge_diagnostics_in_capacity_order(
+    tmp_path: Path,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["selection"]["capacity_charge_diagnostics"].reverse()
+
+    root = _seal_bundle(
+        tmp_path / "reordered-capacity-charges",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match="in order"):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("available", False, "not available"),
+        ("finite", False, "non-finite"),
+        ("dtype", "float64", "float32"),
+        ("target_sum_e", 1.0, "input total charge"),
+        ("shape", [3199], "atom count"),
+        ("sha256", "not-a-sha256", "valid SHA-256"),
+        ("residual_e", 0.5, "inconsistent with the charge sum"),
+        ("abs_residual_per_atom", -1.0, "inconsistent"),
+        ("sum_abs_e", -1.0, "inconsistent charge magnitudes"),
+    ),
+)
+def test_loader_rejects_invalid_capacity_charge_diagnostics(
+    tmp_path: Path,
+    field: str,
+    value: Any,
+    message: str,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        diagnostics = manifest["selection"]["capacity_charge_diagnostics"][0][
+            "charge_diagnostics"
+        ]
+        diagnostics[field] = value
+
+    root = _seal_bundle(
+        tmp_path / f"invalid-capacity-charge-{field}",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match=message):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_rejects_unavailable_raw_capacity_charges(tmp_path: Path) -> None:
+    def mutate(rows: list[dict[str, Any]]) -> None:
+        raw_capacity = next(
+            row
+            for row in rows
+            if row.get("mode") == "capacity" and row.get("success") is True
+        )
+        raw_capacity["charges"]["available"] = False
+
+    root = _seal_bundle(
+        tmp_path / "unavailable-raw-capacity-charges",
+        mutate_raw_rows=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match="not available"):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_cross_checks_parity_charge_diagnostics(
+    tmp_path: Path,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["selection"]["parity_charge_diagnostics"]["sha256"] = "a" * 64
+
+    root = _seal_bundle(
+        tmp_path / "parity-charge-mismatch",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match="selected one-GPU"):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
 def test_loader_requires_measured_fixed_charge_electrostatics_check(
     tmp_path: Path,
 ) -> None:
@@ -1616,6 +1838,85 @@ def test_loader_requires_measured_fixed_charge_electrostatics_check(
     root = _seal_bundle(tmp_path / "changed-charges", mutate_manifest=mutate)
 
     with pytest.raises(DomainLessonResultsError, match="same fixed charge"):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_requires_electrostatics_charge_diagnostics(tmp_path: Path) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["electrostatics_validation"].pop("charge_diagnostics")
+
+    root = _seal_bundle(
+        tmp_path / "missing-electrostatics-charge-diagnostics",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match="charge_diagnostics"):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_cross_checks_electrostatics_charge_diagnostics_to_raw_row(
+    tmp_path: Path,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["electrostatics_validation"]["charge_diagnostics"][
+            "sha256"
+        ] = "a" * 64
+
+    root = _seal_bundle(
+        tmp_path / "electrostatics-charge-mismatch",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(
+        DomainLessonResultsError,
+        match="charge_diagnostics do not match raw results",
+    ):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_keeps_strict_residual_limit_for_3200_atom_solver_check(
+    tmp_path: Path,
+) -> None:
+    residual_e = 2.0 * CHARGE_SUM_TOLERANCE_E
+
+    def update_diagnostics(diagnostics: dict[str, Any]) -> None:
+        diagnostics["sum_e"] = residual_e
+        diagnostics["residual_e"] = residual_e
+        diagnostics["abs_residual_per_atom"] = residual_e / PLANNED_ATOMS[0]
+
+    def mutate_manifest(manifest: dict[str, Any]) -> None:
+        validation = manifest["electrostatics_validation"]
+        validation["charge_sum_e"] = residual_e
+        update_diagnostics(validation["charge_diagnostics"])
+
+    def mutate_raw_rows(rows: list[dict[str, Any]]) -> None:
+        update_diagnostics(rows[0]["charges"])
+
+    root = _seal_bundle(
+        tmp_path / "strict-small-charge-residual",
+        mutate_manifest=mutate_manifest,
+        mutate_raw_rows=mutate_raw_rows,
+    )
+
+    with pytest.raises(
+        DomainLessonResultsError,
+        match="3,200-atom.*residual",
+    ):
+        load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
+
+
+def test_loader_reserves_strict_charge_limit_for_declared_solver_check(
+    tmp_path: Path,
+) -> None:
+    def mutate(manifest: dict[str, Any]) -> None:
+        manifest["electrostatics_validation"]["atom_count"] = PLANNED_ATOMS[1]
+
+    root = _seal_bundle(
+        tmp_path / "wrong-electrostatics-size",
+        mutate_manifest=mutate,
+    )
+
+    with pytest.raises(DomainLessonResultsError, match="3,200-atom"):
         load_domain_lesson_view(root, planned_atom_counts=PLANNED_ATOMS)
 
 
@@ -1905,6 +2206,14 @@ def test_loader_cross_checks_every_raw_electrostatics_value(
         for key in path[:-1]:
             value = value[key]
         value[path[-1]] = float(value[path[-1]]) + 0.25
+        if path == ("charges", "sum_e"):
+            charges = rows[0]["charges"]
+            charges["residual_e"] = (
+                float(charges["sum_e"]) - float(charges["target_sum_e"])
+            )
+            charges["abs_residual_per_atom"] = (
+                abs(float(charges["residual_e"])) / PLANNED_ATOMS[0]
+            )
 
     root = _seal_bundle(tmp_path / manifest_field, mutate_raw_rows=mutate)
 
@@ -2172,6 +2481,7 @@ def test_not_reported_manifest_needs_no_fake_measurements(tmp_path: Path) -> Non
     assert not view.available
     assert view.reason == "H100 run is scheduled but has not finished."
     assert view.capacity_table["success"].isna().all()
+    assert view.charge_diagnostics_table.empty
 
 
 def test_domain_plot_labels_repeated_workflow_time(tmp_path: Path) -> None:

@@ -219,6 +219,19 @@ The multi-GPU path requests one step after `DomainParallel` performs its
 automatic initial force evaluation. Both paths evaluate the unchanged box
 twice.
 
+Keep the two charge checks distinct:
+
+- The 3,200-atom PME-versus-Ewald check uses one fixed predicted-charge array
+  in both solvers and requires `|Σq − Qtarget| ≤ 1e-4 e`.
+- Larger one-GPU capacity and parity rows require finite predicted charges and
+  save their float32 dtype, requested total, observed total, residual per atom,
+  `sum(abs(q))`, and `max(abs(q))`. The residual is reported, not compared with
+  the small-box absolute limit and not adjusted before PME.
+- Toolkit 0.2 does not expose intermediate multi-rank charges. The fixed-input
+  force comparison and the 2-GPU versus 4-GPU energy comparison check the
+  supported distributed outputs. These comparisons do not independently verify
+  the global charge residual of the distributed prediction.
+
 ```bash
 DOMAIN_JOB="$ALCHEMI_SHARED_REPO/scripts/slurm_part1_domain_decomposition.sbatch"
 capacity_job=$(
