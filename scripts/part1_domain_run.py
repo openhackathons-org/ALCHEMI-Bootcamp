@@ -535,6 +535,88 @@ def tensor_bundle_checksum(fields: dict[str, Any]) -> str:
     return digest.hexdigest()
 
 
+def source_atom_ids_tensor(atoms: Any, device: Any) -> Any:
+    """Copy stable input atom IDs without adding them to a Toolkit Batch."""
+
+    import torch
+
+    return torch.as_tensor(
+        atoms.arrays["source_atom_id"],
+        dtype=torch.int64,
+        device=device,
+    )
+
+
+def source_input_checksum(batch: Any, source_atom_ids: Any) -> str:
+    """Hash the scientific Batch fields together with external stable IDs."""
+
+    return tensor_bundle_checksum(
+        {
+            "atomic_numbers": batch.atomic_numbers,
+            "positions": batch.positions,
+            "cell": batch.cell,
+            "pbc": batch.pbc,
+            "source_atom_id": source_atom_ids,
+        }
+    )
+
+
+def predict_gathered_source_ids(
+    *,
+    source_atom_ids: Any,
+    positions: Any,
+    partitioner: Any,
+    world_size: int,
+) -> Any:
+    """Reproduce Toolkit's stable, rank-contiguous scatter and gather order."""
+
+    import torch
+
+    source_ids = source_atom_ids.to(torch.int64).reshape(-1)
+    if source_ids.numel() != positions.shape[0]:
+        raise ValueError("source_atom_ids and positions must have the same length")
+    if world_size < 1:
+        raise ValueError("world_size must be positive")
+    if world_size == 1:
+        return source_ids.clone()
+
+    rank_assignment = partitioner.assign_atoms_to_ranks(positions)
+    rank_assignment = rank_assignment.to(torch.int64).reshape(-1)
+    if rank_assignment.shape != source_ids.shape:
+        raise RuntimeError("spatial rank assignment has the wrong shape")
+    if bool((rank_assignment < 0).any()) or bool(
+        (rank_assignment >= world_size).any()
+    ):
+        raise RuntimeError("spatial rank assignment is outside the rank mesh")
+    scatter_order = torch.argsort(rank_assignment, stable=True)
+    return source_ids[scatter_order]
+
+
+def source_order_from_gathered_ids(
+    gathered_source_ids: Any,
+    *,
+    expected_atom_count: int,
+) -> Any:
+    """Return the row order that restores the stable 0..N-1 atom identity."""
+
+    import torch
+
+    source_ids = gathered_source_ids.to(torch.int64).reshape(-1)
+    if source_ids.numel() != expected_atom_count:
+        raise RuntimeError("predicted gathered source_atom_id has the wrong shape")
+    order = torch.argsort(source_ids, stable=True)
+    expected_ids = torch.arange(
+        expected_atom_count,
+        dtype=torch.int64,
+        device=source_ids.device,
+    )
+    if not torch.equal(source_ids[order], expected_ids):
+        raise RuntimeError(
+            "predicted gathered source_atom_id is not an exact 0..N-1 permutation"
+        )
+    return order
+
+
 def resolve_checkpoint(alias_or_path: str) -> Path:
     from aimnet.calculators.model_registry import get_model_path
 
@@ -724,14 +806,6 @@ def make_batch(atoms: Any, device: Any) -> Any:
     data.forces = torch.zeros(len(atoms), 3, device=device, dtype=torch.float32)
     data.energy = torch.zeros(1, 1, device=device, dtype=torch.float32)
     data.charge = torch.zeros(1, 1, device=device, dtype=torch.float32)
-    data.add_node_property(
-        "source_atom_id",
-        torch.as_tensor(
-            atoms.arrays["source_atom_id"],
-            dtype=torch.int64,
-            device=device,
-        ),
-    )
     return Batch.from_data_list([data], device=device)
 
 
@@ -1020,14 +1094,10 @@ def run_electrostatics_validation(
     if int(os.environ.get("WORLD_SIZE", "1")) != 1:
         raise ValueError("electrostatics-validation requires exactly one rank")
     batch = make_batch(atoms, device)
-    input_hash = tensor_bundle_checksum(
-        {
-            "atomic_numbers": batch.atomic_numbers,
-            "positions": batch.positions,
-            "cell": batch.cell,
-            "pbc": batch.pbc,
-            "source_atom_id": batch.source_atom_id,
-        }
+    source_atom_ids = source_atom_ids_tensor(atoms, device)
+    input_hash = source_input_checksum(
+        batch,
+        source_atom_ids,
     )
     aimnet, aimnet_info = build_aimnet(checkpoint, device)
     torch.cuda.reset_peak_memory_stats(device)
@@ -1242,6 +1312,9 @@ def run_capacity(
     setup_start = perf_counter()
     stage_tracker["stage"] = "input_transfer"
     full_batch = make_batch(atoms, device) if rank == 0 else None
+    source_atom_ids = (
+        source_atom_ids_tensor(atoms, device) if rank == 0 else None
+    )
     stage_tracker["stage"] = "model_setup"
     pme_values = torch.zeros(7, dtype=torch.float64, device=device)
     if rank == 0:
@@ -1308,14 +1381,10 @@ def run_capacity(
         )
     input_tensor_hash = None
     if full_batch is not None:
-        input_tensor_hash = tensor_bundle_checksum(
-            {
-                "atomic_numbers": full_batch.atomic_numbers,
-                "positions": full_batch.positions,
-                "cell": full_batch.cell,
-                "pbc": full_batch.pbc,
-                "source_atom_id": full_batch.source_atom_id,
-            }
+        assert source_atom_ids is not None
+        input_tensor_hash = source_input_checksum(
+            full_batch,
+            source_atom_ids,
         )
     domain_config = DomainConfig(
         cutoff=max(
@@ -1330,11 +1399,19 @@ def run_capacity(
         require_nondegenerate=world_size > 1,
     )
     layout_tensor = torch.zeros(6, dtype=torch.int64, device=device)
+    gathered_source_ids = None
     if rank == 0:
         derived_layout = SpatialPartitioner(
             config=domain_config,
             cell_matrix=full_batch.cell,
             pbc=full_batch.pbc,
+        )
+        assert source_atom_ids is not None
+        gathered_source_ids = predict_gathered_source_ids(
+            source_atom_ids=source_atom_ids,
+            positions=full_batch.positions,
+            partitioner=derived_layout,
+            world_size=world_size,
         )
         layout_tensor.copy_(
             torch.tensor(
@@ -1386,6 +1463,10 @@ def run_capacity(
         if args.measurement_role == "steady_timing"
         else 1
     )
+    if world_size > 1 and run_steps != 1:
+        raise RuntimeError(
+            "multi-rank source-order reconstruction requires one requested step"
+        )
     automatic_initial_evaluations = (
         DOMAIN_METHODOLOGY.domain_parallel_multi_rank_initial_force_evaluations
         if world_size > 1
@@ -1448,14 +1529,10 @@ def run_capacity(
         input_unchanged = True
         if rank == 0:
             assert full_batch is not None
-            observed_hash = tensor_bundle_checksum(
-                {
-                    "atomic_numbers": full_batch.atomic_numbers,
-                    "positions": full_batch.positions,
-                    "cell": full_batch.cell,
-                    "pbc": full_batch.pbc,
-                    "source_atom_id": full_batch.source_atom_id,
-                }
+            assert source_atom_ids is not None
+            observed_hash = source_input_checksum(
+                full_batch,
+                source_atom_ids,
             )
             source_input_hashes.append(observed_hash)
             input_unchanged = observed_hash == input_tensor_hash
@@ -1600,23 +1677,19 @@ def run_capacity(
         if not bool(torch.isfinite(gathered.forces).all()):
             raise RuntimeError("gathered forces contain a non-finite value")
 
-        source_ids = gathered.source_atom_id.to(torch.int64).reshape(-1)
-        if source_ids.numel() != expected_atom_count:
-            raise RuntimeError("gathered source_atom_id has the wrong shape")
-        order = torch.argsort(source_ids)
-        expected_ids = torch.arange(
-            expected_atom_count, dtype=torch.int64, device=device
+        assert gathered_source_ids is not None
+        assert source_atom_ids is not None
+        order = source_order_from_gathered_ids(
+            gathered_source_ids,
+            expected_atom_count=expected_atom_count,
         )
-        if not torch.equal(source_ids[order], expected_ids):
-            raise RuntimeError(
-                "gathered source_atom_id is not an exact 0..N-1 permutation"
-            )
         sorted_forces = gathered.forces[order]
         sorted_positions = gathered.positions[order]
         sorted_atomic_numbers = gathered.atomic_numbers.reshape(-1)[order]
+        source_file_order = torch.argsort(source_atom_ids, stable=True)
         expected_atomic_numbers = torch.as_tensor(
             atoms.numbers, dtype=sorted_atomic_numbers.dtype, device=device
-        )
+        )[source_file_order]
         if not torch.equal(sorted_atomic_numbers, expected_atomic_numbers):
             raise RuntimeError("gather changed the source-ordered atomic numbers")
         # Toolkit 0.2 gathers atom-level fields. The globally reduced total
@@ -1666,6 +1739,11 @@ def run_capacity(
                 "pme_reciprocal_mesh": (
                     "replicated on every rank in the Toolkit 0.2 version used here"
                 ),
+                "gathered_atom_order": (
+                    "source_atom_id kept outside Batch; rank-contiguous gather "
+                    "order reproduced with "
+                    "SpatialPartitioner.assign_atoms_to_ranks"
+                ),
             },
             "output": {
                 "energy_ev": energy_ev,
@@ -1675,7 +1753,9 @@ def run_capacity(
                 "atomic_numbers_source_atom_order_sha256": tensor_checksum(
                     sorted_atomic_numbers
                 ),
-                "source_atom_id_sha256": tensor_checksum(source_ids[order]),
+                "source_atom_id_sha256": tensor_checksum(
+                    gathered_source_ids[order]
+                ),
             },
             "charges": (
                 {

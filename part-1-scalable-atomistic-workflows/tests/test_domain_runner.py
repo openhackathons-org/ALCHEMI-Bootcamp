@@ -10,7 +10,7 @@ import math
 from pathlib import Path
 import subprocess
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -356,6 +356,7 @@ def test_runner_keeps_global_energy_separate_from_gathered_atom_fields(
     tmp_path: Path,
 ) -> None:
     source = inspect.getsource(RUNNER.run_capacity)
+    order_source = inspect.getsource(RUNNER.source_order_from_gathered_ids)
 
     assert "replicated_energy = result_owned.energy.detach().clone()" in source
     assert "gathered = domain.gather(result_owned, dst=0)" in source
@@ -366,12 +367,85 @@ def test_runner_keeps_global_energy_separate_from_gathered_atom_fields(
     assert "torch.isfinite(result_owned.forces)" in source
     assert "torch.isfinite(gathered.positions)" in source
     assert "torch.isfinite(gathered.forces)" in source
-    assert "source_atom_id is not an exact 0..N-1 permutation" in source
+    assert "source_order_from_gathered_ids(" in source
+    assert "gathered.source_atom_id" not in source
+    assert "source_atom_id is not an exact 0..N-1 permutation" in order_source
 
     output = tmp_path / "strict.json"
     with pytest.raises(ValueError, match="Out of range float"):
         RUNNER.atomic_write_json(output, {"bad": float("nan")})
     assert not output.exists()
+
+
+def test_external_source_ids_restore_toolkit_rank_contiguous_order() -> None:
+    torch = pytest.importorskip("torch")
+
+    class RankAssigner:
+        def __init__(self) -> None:
+            self.calls = 0
+
+        def assign_atoms_to_ranks(self, positions: object) -> object:
+            self.calls += 1
+            assert positions is source_positions
+            return torch.tensor([2, 0, 1, 0, 2, 1])
+
+    source_positions = torch.arange(18, dtype=torch.float32).reshape(6, 3)
+    source_ids = torch.tensor([5, 0, 3, 1, 4, 2])
+    partitioner = RankAssigner()
+
+    gathered_ids = RUNNER.predict_gathered_source_ids(
+        source_atom_ids=source_ids,
+        positions=source_positions,
+        partitioner=partitioner,
+        world_size=3,
+    )
+    assert partitioner.calls == 1
+    assert gathered_ids.tolist() == [0, 1, 3, 2, 5, 4]
+
+    source_order = RUNNER.source_order_from_gathered_ids(
+        gathered_ids,
+        expected_atom_count=6,
+    )
+    gathered_values = 10 + gathered_ids
+    assert gathered_values[source_order].tolist() == [10, 11, 12, 13, 14, 15]
+
+    class MustNotAssign:
+        def assign_atoms_to_ranks(self, positions: object) -> object:
+            raise AssertionError("one-rank gather must keep input row order")
+
+    one_rank_ids = RUNNER.predict_gathered_source_ids(
+        source_atom_ids=source_ids,
+        positions=source_positions,
+        partitioner=MustNotAssign(),
+        world_size=1,
+    )
+    assert torch.equal(one_rank_ids, source_ids)
+    assert one_rank_ids.data_ptr() != source_ids.data_ptr()
+
+
+def test_source_input_checksum_includes_ids_kept_outside_batch() -> None:
+    torch = pytest.importorskip("torch")
+
+    batch = SimpleNamespace(
+        atomic_numbers=torch.tensor([6, 8], dtype=torch.int64),
+        positions=torch.tensor([[0.0, 0.0, 0.0], [1.2, 0.0, 0.0]]),
+        cell=torch.eye(3).unsqueeze(0),
+        pbc=torch.tensor([[True, True, True]]),
+    )
+    source_ids = torch.tensor([0, 1], dtype=torch.int64)
+
+    checksum = RUNNER.source_input_checksum(batch, source_ids)
+    assert checksum == RUNNER.source_input_checksum(batch, source_ids.clone())
+    assert checksum != RUNNER.source_input_checksum(batch, source_ids.flip(0))
+
+    make_batch_source = inspect.getsource(RUNNER.make_batch)
+    capacity_source = inspect.getsource(RUNNER.run_capacity)
+    assert "source_atom_id" not in make_batch_source
+    assert "predict_gathered_source_ids(" in capacity_source
+    assert "partitioner=derived_layout" in capacity_source
+    assert "world_size > 1 and run_steps != 1" in capacity_source
+    assert '"gathered_atom_order"' in capacity_source
+    assert "SpatialPartitioner.assign_atoms_to_ranks" in capacity_source
 
 
 def test_runtime_gpu_uuid_is_written_as_json_text() -> None:
@@ -392,7 +466,7 @@ def test_steady_timer_covers_repeated_fresh_public_workflows() -> None:
     final_sync = source.index("torch.cuda.synchronize(device)", gather)
     timer_end = source.index("local_elapsed_s = perf_counter() - start")
     reduction = source.index("dist.all_reduce(max_elapsed", timer_end)
-    input_check = source.index("observed_hash = tensor_bundle_checksum", timer_end)
+    input_check = source.index("observed_hash = source_input_checksum", timer_end)
     file_write = source.index("# Shared-filesystem writes happen only after")
     energy_snapshot = source.index(
         "replicated_energy = result_owned.energy.detach().clone()"
