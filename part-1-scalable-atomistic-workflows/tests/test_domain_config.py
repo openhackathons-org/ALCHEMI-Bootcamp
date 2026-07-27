@@ -23,7 +23,7 @@ def test_every_domain_setting_has_required_context() -> None:
 
     assert record["schema"] == DOMAIN_METHODOLOGY_SCHEMA
     assert record["name"] == "part1-packmol-domain-decomposition"
-    assert record["version"] == "1.6.0"
+    assert record["version"] == "1.7.0"
     assert set(record["settings"]) == {
         item.name
         for item in fields(DomainMethodologyConfig)

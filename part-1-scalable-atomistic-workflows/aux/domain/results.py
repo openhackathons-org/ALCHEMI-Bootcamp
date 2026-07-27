@@ -23,7 +23,7 @@ import pandas as pd
 from .config import DOMAIN_METHODOLOGY
 
 
-BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v2"
+BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v3"
 MANIFEST_NAME = "manifest.json"
 CHECKSUM_INDEX_NAME = "SHA256SUMS"
 RAW_RESULTS_NAME = "raw-results.jsonl"
@@ -133,6 +133,10 @@ PME_EWALD_FORCE_TOLERANCE_EV_PER_A = (
     DOMAIN_METHODOLOGY.pme_ewald_force_max_tolerance_ev_a
 )
 ATOMS_PER_COMPOSITION_UNIT = DOMAIN_METHODOLOGY.atoms_per_composition_unit
+ELECTROSTATICS_VALIDATION_ATOM_COUNT = (
+    DOMAIN_METHODOLOGY.electrostatics_validation_molecules_per_species
+    * ATOMS_PER_COMPOSITION_UNIT
+)
 _REQUIRED_PARITY_GPUS = frozenset(DOMAIN_METHODOLOGY.distributed_world_sizes)
 _REQUIRED_STEADY_TIMING_GPUS = frozenset(
     DOMAIN_METHODOLOGY.steady_timing_world_sizes
@@ -153,6 +157,7 @@ class DomainLessonView:
     root: Path
     manifest: Mapping[str, Any]
     capacity_table: pd.DataFrame
+    charge_diagnostics_table: pd.DataFrame
     electrostatics_table: pd.DataFrame
     parity_table: pd.DataFrame
     distributed_table: pd.DataFrame
@@ -399,6 +404,7 @@ def _not_reported(
         root=root,
         manifest={} if manifest is None else manifest,
         capacity_table=_capacity_view(raw_capacity),
+        charge_diagnostics_table=_charge_diagnostics_view(()),
         electrostatics_table=_electrostatics_view(None),
         parity_table=_parity_view(raw_parity),
         distributed_table=_distributed_view(raw_distributed),
@@ -1188,6 +1194,154 @@ def _require_sha256(value: Any, *, name: str) -> str:
     return digest
 
 
+def _finite_charge_number(
+    record: Mapping[str, Any],
+    name: str,
+    *,
+    context: str,
+) -> float:
+    value = record.get(name)
+    if isinstance(value, bool):
+        raise DomainLessonResultsError(f"{context}.{name} must be finite")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise DomainLessonResultsError(f"{context}.{name} must be finite") from exc
+    if not np.isfinite(number):
+        raise DomainLessonResultsError(f"{context}.{name} must be finite")
+    return number
+
+
+def _validated_charge_diagnostics(
+    value: Any,
+    *,
+    atom_count: int,
+    context: str,
+    target_sum_e: float = 0.0,
+) -> dict[str, Any]:
+    """Validate one unmodified float32 charge tensor summary.
+
+    The residual is recorded as a numerical diagnostic. This general check does
+    not turn it into a pass/fail threshold for large one-GPU calculations.
+    """
+
+    if not isinstance(value, Mapping):
+        raise DomainLessonResultsError(f"{context} must be an object")
+    required = (
+        "available",
+        "finite",
+        "dtype",
+        "target_sum_e",
+        "sum_e",
+        "residual_e",
+        "abs_residual_per_atom",
+        "sum_abs_e",
+        "max_abs_e",
+        "shape",
+        "sha256",
+    )
+    _require_keys(value, required, context=context)
+    if value["available"] is not True:
+        raise DomainLessonResultsError(f"{context} are not available")
+    if value["finite"] is not True:
+        raise DomainLessonResultsError(f"{context} contain non-finite charges")
+    if value["dtype"] != "float32":
+        raise DomainLessonResultsError(
+            f"{context}.dtype must identify the float32 PME charge tensor"
+        )
+    if atom_count <= 0:
+        raise DomainLessonResultsError(f"{context} atom count must be positive")
+
+    expected_target = float(target_sum_e)
+    if not np.isfinite(expected_target):
+        raise DomainLessonResultsError(
+            f"{context} expected total-charge target must be finite"
+        )
+    observed_target = _finite_charge_number(
+        value,
+        "target_sum_e",
+        context=context,
+    )
+    if observed_target != expected_target:
+        raise DomainLessonResultsError(
+            f"{context}.target_sum_e does not match the input total charge"
+        )
+
+    shape = value["shape"]
+    if (
+        not isinstance(shape, list)
+        or not shape
+        or any(
+            isinstance(size, bool) or not isinstance(size, int) or size <= 0
+            for size in shape
+        )
+        or math.prod(shape) != atom_count
+    ):
+        raise DomainLessonResultsError(
+            f"{context}.shape does not match the atom count"
+        )
+    digest = _require_sha256(
+        value["sha256"],
+        name=f"{context}.sha256",
+    )
+
+    charge_sum = _finite_charge_number(value, "sum_e", context=context)
+    residual = _finite_charge_number(value, "residual_e", context=context)
+    residual_per_atom = _finite_charge_number(
+        value,
+        "abs_residual_per_atom",
+        context=context,
+    )
+    sum_abs = _finite_charge_number(value, "sum_abs_e", context=context)
+    max_abs = _finite_charge_number(value, "max_abs_e", context=context)
+    if not math.isclose(
+        residual,
+        charge_sum - observed_target,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-15,
+    ):
+        raise DomainLessonResultsError(
+            f"{context}.residual_e is inconsistent with the charge sum"
+        )
+    if not math.isclose(
+        residual_per_atom,
+        abs(residual) / atom_count,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-18,
+    ):
+        raise DomainLessonResultsError(
+            f"{context}.abs_residual_per_atom is inconsistent"
+        )
+
+    magnitude_slack = 1.0e-12 * max(1.0, sum_abs, atom_count * max_abs)
+    if (
+        residual_per_atom < 0.0
+        or sum_abs < 0.0
+        or max_abs < 0.0
+        or sum_abs + magnitude_slack < abs(charge_sum)
+        or max_abs > sum_abs + magnitude_slack
+        or atom_count * max_abs + magnitude_slack < abs(charge_sum)
+        or sum_abs > atom_count * max_abs + magnitude_slack
+    ):
+        raise DomainLessonResultsError(
+            f"{context} contain inconsistent charge magnitudes"
+        )
+
+    return {
+        "available": True,
+        "finite": True,
+        "dtype": "float32",
+        "target_sum_e": observed_target,
+        "sum_e": charge_sum,
+        "residual_e": residual,
+        "abs_residual_per_atom": residual_per_atom,
+        "sum_abs_e": sum_abs,
+        "max_abs_e": max_abs,
+        "shape": list(shape),
+        "sha256": digest,
+    }
+
+
 def _raw_electrostatics_row(
     raw_rows: Sequence[Mapping[str, Any]],
 ) -> Mapping[str, Any]:
@@ -1240,6 +1394,7 @@ def _validate_electrostatics(
         "fixed_charges",
         "atom_count",
         "structure_sha256",
+        "charge_diagnostics",
         "charge_sum_e",
         "charge_sum_tolerance_e",
         "pme_energy_ev",
@@ -1272,6 +1427,12 @@ def _validate_electrostatics(
     if atom_count <= 0 or float(record["atom_count"]) != atom_count:
         raise DomainLessonResultsError(
             "electrostatics_validation.atom_count must be positive"
+        )
+    if atom_count != ELECTROSTATICS_VALIDATION_ATOM_COUNT:
+        raise DomainLessonResultsError(
+            "the strict charge-residual check is reserved for the "
+            f"{ELECTROSTATICS_VALIDATION_ATOM_COUNT:,}-atom "
+            "PME-versus-Ewald validation"
         )
     expected_structure = structure_sha256_by_atom_count.get(atom_count)
     if expected_structure is None or record["structure_sha256"] != expected_structure:
@@ -1314,8 +1475,25 @@ def _validate_electrostatics(
             raise DomainLessonResultsError(
                 f"electrostatics_validation.{name} changed from the predeclared value"
             )
-    if abs(values["charge_sum_e"]) > CHARGE_SUM_TOLERANCE_E:
-        raise DomainLessonResultsError("predicted charges are not neutral")
+    manifest_charge_diagnostics = _validated_charge_diagnostics(
+        record["charge_diagnostics"],
+        atom_count=atom_count,
+        target_sum_e=0.0,
+        context="electrostatics_validation.charge_diagnostics",
+    )
+    if values["charge_sum_e"] != manifest_charge_diagnostics["sum_e"]:
+        raise DomainLessonResultsError(
+            "electrostatics_validation.charge_sum_e does not match "
+            "charge_diagnostics"
+        )
+    if (
+        abs(manifest_charge_diagnostics["residual_e"])
+        > CHARGE_SUM_TOLERANCE_E
+    ):
+        raise DomainLessonResultsError(
+            "the 3,200-atom PME-versus-Ewald charge residual exceeds "
+            "the predeclared limit"
+        )
     if (
         values["energy_abs_difference_ev_per_atom"] < 0.0
         or values["energy_abs_difference_ev_per_atom"]
@@ -1379,7 +1557,19 @@ def _validate_electrostatics(
     )
     _require_keys(
         raw_charges,
-        ("available", "sha256", "sum_e"),
+        (
+            "available",
+            "finite",
+            "dtype",
+            "target_sum_e",
+            "sum_e",
+            "residual_e",
+            "abs_residual_per_atom",
+            "sum_abs_e",
+            "max_abs_e",
+            "shape",
+            "sha256",
+        ),
         context="raw electrostatics row.charges",
     )
     _require_keys(
@@ -1420,6 +1610,12 @@ def _validate_electrostatics(
         raise DomainLessonResultsError(
             "raw electrostatics-validation comparison did not pass"
         )
+    raw_charge_diagnostics = _validated_charge_diagnostics(
+        raw_charges,
+        atom_count=atom_count,
+        target_sum_e=0.0,
+        context="raw electrostatics row.charges",
+    )
 
     raw_structure_sha256 = _require_sha256(
         raw_input["file_sha256"],
@@ -1478,6 +1674,10 @@ def _validate_electrostatics(
             raise DomainLessonResultsError(
                 f"electrostatics_validation.{name} does not match raw results"
             )
+    if raw_charge_diagnostics != manifest_charge_diagnostics:
+        raise DomainLessonResultsError(
+            "electrostatics_validation.charge_diagnostics do not match raw results"
+        )
 
 
 def _read_table(
@@ -1951,13 +2151,17 @@ def _validate_measurement_completeness(
 def _validate_selection(
     manifest: Mapping[str, Any],
     capacity: pd.DataFrame,
+    parity: pd.DataFrame,
     distributed: pd.DataFrame,
+    raw_by_case: Mapping[str, Mapping[str, Any]],
 ) -> Mapping[str, Any]:
     selection = _require_mapping(manifest, "selection", context="manifest")
     required = (
         "largest_success_pair_count",
         "first_cuda_oom_pair_count",
         "parity_pair_count",
+        "capacity_charge_diagnostics",
+        "parity_charge_diagnostics",
         "successful_rescue_gpu_counts",
     )
     _require_keys(selection, required, context="manifest.selection")
@@ -1969,6 +2173,10 @@ def _validate_selection(
         oom_pairs = _positive_integer(
             selection["first_cuda_oom_pair_count"],
             name="manifest first-CUDA-OOM 1:1 composition count",
+        )
+        parity_pairs = _positive_integer(
+            selection["parity_pair_count"],
+            name="manifest parity 1:1 composition count",
         )
     except ValueError as exc:
         raise DomainLessonResultsError(str(exc)) from exc
@@ -1990,6 +2198,12 @@ def _validate_selection(
     if oom_pairs * ATOMS_PER_COMPOSITION_UNIT != first_oom_atoms:
         raise DomainLessonResultsError(
             "manifest first CUDA OOM size does not match the capacity ladder"
+        )
+    if not parity["atom_count"].eq(
+        parity_pairs * ATOMS_PER_COMPOSITION_UNIT
+    ).all():
+        raise DomainLessonResultsError(
+            "manifest parity size does not match measured parity rows"
         )
 
     kinds = _case_kinds(
@@ -2033,6 +2247,104 @@ def _validate_selection(
     ):
         raise DomainLessonResultsError(
             "manifest successful rescue GPU counts do not match measured rows"
+        )
+
+    raw_capacity_diagnostics = selection["capacity_charge_diagnostics"]
+    if not isinstance(raw_capacity_diagnostics, list):
+        raise DomainLessonResultsError(
+            "manifest.selection.capacity_charge_diagnostics must be a list"
+        )
+    expected_capacity_rows = successful_capacity.reset_index(drop=True)
+    if len(raw_capacity_diagnostics) != len(expected_capacity_rows):
+        raise DomainLessonResultsError(
+            "manifest.selection.capacity_charge_diagnostics must describe every "
+            "successful one-GPU capacity row"
+        )
+
+    validated_by_pair_count: dict[int, dict[str, Any]] = {}
+    for index, expected_row in expected_capacity_rows.iterrows():
+        context = f"manifest.selection.capacity_charge_diagnostics[{index}]"
+        item = raw_capacity_diagnostics[index]
+        if not isinstance(item, Mapping):
+            raise DomainLessonResultsError(f"{context} must be an object")
+        _require_keys(
+            item,
+            ("case_id", "pair_count", "atom_count", "charge_diagnostics"),
+            context=context,
+        )
+        case_id = str(item["case_id"])
+        expected_case_id = str(expected_row["case_id"])
+        if case_id != expected_case_id:
+            raise DomainLessonResultsError(
+                "manifest.selection.capacity_charge_diagnostics must follow the "
+                "successful capacity rows in order"
+            )
+        try:
+            atom_count = _positive_integer(
+                item["atom_count"],
+                name=f"{context}.atom_count",
+            )
+            pair_count = _positive_integer(
+                item["pair_count"],
+                name=f"{context}.pair_count",
+            )
+        except ValueError as exc:
+            raise DomainLessonResultsError(str(exc)) from exc
+        if (
+            atom_count != int(expected_row["atom_count"])
+            or pair_count * ATOMS_PER_COMPOSITION_UNIT != atom_count
+        ):
+            raise DomainLessonResultsError(
+                f"{context} does not match its successful capacity row"
+            )
+
+        selected_diagnostics = _validated_charge_diagnostics(
+            item["charge_diagnostics"],
+            atom_count=atom_count,
+            target_sum_e=0.0,
+            context=f"{context}.charge_diagnostics",
+        )
+        raw_row = raw_by_case.get(case_id)
+        if raw_row is None:
+            raise DomainLessonResultsError(
+                f"{context} has no matching raw capacity row"
+            )
+        raw_charges = _require_mapping(
+            raw_row,
+            "charges",
+            context=f"raw capacity row {case_id!r}",
+        )
+        observed_diagnostics = _validated_charge_diagnostics(
+            raw_charges,
+            atom_count=atom_count,
+            target_sum_e=0.0,
+            context=f"raw capacity row {case_id!r}.charges",
+        )
+        if selected_diagnostics != observed_diagnostics:
+            raise DomainLessonResultsError(
+                f"{context}.charge_diagnostics do not match raw results"
+            )
+        if pair_count in validated_by_pair_count:
+            raise DomainLessonResultsError(
+                "capacity charge diagnostics contain a duplicate pair count"
+            )
+        validated_by_pair_count[pair_count] = selected_diagnostics
+
+    expected_parity_diagnostics = validated_by_pair_count.get(parity_pairs)
+    if expected_parity_diagnostics is None:
+        raise DomainLessonResultsError(
+            "manifest parity size has no successful one-GPU charge diagnostics"
+        )
+    parity_diagnostics = _validated_charge_diagnostics(
+        selection["parity_charge_diagnostics"],
+        atom_count=parity_pairs * ATOMS_PER_COMPOSITION_UNIT,
+        target_sum_e=0.0,
+        context="manifest.selection.parity_charge_diagnostics",
+    )
+    if parity_diagnostics != expected_parity_diagnostics:
+        raise DomainLessonResultsError(
+            "manifest.selection.parity_charge_diagnostics do not match the "
+            "selected one-GPU capacity row"
         )
     return selection
 
@@ -2875,6 +3187,37 @@ def _capacity_view(table: pd.DataFrame) -> pd.DataFrame:
     return view.reset_index(drop=True)
 
 
+def _charge_diagnostics_view(
+    records: Sequence[Mapping[str, Any]],
+) -> pd.DataFrame:
+    """Return the compact one-GPU charge summary shown to learners."""
+
+    columns = (
+        "atom_count",
+        "dtype",
+        "target_sum_e",
+        "charge_sum_e",
+        "residual_e",
+        "abs_residual_per_atom_e",
+    )
+    rows = []
+    for record in records:
+        diagnostics = record["charge_diagnostics"]
+        rows.append(
+            {
+                "atom_count": int(record["atom_count"]),
+                "dtype": str(diagnostics["dtype"]),
+                "target_sum_e": float(diagnostics["target_sum_e"]),
+                "charge_sum_e": float(diagnostics["sum_e"]),
+                "residual_e": float(diagnostics["residual_e"]),
+                "abs_residual_per_atom_e": float(
+                    diagnostics["abs_residual_per_atom"]
+                ),
+            }
+        )
+    return pd.DataFrame(rows, columns=columns)
+
+
 def _electrostatics_view(
     record: Mapping[str, Any] | None,
 ) -> pd.DataFrame:
@@ -3178,12 +3521,14 @@ def load_domain_lesson_view(
         tables["parity"],
         tables["distributed"],
     )
+    raw_by_case = _reconcile_raw_measurements(tables, raw_rows)
     selection = _validate_selection(
         manifest,
         capacity,
+        tables["parity"],
         tables["distributed"],
+        raw_by_case,
     )
-    raw_by_case = _reconcile_raw_measurements(tables, raw_rows)
     _validate_raw_parity(
         root,
         checksums,
@@ -3220,6 +3565,9 @@ def load_domain_lesson_view(
         root=root,
         manifest=manifest,
         capacity_table=_capacity_view(capacity),
+        charge_diagnostics_table=_charge_diagnostics_view(
+            selection["capacity_charge_diagnostics"]
+        ),
         electrostatics_table=_electrostatics_view(
             _require_mapping(
                 manifest,

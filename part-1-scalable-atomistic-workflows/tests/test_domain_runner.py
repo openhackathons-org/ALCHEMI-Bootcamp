@@ -36,6 +36,27 @@ PLAN = _load_script("part1_domain_plan.py")
 RUNNER = _load_script("part1_domain_run.py")
 
 
+def _charge_diagnostics(
+    *,
+    atom_count: int,
+    sum_e: float,
+) -> dict[str, object]:
+    residual_e = sum_e
+    return {
+        "available": True,
+        "finite": True,
+        "dtype": "float32",
+        "target_sum_e": 0.0,
+        "sum_e": sum_e,
+        "residual_e": residual_e,
+        "abs_residual_per_atom": abs(residual_e) / atom_count,
+        "sum_abs_e": max(1.0, abs(sum_e)),
+        "max_abs_e": 0.25,
+        "shape": [atom_count],
+        "sha256": "a" * 64,
+    }
+
+
 def _plan() -> dict[str, object]:
     return PLAN.build_plan(
         run_id="domain-test",
@@ -375,6 +396,104 @@ def test_runner_keeps_global_energy_separate_from_gathered_atom_fields(
     with pytest.raises(ValueError, match="Out of range float"):
         RUNNER.atomic_write_json(output, {"bad": float("nan")})
     assert not output.exists()
+
+
+def test_large_finite_charge_residual_is_recorded_without_a_capacity_gate() -> None:
+    torch = pytest.importorskip("torch")
+    atom_count = 51_200
+    charges = torch.zeros(atom_count, dtype=torch.float32)
+    charges[0] = -0.00467
+
+    raw = RUNNER.charge_diagnostics(charges, target_sum_e=0.0)
+    checked = PLAN.validated_charge_diagnostics(
+        raw,
+        atom_count=atom_count,
+        target_sum_e=0.0,
+        context="large-system test",
+    )
+
+    assert checked["dtype"] == "float32"
+    assert checked["shape"] == [atom_count]
+    assert checked["sum_e"] == pytest.approx(-0.00467)
+    assert checked["residual_e"] == checked["sum_e"]
+    assert checked["abs_residual_per_atom"] == pytest.approx(
+        abs(checked["residual_e"]) / atom_count
+    )
+    assert abs(checked["residual_e"]) > PLAN.DEFAULT_CHARGE_SUM_TOL_E
+
+
+@pytest.mark.parametrize(
+    ("change", "message"),
+    (
+        ({"available": False}, "unavailable"),
+        ({"finite": False}, "non-finite"),
+        ({"residual_e": 0.1}, "inconsistent charge residual"),
+        ({"shape": [51_199]}, "inconsistent tensor shape"),
+        ({"sha256": "not-a-hash"}, "invalid tensor SHA-256"),
+    ),
+)
+def test_capacity_charge_diagnostics_reject_invalid_metadata(
+    change: dict[str, object],
+    message: str,
+) -> None:
+    record = {**_charge_diagnostics(atom_count=51_200, sum_e=-0.00467), **change}
+
+    with pytest.raises(ValueError, match=message):
+        PLAN.validated_charge_diagnostics(
+            record,
+            atom_count=51_200,
+            target_sum_e=0.0,
+            context="capacity test",
+        )
+
+
+def test_strict_charge_limit_is_only_for_the_3200_atom_solver_check() -> None:
+    accepted = PLAN.validated_charge_diagnostics(
+        _charge_diagnostics(atom_count=PLAN.BASE_ATOM_COUNT, sum_e=5.0e-5),
+        atom_count=PLAN.BASE_ATOM_COUNT,
+    )
+    PLAN.require_fixed_charge_validation_residual(
+        accepted,
+        atom_count=PLAN.BASE_ATOM_COUNT,
+        max_abs_residual_e=PLAN.DEFAULT_CHARGE_SUM_TOL_E,
+    )
+
+    too_large = PLAN.validated_charge_diagnostics(
+        _charge_diagnostics(atom_count=PLAN.BASE_ATOM_COUNT, sum_e=2.0e-4),
+        atom_count=PLAN.BASE_ATOM_COUNT,
+    )
+    with pytest.raises(ValueError, match="exceeds the declared"):
+        PLAN.require_fixed_charge_validation_residual(
+            too_large,
+            atom_count=PLAN.BASE_ATOM_COUNT,
+            max_abs_residual_e=PLAN.DEFAULT_CHARGE_SUM_TOL_E,
+        )
+
+    large_system = PLAN.validated_charge_diagnostics(
+        _charge_diagnostics(atom_count=51_200, sum_e=-0.00467),
+        atom_count=51_200,
+    )
+    with pytest.raises(ValueError, match="reserved for the checked 3,200-atom"):
+        PLAN.require_fixed_charge_validation_residual(
+            large_system,
+            atom_count=51_200,
+            max_abs_residual_e=PLAN.DEFAULT_CHARGE_SUM_TOL_E,
+        )
+
+
+def test_selection_and_bundle_archive_charge_diagnostics() -> None:
+    selection_source = inspect.getsource(PLAN.select_capacity)
+    bundle_source = inspect.getsource(PLAN.build_bundle)
+
+    assert "capacity_charge_diagnostic_records(successful)" in selection_source
+    assert '"capacity_charge_diagnostics": capacity_charge_diagnostics' in (
+        selection_source
+    )
+    assert '"charge_diagnostics": parity_charge_diagnostics' in selection_source
+    assert "abs(float(parity_charges" not in selection_source
+    assert "expected_capacity_charge_diagnostics" in bundle_source
+    assert "expected_parity_charge_diagnostics" in bundle_source
+    assert "validation_charge_diagnostics" in bundle_source
 
 
 def test_external_source_ids_restore_toolkit_rank_contiguous_order() -> None:

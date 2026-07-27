@@ -208,8 +208,12 @@ class DomainMethodologyConfig:
     )
     charge_sum_tolerance_e: float = _setting(
         units="e",
-        scope="one-GPU predicted-charge neutrality",
-        rationale="Catches a missing, non-finite, or non-neutral charge result.",
+        scope="3,200-atom fixed-charge PME-versus-Ewald validation",
+        rationale=(
+            "Checks the total of the one predicted-charge array used by both "
+            "electrostatics solvers. Larger float32 reductions report their "
+            "residual separately instead of reusing this absolute limit."
+        ),
         source="Part 1 numerical acceptance limit declared before measurement.",
     )
     parity_energy_tolerance_ev_per_atom: float = _setting(
@@ -580,7 +584,7 @@ class DomainMethodologyConfig:
 
 DOMAIN_METHODOLOGY = DomainMethodologyConfig(
     name="part1-packmol-domain-decomposition",
-    version="1.6.0",
+    version="1.7.0",
     nci_system_id="1.041",
     nci_scale=1.0,
     atoms_per_composition_unit=25,

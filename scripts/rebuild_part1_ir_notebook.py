@@ -8876,11 +8876,14 @@ manifest_checks = {
         "domain_atom_count": int(domain_result.num_nodes),
         "domain_energy_eV": domain_energy_ev,
         "domain_force_max_eV_A": domain_fmax_ev_a,
+        "domain_charge_dtype": domain_charge_dtype,
+        "domain_charge_target_e": domain_charge_target_e,
         "domain_charge_sum_e": domain_charge_sum,
-        "domain_charge_sum_tolerance_e": DOMAIN_CHARGE_SUM_TOLERANCE_E,
-        "domain_charge_neutral": (
-            abs(domain_charge_sum) <= DOMAIN_CHARGE_SUM_TOLERANCE_E
+        "domain_charge_residual_e": domain_charge_residual_e,
+        "domain_charge_abs_residual_per_atom": (
+            domain_charge_abs_residual_per_atom
         ),
+        "domain_charge_finite": domain_charge_finite,
         "domain_elapsed_s": domain_elapsed_s,
         "domain_peak_memory_GB": domain_peak_memory_gb,
         "domain_recorded_results_available": domain_view.available,
@@ -8903,19 +8906,18 @@ checks_progress.complete("Numerical checks collected")
             r"""
 ### One periodic system: prepare spatial decomposition
 
-Reuse the Stage 3 phenol and N-methylacetamide molecules, now as independent
-species. The notebook loads a checked, neutral 3,200-atom periodic box with
-128 rigid copies of each. Packmol placed them once when the bundle was built;
-it does not run here. The box is neither relaxed nor equilibrated.
+Reuse the Stage 3 phenol and N-methylacetamide molecules as independent species
+in a checked 3,200-atom periodic box with an input total-charge target of zero
+and 128 rigid copies of each. Packmol placed them once; it does not run here,
+and the box is neither relaxed nor equilibrated.
 
-The bundled image is a static OVITO render; loading it does not start OVITO or
-change coordinates. Larger offline inputs are integer supercells of this box,
-so composition and construction density stay fixed without giant live packing.
+The static OVITO render does not alter the data: loading it does not start
+OVITO or change coordinates; integer supercells preserve composition and
+construction density without giant live packing.
 
 This changes many independent graphs into one crowded periodic graph. The NCI
 curves do not validate the dense mixture; its 1:1 composition and 1.0 g cm⁻³
-construction density are teaching inputs. This is an API and capacity example,
-not a liquid-property calculation.
+construction density are teaching inputs, not a liquid-property calculation.
 
 The periodic model uses AIMNet2-predicted charges with particle mesh Ewald
 (PME), the checkpoint base, and tapered D3(BJ).
@@ -8923,18 +8925,14 @@ The periodic model uses AIMNet2-predicted charges with particle mesh Ewald
 **Domain decomposition** gives each GPU a spatial region. A **halo** copies
 nearby atoms across region edges so boundary interactions are retained. On
 one GPU, `DomainParallel` passes the box through without splitting it.
-
-Toolkit starts with `AtomicData.from_atoms`.
 """
             + "\n\n"
             + process_diagram_html(
                 title="From pairwise interactions to a crowded molecular environment",
                 steps=(
-                    "checked periodic base box",
-                    "AtomicData + one Batch",
-                    "DomainParallel.partition",
-                    "one-GPU walkthrough / saved multi-GPU run",
-                    "DomainParallel.gather",
+                    "checked box → AtomicData + Batch",
+                    "partition → run → gather",
+                    "saved multi-GPU checks",
                 ),
                     caption=(
                         "The model on each rank evaluates "
@@ -8944,8 +8942,8 @@ Toolkit starts with `AtomicData.from_atoms`.
             + "\n\n"
             + callout_html(
                 "Periodic support does not establish AIMNet2 accuracy for this "
-                "dense mixture. Treat the live energy and forces as an API "
-                "check, not a material-property result.",
+                "dense mixture. This is an API check, not a material-property "
+                "result.",
                 kind="note",
             ),
         ),
@@ -9007,8 +9005,8 @@ domain_data.add_node_property("forces", torch.zeros(len(domain_atoms), 3))
 domain_data.add_node_property("velocities", torch.zeros(len(domain_atoms), 3))
 domain_batch_progress.advance(message="AtomicData fields prepared")
 
-# The packing helper writes the planned net charge to Atoms.info["charge"].
-# AtomicData carries it into Batch.charge; this example must be neutral.
+# The packing helper writes the input total-charge target to Atoms.info["charge"].
+# AtomicData carries that zero target into Batch.charge.
 domain_batch = Batch.from_data_list([domain_data], device=DEVICE)
 assert domain_batch.num_graphs == 1
 assert float(domain_batch.charge.item()) == 0.0
@@ -9034,9 +9032,10 @@ Reuse `aimnet2-wb97m-d3_0` and its checkpoint D3(BJ) parameters:
 
 - The checkpoint's embedded `SRCoulomb` module subtracts short-range Coulomb.
   Adding full PME gives `E_NN + E_Coulomb^LR` without double counting.
-- `Batch.charge = 0` sets the total charge. `AIMNet2Wrapper` predicts
-  geometry-dependent atomic charges that sum to it, and `PMEModelWrapper`
-  consumes those charges.
+- `Batch.charge = 0` supplies the model's total-charge target.
+  `AIMNet2Wrapper` returns float32 atomic charges. Its internal correction
+  reduces in float32, so re-summing a large system in float64 can expose a
+  small residual. Toolkit passes those charges to `PMEModelWrapper` unchanged.
 - `hybrid_forces=True` supplies fixed-charge PME forces. The shared
   `use_autograd=True` group adds the response through the predicted charges.
 - `DFTD3ModelWrapper` adds D3 once and returns its forces directly.
@@ -9044,9 +9043,8 @@ Reuse `aimnet2-wb97m-d3_0` and its checkpoint D3(BJ) parameters:
   consistent splitting parameter and mesh. `DomainParallel` then rebuilds
   neighbors for each GPU region.
 
-Periodic support does not establish accuracy for this mixture. The composition
-includes every declared energy term; `BaseDynamics` therefore performs one
-energy-and-force evaluation without moving atoms.
+Periodic support does not establish accuracy for this mixture, even though the
+composition includes every declared energy term.
 """,
         ),
     )
@@ -9216,10 +9214,11 @@ display(readable_table(
     show_index=False,
 ))
 display(callout(
-    "Only the total box charge is constrained. AIMNet2 does not require each "
-    "source molecule to remain exactly neutral. These model-dependent sums are "
-    "a diagnostic, not validated intermolecular charge transfer; all 256 "
-    "values are saved.",
+    "The model receives one total-charge target for the box. It does not "
+    "require each source molecule to remain exactly neutral. "
+    "No additional renormalization is applied to the returned charges before "
+    "PME. These model-dependent sums are a diagnostic. They are "
+    "not validated intermolecular charge transfer; all 256 values are saved.",
     kind="note",
 ))
 domain_charge_progress.complete("summary and charge extremes displayed")
@@ -9235,15 +9234,36 @@ domain_output_progress = NotebookProgress(
     title="Inspect the one-GPU result", total=2, unit="checks"
 )
 
-domain_charge_sum = float(domain_result.charges.sum().detach().cpu())
-DOMAIN_CHARGE_SUM_TOLERANCE_E = DOMAIN_METHODOLOGY.charge_sum_tolerance_e
+domain_charge_values = domain_result.charges.detach()
+domain_charge_dtype = str(domain_charge_values.dtype).removeprefix("torch.")
+domain_charge_target_e = float(domain_batch.charge.to(torch.float64).sum().item())
+domain_charge_sum = float(domain_charge_values.to(torch.float64).sum().cpu())
+domain_charge_residual_e = domain_charge_sum - domain_charge_target_e
+domain_charge_abs_residual_per_atom = (
+    abs(domain_charge_residual_e) / domain_charge_values.numel()
+)
+domain_charge_sum_abs_e = float(
+    domain_charge_values.to(torch.float64).abs().sum().cpu()
+)
+domain_charge_max_abs_e = float(
+    domain_charge_values.to(torch.float64).abs().max().cpu()
+)
+domain_charge_finite = bool(torch.isfinite(domain_charge_values).all())
 domain_energy_ev = float(domain_energy.reshape(-1)[0].cpu())
 domain_fmax_ev_a = float(
     torch.linalg.vector_norm(domain_result.forces, dim=1).max().detach().cpu()
 )
 domain_live_api_passed = bool(
-    np.isfinite([domain_energy_ev, domain_fmax_ev_a, domain_charge_sum]).all()
-    and abs(domain_charge_sum) <= DOMAIN_CHARGE_SUM_TOLERANCE_E
+    domain_charge_finite
+    and np.isfinite([
+        domain_energy_ev,
+        domain_fmax_ev_a,
+        domain_charge_sum,
+        domain_charge_residual_e,
+        domain_charge_abs_residual_per_atom,
+        domain_charge_sum_abs_e,
+        domain_charge_max_abs_e,
+    ]).all()
 )
 assert domain_live_api_passed
 domain_result_atoms = graph_atoms_from_batch(
@@ -9260,8 +9280,13 @@ domain_live_summary = pd.DataFrame([
     ("raw model energy / atom for this fixed input (eV)",
      domain_energy_ev / domain_result.num_nodes),
     ("maximum force (eV/Å)", domain_fmax_ev_a),
+    ("predicted charge dtype", domain_charge_dtype),
+    ("input total-charge target (e)", domain_charge_target_e),
     ("total predicted charge (e)", domain_charge_sum),
-    ("charge neutrality limit (e)", DOMAIN_CHARGE_SUM_TOLERANCE_E),
+    ("charge residual (e)", domain_charge_residual_e),
+    ("absolute charge residual / atom (e)", domain_charge_abs_residual_per_atom),
+    ("sum of absolute atomic charges (e)", domain_charge_sum_abs_e),
+    ("maximum absolute atomic charge (e)", domain_charge_max_abs_e),
     ("local API-check wall time (s)", domain_elapsed_s),
     ("local Torch peak allocated after reset (GB)", domain_peak_memory_gb),
 ], columns=["Measure", "Value"]).round(6)
@@ -9273,6 +9298,8 @@ display(callout(
     "`BaseDynamics` evaluates the "
     "checked, unequilibrated base box without changing its coordinates. Its "
     "first-call time is not comparable with the warmed H100 measurements. "
+    "Toolkit passed the returned float32 charges to PME unchanged. Their "
+    "reported sum residual is a numerical diagnostic, not a pass threshold. "
     "The raw energy is not an interaction, cohesive, or liquid-property "
     "energy. A large maximum force means the box would need relaxation or "
     "equilibration before dynamics; it is not evidence of material instability.",
@@ -9289,9 +9316,8 @@ domain_output_progress.complete("result table displayed")
             r"""
 ### The multi-GPU API used by the offline run
 
-`torchrun` starts one worker **rank** per GPU. Rank 0 supplies the full
-`Batch`; `DomainParallel` partitions it and later gathers atom fields. Energy
-is summed across ranks.
+`torchrun` starts one worker **rank** per GPU. Rank 0 supplies the full `Batch`
+to `DomainParallel`.
 
 ```python
 import torch
@@ -9308,7 +9334,7 @@ mesh = manager.initialize_mesh(
     mesh_dim_names=("domain",),
 )
 
-full = ... if manager.rank == 0 else None  # rank 0 supplies the full system
+full = ... if manager.rank == 0 else None
 periodic_model = ...  # checkpoint base + predicted-charge PME + D3
 config = DomainConfig(
     cutoff=domain_cutoff_a,
@@ -9347,10 +9373,12 @@ one-GPU path uses the model's ordinary neighbor hooks.
 | spatial grid | assigns atoms to GPU regions |
 | PME grid | defines the electrostatics FFT repeated on every GPU |
 
-Toolkit 0.2 restricts this example to a neutral box because the input system
-charge is not copied into each GPU region. `gather` reconstructs declared atom
-fields such as forces; this distributed AIMNet2-to-PME group does not emit
-predicted atomic charges.
+Toolkit 0.2 restricts this example to an input total-charge target of zero
+because that target is not copied into each GPU region. Toolkit passes
+AIMNet2 charges to PME unchanged.
+`gather` collects forces, but the distributed AIMNet2-to-PME group does not
+emit predicted atomic charges. Rank consistency is checked through
+source-ordered forces and distributed energies.
 """,
         ),
     )
@@ -9361,12 +9389,11 @@ predicted atomic charges.
             r"""
 ### Measure where one GPU stops fitting
 
-The offline H100 campaign repeats the checked base box as integer supercells.
-Its recorded x/y/z repeat factors preserve composition and construction
-density; Packmol is not rerun.
+The offline H100 campaign uses integer supercells, preserving composition and
+construction density; Packmol is not rerun.
 
-Only checked saved results appear. The notebook never triggers an
-out-of-memory failure live. These answer three different questions:
+The notebook never triggers an out-of-memory failure live. Checked results
+answer three different questions:
 
 | Measurement | Input | Nodes = ranks = GPUs | Question |
 |---|---:|---:|---|
@@ -9380,14 +9407,18 @@ input checks 1-GPU forces against 2/4 GPUs and 2-GPU distributed energy
 against 4. The raw 1-to-multi energy offset is diagnostic because Toolkit
 0.2 reduces those paths differently. Timing reports the slowest-rank median
 and interquartile range (IQR) for each complete `partition → run → gather`.
-Exact settings are in the
-[compute-lab runbook](COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set).
+Successful one-GPU rows record the actual float32 charges passed to PME:
+dtype, target, sum, residual, absolute residual per atom, magnitude statistics,
+shape, and hash.
+The residual is reported, not limited; `1e-4 e` applies only to the separate
+3,200-atom fixed-charge PME-versus-Ewald validation. See the
+[runbook](COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set).
 """
             + "\n\n"
             + callout_html(
-                "Interpret speed only after the force and distributed-energy "
-                "checks pass. The first OOM and its unchanged retries measure "
-                "capacity; the separate one-GPU-fit input measures speed.",
+                "Check force and distributed-energy agreement before speed. "
+                "The first OOM and its unchanged retries measure capacity; "
+                "the separate one-GPU-fit input measures speed.",
                 kind="check",
             )
             + "\n\n"
@@ -9499,8 +9530,12 @@ domain_h100_settings = pd.DataFrame([
      f"model evaluations each; median and IQR on 1, 2, and 4 GPUs"),
     ("Repeatability", f"IQR / median ≤ "
      f"{DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr:.0%}"),
-    ("Charge neutrality",
-     f"|Σq| ≤ {DOMAIN_METHODOLOGY.charge_sum_tolerance_e:g} e"),
+    ("One-GPU predicted charges",
+     "finite float32 values; record target, sum, residual, absolute residual / atom, "
+     "magnitude statistics, shape, and hash; do not renormalize after model "
+     "evaluation or apply a residual threshold"),
+    ("3,200-atom PME ↔ Ewald charge check",
+     f"|Σq - Qtarget| ≤ {DOMAIN_METHODOLOGY.charge_sum_tolerance_e:g} e"),
     ("2 → 4-GPU energy",
      f"|ΔEdistributed| / N ≤ "
      f"{DOMAIN_METHODOLOGY.parity_energy_tolerance_ev_per_atom:g} eV/atom"),
@@ -9532,6 +9567,11 @@ if domain_view.available:
     display(readable_table(
         domain_view.capacity_table.round(3),
         label="1 · One-H100 capacity, including the first natural OOM",
+        show_index=False,
+    ))
+    display(readable_table(
+        domain_view.charge_diagnostics_table.round(9),
+        label="One-H100 charge residuals passed to PME",
         show_index=False,
     ))
     display(readable_table(

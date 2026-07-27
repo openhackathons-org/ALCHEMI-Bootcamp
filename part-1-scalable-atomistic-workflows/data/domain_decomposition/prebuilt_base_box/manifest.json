@@ -4,7 +4,7 @@
   "methodology": {
     "schema": "alchemi.part1-domain-methodology.v2",
     "name": "part1-packmol-domain-decomposition",
-    "version": "1.6.0"
+    "version": "1.7.0"
   },
   "source": {
     "nci_subset_file": "../../nci_atlas/nci-atlas-curves.csv.gz",
