@@ -1,0 +1,130 @@
+{
+  "generated_with": {
+    "library": "ASE",
+    "version": "3.28.0"
+  },
+  "geometry_status": "ASE-generated initial placements; not model-relaxed",
+  "method_id": "cu111-important-molecules-v1",
+  "methodology_file": "methodology.json",
+  "methodology_sha256": "6c0b6ae807e8c5bb735e2e9541ee97e1d1674107c185751624f449c7b3c48117",
+  "schema": "alchemi.adsorption-structures.v1",
+  "structures": [
+    {
+      "atoms": 36,
+      "file": "clean_cu111_initial.extxyz",
+      "formula": "Cu36",
+      "key": "clean_cu111",
+      "pbc": [
+        true,
+        true,
+        false
+      ],
+      "role": "clean_slab",
+      "sha256": "d46590af51afb3e0fba483e48a642b510983e8e8be9e3ab043a117d0c93f7e8b"
+    },
+    {
+      "atoms": 38,
+      "file": "co_on_cu111_initial.extxyz",
+      "formula": "CCu36O",
+      "key": "co_on_cu111",
+      "pbc": [
+        true,
+        true,
+        false
+      ],
+      "role": "adslab",
+      "sha256": "227cb6b14a2e27db6d7e3caf2d9214554f92a61d63fbf8d35824072fd64ec13a"
+    },
+    {
+      "atoms": 39,
+      "file": "co2_on_cu111_initial.extxyz",
+      "formula": "CCu36O2",
+      "key": "co2_on_cu111",
+      "pbc": [
+        true,
+        true,
+        false
+      ],
+      "role": "adslab",
+      "sha256": "1a88599168b319cfb169ed26784f72f53689bd71a09f07981c5cc5fcd534e70e"
+    },
+    {
+      "atoms": 40,
+      "file": "nh3_on_cu111_initial.extxyz",
+      "formula": "H3Cu36N",
+      "key": "nh3_on_cu111",
+      "pbc": [
+        true,
+        true,
+        false
+      ],
+      "role": "adslab",
+      "sha256": "d678b1b08725890d6e3417674eb2c4b545356134a9e376bfbd78289d9cca64fd"
+    },
+    {
+      "atoms": 42,
+      "file": "ch3oh_on_cu111_initial.extxyz",
+      "formula": "CH4Cu36O",
+      "key": "ch3oh_on_cu111",
+      "pbc": [
+        true,
+        true,
+        false
+      ],
+      "role": "adslab",
+      "sha256": "424024f2094b6ace1988fbbd50462f2b8f3afa8137848b6e6079a3556cceb10a"
+    },
+    {
+      "atoms": 2,
+      "file": "co_gas_initial.extxyz",
+      "formula": "CO",
+      "key": "co_gas",
+      "pbc": [
+        false,
+        false,
+        false
+      ],
+      "role": "gas",
+      "sha256": "d70d78ba91a57209df37495fa21194f952dd65aaea8bc0a2502b4912f0a0fc30"
+    },
+    {
+      "atoms": 3,
+      "file": "co2_gas_initial.extxyz",
+      "formula": "CO2",
+      "key": "co2_gas",
+      "pbc": [
+        false,
+        false,
+        false
+      ],
+      "role": "gas",
+      "sha256": "71e4a41ea93e5d7dfcfbd1bc9b02e149152eef421c3719340222ef591fa761ca"
+    },
+    {
+      "atoms": 4,
+      "file": "nh3_gas_initial.extxyz",
+      "formula": "H3N",
+      "key": "nh3_gas",
+      "pbc": [
+        false,
+        false,
+        false
+      ],
+      "role": "gas",
+      "sha256": "380a3a29bd301d1112741d0be12acb5f3ab6313ab6ba08eb32de0f3c43ab18af"
+    },
+    {
+      "atoms": 6,
+      "file": "ch3oh_gas_initial.extxyz",
+      "formula": "CH4O",
+      "key": "ch3oh_gas",
+      "pbc": [
+        false,
+        false,
+        false
+      ],
+      "role": "gas",
+      "sha256": "5511dfce1bb56c3bdcbec245eaac29cd2ed95c40cbe4e3ceed02bd3cec022621"
+    }
+  ]
+}

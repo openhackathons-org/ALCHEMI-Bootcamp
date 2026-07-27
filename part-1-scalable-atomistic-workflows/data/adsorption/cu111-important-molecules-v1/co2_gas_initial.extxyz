@@ -1,0 +1,5 @@
+3
+Properties=species:S:1:pos:R:3:is_adsorbate:L:1 structure_key=co2_gas role=gas adsorbate=CO2 surface=none geometry_status="ASE-generated initial placements; not model-relaxed" relaxed=F pbc="F F F"
+C        0.00000000       0.00000000       0.00000000  T
+O        0.00000000       0.00000000       1.17865800  T
+O        0.00000000       0.00000000      -1.17865800  T

@@ -14,7 +14,7 @@ set -euo pipefail
 # Set ALCHEMI_RUN_ROOT for a site-specific persistent scratch location.
 RUN_ROOT="${ALCHEMI_RUN_ROOT:-${SCRATCH:-$HOME}/alchemi-ir}"
 REPO_ROOT="$RUN_ROOT/stage/repo/ALCHEMI-Bootcamp"
-PART_DIR="$REPO_ROOT/part-1-water-hydrogen-bonding-toolkit"
+PART_DIR="$REPO_ROOT/part-1-scalable-atomistic-workflows"
 REF_ENV="$RUN_ROOT/envs/alchemi-b973c-ir"
 NODE_TMP="/tmp/alchemi-dimer-${SLURM_JOB_ID}"
 LOCAL_OUT="$NODE_TMP/water_dimer_b97_3c"

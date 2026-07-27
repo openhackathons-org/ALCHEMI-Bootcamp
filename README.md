@@ -1,106 +1,122 @@
 # ALCHEMI Playbook
 
-This v2 branch retains the existing ALCHEMI tutorials and adds the implemented
-water-based Part 1 rebuild. The Part 3 notebook remains available as a
-research and runtime-validation harness. Everything runs from one Docker
-container with JupyterLab at port 8888.
+Hands-on tutorials for building batched atomistic workflows with NVIDIA
+ALCHEMI Toolkit. The playbook focuses on the Toolkit data model, model adapters,
+GPU execution, relaxation and dynamics, hooks, model composition, and saved
+results.
 
-## Playbook contents
+The curriculum is Toolkit-first. Scientific examples provide meaningful inputs
+and outputs, but they do not limit which reusable ALCHEMI capabilities the
+series teaches.
 
-The checkout currently contains these tutorial notebooks:
+## Tutorials
 
-- **[Part 1 rebuild: One Water Dimer to a Batched IR Trajectory](part-1-water-hydrogen-bonding-toolkit/)** — compose the AIMNet2-2025 B97-3c residual with pairwise D3(BJ) and its official finite-system all-pairs `simple` Coulomb convention, then compute live predicted-charge spectra for H₂O/D₂O monomers and cyclic-hexamer seeds in one NVT→NVE batch, with topology and thermal-state gates on every comparison.
-- **[Legacy adsorption tutorial — former Part 1](part-1-batched-adsorption-toolkit/)** — enumerate and relax adsorbate–surface candidates with MACE-MPA-0 and Toolkit FIRE2.
-- **[Part 2: OLED Melting Point Predictions with ALCHEMI Toolkit](part-2-batched-melting-toolkit/)** — study solid–liquid coexistence for naphthalene with the Orb-v3 molecular potential.
-- **[Retained research/validation prototype: Atoms to Batched GPU Workflows](part-3-toolkit-foundations/)** — compare CPU/GPU and homogeneous/heterogeneous batching, inspect neighbor-buffer tradeoffs, implement a custom Toolkit model, and compose AIMNet2 ωB97M-D3 with pairwise D3(BJ) and finite nonperiodic electrostatics. The complete model is evaluated live on three ten-point NCI Atlas interaction curves against near-matched DFT-D3 and independent CCSD(T)/CBS references. This is not the polished learner-facing Part 1 story.
+| Tutorial | Focus |
+|---|---|
+| [Part 1: From one structure to scalable atomistic workflows](part-1-scalable-atomistic-workflows/) | Follow one seven-stage path from a single result through NCI Atlas batching, model composition, a custom materials-model adapter, dynamics, infrared analysis, inflight queues, and spatial domain decomposition. |
+| [Part 2: Batched adsorption](part-2-batched-adsorption-toolkit/) | Enumerate and relax adsorbate-surface candidates with a materials model. |
+| [Part 3: OLED melting-point prediction](part-3-batched-melting-toolkit/) | Use a molecular potential in a solid-liquid coexistence workflow. |
 
-## Tools and frameworks
+These part numbers and directory names are the permanent curriculum order. The
+archived `research-toolkit-foundations` notebook contains the research version
+of the NCI Atlas lesson now incorporated into Part 1. It is not included in the
+Part 1 image, is not an active tutorial, and is not a source of part numbering.
 
-The tools and frameworks used in this playbook:
+The v2 image targets the remastered Part 1. The retained adsorption notebook,
+now Part 2, requires its separate historical MACE environment. The retained
+OLED notebook, now Part 3 and historically Part 2, requires its separate
+historical Orb environment. The Part 1 image intentionally does not install
+`orb-models` or the legacy-only `loguru` dependency. The retained notebooks
+still need updated environments and validation before learner use.
 
-- [NVIDIA ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) — Python library for batched, GPU-native atomistic relaxation and dynamics
-- [NVIDIA ALCHEMI Toolkit-Ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops) — GPU kernels (neighbor lists, DFT-D3, long-range electrostatics) under the Toolkit
-- [MACE-MPA-0](https://github.com/ACEsuit/mace) — materials foundation model used for the Part 1 adsorption search
-- [Orb-v3](https://github.com/orbital-materials/orb-models) — molecular potential used by the Part 2 melting workflow
-- [AIMNet2-2025 B97-3c](https://huggingface.co/isayevlab/aimnet2-2025) — molecular potential used for the Part 1 predicted-charge IR trajectory
-- [AIMNet2 ωB97M-D3](https://huggingface.co/isayevlab/aimnet2-wb97m-d3) — molecular potential used for the Part 3 component-composition example
-- [OVITO](https://www.ovito.org/) — atomistic visualization
-- [JupyterLab](https://jupyterlab.readthedocs.io/) — interactive notebook environment
+## What the playbook teaches
 
-## Resources
+- Convert ASE or pymatgen structures to `AtomicData`.
+- Combine variable-sized systems in a `Batch` and recover individual results.
+- Inspect model inputs, outputs, precision, and neighbor requirements.
+- Use public Toolkit model adapters and connect a new model through the adapter
+  interface.
+- Build neighbors through Toolkit Core and understand the accelerated
+  Toolkit-Ops implementations underneath.
+- Compose independent and dependent model contributions without hiding the
+  data flow.
+- Run batched relaxation and dynamics with hooks for neighbors, checks,
+  logging, and saved snapshots.
+- Explain single-call batching, inflight processing, spatial domain
+  decomposition, and distributed stage pipelines as different execution
+  patterns.
+- Measure CPU and GPU behavior with equal work, teach the intended multi-GPU
+  workflow, and analyze verified multi-GPU results when they are available.
 
-- **ALCHEMI:** [developer hub](https://developer.nvidia.com/cuda/cuda-x-libraries/alchemi) · [Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) · [Toolkit-Ops docs](https://nvidia.github.io/nvalchemi-toolkit-ops/)
-- **Source (GitHub):** [nvalchemi-toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) · [nvalchemi-toolkit-ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
-- **pip:** `pip install nvalchemi-toolkit` ([PyPI](https://pypi.org/project/nvalchemi-toolkit/)) — see the [Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) for GPU wheels and optional extras (`[ase,mace,aimnet]`). This playbook's Docker image installs the pinned build for you (see [RUNTIME_SNAPSHOT.md](RUNTIME_SNAPSHOT.md)).
-
-## Runtime snapshot
-
-The updated main environment is pinned for reproducible rebuilds. The Docker image exposes a single Jupyter kernel, `alchemi-main` (`ALCHEMI Main`), backed by the `/opt/conda/envs/alchemi-playbook` Python environment. The full package/commit snapshot is recorded in [RUNTIME_SNAPSHOT.md](RUNTIME_SNAPSHOT.md).
-
-The Part 1 scientific path is acceptance-tested in the exact pinned CL H100
-environment: scientific execution source SHA `5403dfcd…` passed in job
-`3087665`. On the validation host, its intentionally gitignored local bundle at
-`part-1-water-hydrogen-bonding-toolkit/outputs/h100-remaster-3087665/` contains
-the source, executed notebook, validator report, full trajectory, and figures.
-The current `v2` learner notebook SHA is `81124de…`: it adds the new
-banner and presentation system, changes one CPU/GPU callout from `CHECK` to the
-truthful `RESULT — OBSERVED`, and leaves the scientific code path unchanged. It
-has not been rerun on H100. A clean build of the distributable Docker image
-remains a separate release-image gate.
-
-Part 1 keeps the variable-size dimer scan in eager mode. It applies default
-`torch.compile` only after building the fixed 42-atom IR batch, then requires
-the compiled energy, forces, and charges to match both an eager evaluation and
-a second synchronized compiled evaluation before relaxation or dynamics.
-
-## Playbook duration
-
-Parts 1 and 2 retain their existing workshop scope. The retained Part 3
-research harness does not yet have a validated workshop-duration target.
-
-## Prerequisites
+## Requirements
 
 | Requirement | Details |
-|-------------|---------|
-| Background | Python proficiency; basic familiarity with computational chemistry / atomistic simulation. |
-| GPU host | NVIDIA x86_64 GPU. Tested on A100, H100, B200, L40S, RTX 6000 Ada. |
-| Docker | Latest [Docker Engine](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker) with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) and the Docker Compose v2 plugin. |
-| Internet | Needed during environment setup for image pulls, model checkpoints, and prewarming the Toolkit D3 parameter cache. The Part 1 notebook does not download D3 data while it runs. |
+|---|---|
+| Background | Python, plus basic computational chemistry, atomistic simulation, or machine-learning experience |
+| Host | x86_64 Linux host with an NVIDIA GPU |
+| Container runtime | Docker Engine, Docker Compose v2, and NVIDIA Container Toolkit |
+| Storage and network | Enough space for the image and model checkpoints; network access during image build and the first D3 setup, unless a checked D3 cache is supplied |
 
-## Deploying the Playbook
+The main remastered notebook is paced for an H100-class GPU. It can be opened
+on weaker hardware, but runtimes will differ. The notebook does not silently
+shorten the declared scientific workload to fit a smaller device.
 
-All listed notebooks run from a single unified Docker container orchestrated
-via Docker Compose.
+## Start JupyterLab
+
+From the repository root:
 
 ```bash
 cd build
-docker compose up          # builds the unified image and starts JupyterLab
+docker compose up
 ```
 
-Once running, the service is reachable at:
+Open `http://localhost:8888/lab`, then launch
+`part-1-scalable-atomistic-workflows/alchemi-water-ir.ipynb`. Other tutorial
+folders remain visible for reference, but they need the separate environments
+listed above.
 
-| Service    | URL                                  |
-|------------|--------------------------------------|
-| Jupyter    | http://localhost:8888/lab            |
+Compose bind-mounts the local tutorial directories so edits appear immediately;
+it is the development path, not the clean-image release check. Rebuild after
+changing package pins. To inspect the files baked into the image with no host
+source mounted over them, stop Compose and run the command below. The clean
+v2 image contains the remastered Part 1 plus the Part 2/3 status READMEs; it
+does not package their historical notebooks or scientific data.
 
-Open the Jupyter URL in your browser and launch any notebook:
+```bash
+docker run --rm --gpus all --shm-size=8g \
+  -p 8888:8888 alchemi-playbook:latest
+```
 
-- `part-1-water-hydrogen-bonding-toolkit/alchemi-water-ir.ipynb`
-- `part-1-batched-adsorption-toolkit/alchemi-mace-adsorption-search.ipynb`
-- `part-2-batched-melting-toolkit/melting-point-slc.ipynb`
-- `part-3-toolkit-foundations/alchemi-toolkit-foundations.ipynb`
+The image definition and package pins live in [build/Dockerfile](build/Dockerfile),
+[build/environment.yml](build/environment.yml), and
+[build/requirements.txt](build/requirements.txt).
 
-### Browsing without live GPU work
+## Documentation
 
-The legacy adsorption notebook exposes its original short/full and saved/compute controls. The new water-IR notebook always runs its full 5,000-step NVT + 50,000-step NVE live workload. Part 2 can replay the long production trajectories from shipped results. Part 3 is intentionally bounded live compute; its scientific outputs are not replayed from saved results.
+| Document | Purpose |
+|---|---|
+| [Fundamental tutorial design principles](TUTORIAL_DESIGN_PRINCIPLES.md) | General rules derived from strong PyTorch, TorchSim, Warp, BioNeMo, and large-scale computing tutorials |
+| [ALCHEMI tutorial principles and visual style](ALCHEMI_TUTORIAL_PRINCIPLES.md) | Toolkit-first curriculum, public API exposure, live compute, helper-code, and notebook-style rules |
+| [Toolkit API curriculum](TOOLKIT_API_CURRICULUM.md) | Separate list of the Toolkit capabilities and public APIs the playbook should cover |
+| [Third-party notices](THIRD_PARTY_NOTICES.md) | Software, model, checkpoint, and redistribution notes |
+| [Changelog](CHANGELOG.md) | User-visible changes to the playbook |
+
+Exact calculation records, hardware measurements, checksums, and failed-run
+details belong beside the saved results they describe. They are not part of the
+root project overview or the tutorial-design guides.
+
+## Official resources
+
+- [ALCHEMI developer hub](https://developer.nvidia.com/cuda/cuda-x-libraries/alchemi)
+- [Toolkit documentation](https://nvidia.github.io/nvalchemi-toolkit/)
+- [Toolkit source](https://github.com/NVIDIA/nvalchemi-toolkit)
+- [Toolkit-Ops documentation](https://nvidia.github.io/nvalchemi-toolkit-ops/)
+- [Toolkit-Ops source](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+This repository is licensed under Apache 2.0. See [LICENSE](LICENSE).
 
-The Toolkit D3 parameter tensor is a separate runtime asset. Part 1 passes its
-path explicitly with `param_file`, sets `auto_download=False`, and requires
-SHA-256
-`b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84`.
-The tensor is not bundled in this repository while redistribution rights remain
-unconfirmed.
+Models, checkpoints, datasets, figures, and downloaded runtime files may have
+separate terms. Review [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the
+README beside each input before redistribution.

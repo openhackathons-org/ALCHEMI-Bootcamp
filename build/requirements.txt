@@ -1,37 +1,32 @@
-# Unified runtime + tooling dependencies for the ALCHEMI Playbook (Parts 1–3).
+# Runtime and tooling dependencies for the remastered Part 1 image.
 #
-# ovito is installed via conda (see dev/environment.yml) so its bundled
+# ovito is installed via conda (see build/environment.yml) so its bundled
 # Qt6 / glib / fontconfig runtime ships with the conda env instead of via
-# apt-get system libs. See dev/Dockerfile and dev/README.md for the
-# full install sequence.
+# apt-get system libs. See build/Dockerfile and the repository README for
+# the full install sequence.
 
-# Toolkit packages pinned to validated source commits for a reproducible
-# environment. The Dockerfile installs with `--no-sources-package
-# nvalchemi-toolkit-ops` so Toolkit's internal `tool.uv.sources` revision
-# cannot override the directly validated commit below.
+# Toolkit packages pinned to exact source commits for a reproducible
+# environment. Runtime validation is recorded separately. The Dockerfile
+# installs with `--no-sources-package nvalchemi-toolkit-ops` so Toolkit's
+# internal `tool.uv.sources` revision cannot override the exact pin below.
 torch==2.12.0
-nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c6fbe652315e0cebd4f57a6a25f626258f0dbbfd
+nvalchemi-toolkit-ops[torch-cu13,jax-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@e8e7a7464f6745277a156a3d6f433d06b58c60e3
+# Match the JAX version resolved and tested by the pinned Toolkit-Ops commit.
+jax[cuda13]==0.9.0.1
 
-# Toolkit (Part 3 core; pulls in ase as a transitive)
-nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@b770ee6963fd2f6137891e408c370012751918e2
+# Toolkit core used throughout the playbook; pulls in ASE transitively.
+nvalchemi-toolkit[ase,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409
 
-# Explicit transitive pins used by the remastered Toolkit-foundations notebook.
+# Explicit model/runtime pins used by the remastered notebooks.
 aimnet==0.2.0
+sevenn==0.13.0
+# SevenNet requires e3nn >=0.5 because that release changed the
+# Clebsch-Gordan coefficient convention. Pin the tested final 0.5 release.
+e3nn==0.5.9
 nvidia-physicsnemo==2.1.1
 warp-lang==1.13.0
 
-# cuEquivariance compiled Torch ops for the CUDA 13 runtime. This matches the
-# cuequivariance/cuequivariance-torch 0.10.0 stack pulled by mace-torch and
-# prevents the MACE path from falling back to the naive implementation.
-cuequivariance-ops-torch-cu13==0.10.0
-
-# ORB-v3 foundation model used by Part 2. Its 0.7.0 metadata still caps
-# Toolkit-Ops below 0.4; build/overrides.txt keeps the playbook's validated
-# Toolkit-Ops source pin authoritative during unified resolution.
-orb-models==0.7.0
-loguru
-
-# Parts 1 and 2 scientific stack
+# Scientific and notebook stack
 pymatgen>=2024.1.1
 pydantic>=2.0
 requests>=2.31
@@ -46,11 +41,8 @@ ipywidgets>=8.0
 jupyterlab
 jupyterlab-vim
 
-# Part 2 packing
-packmol
-
-# Parts 1 and 2 trajectory MP4 rendering (imageio_ffmpeg ships a static ffmpeg binary,
-# so no apt-get ffmpeg is needed in the image).
+# Retained trajectory MP4 support. imageio_ffmpeg ships a static ffmpeg binary,
+# so no apt-get ffmpeg is needed in the image.
 imageio-ffmpeg
 
 # Test + lint tooling (formerly requirements-dev.txt; included unconditionally
