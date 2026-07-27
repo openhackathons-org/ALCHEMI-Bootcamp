@@ -441,14 +441,14 @@ def test_rejects_historical_patch_in_active_producer_index(tmp_path: Path) -> No
     inputs = [
         _write_job(tmp_path / f"job-{route}", route) for route in ROUTE_SPECS
     ]
-    patch_path = (
-        REPOSITORY_ROOT
-        / "scripts/patches/nvalchemi-toolkit-b770ee6-sustained-pipeline-compat.patch"
+    retired_patch_path = (
+        "scripts/patches/"
+        "nvalchemi-toolkit-b770ee6-sustained-pipeline-compat.patch"
     )
     index = inputs[0] / "producer-SHA256SUMS"
     index.write_text(
         index.read_text(encoding="utf-8")
-        + f"{sha256_file(patch_path)}  {patch_path.as_posix()}\n",
+        + f"{'0' * 64}  {retired_patch_path}\n",
         encoding="utf-8",
     )
 
