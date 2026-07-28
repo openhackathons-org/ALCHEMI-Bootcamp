@@ -99,6 +99,110 @@ def _window_for_label(
     return low, high
 
 
+def first_atomic_data_table(
+    *,
+    num_atoms: int,
+    atomic_numbers: Sequence[int] | np.ndarray,
+    positions_shape: Sequence[int],
+    cell: Any | None,
+    positions_dtype: str,
+    device: str,
+) -> pd.DataFrame:
+    """Format fields observed from the first notebook-built ``AtomicData``.
+
+    The notebook still constructs and inspects the Toolkit object.  This helper
+    only validates the values passed from that visible code and assembles the
+    learner-facing table.
+    """
+
+    if isinstance(num_atoms, bool) or not isinstance(num_atoms, (int, np.integer)):
+        raise TypeError("num_atoms must be an integer")
+    atom_count = int(num_atoms)
+    if atom_count <= 0:
+        raise ValueError("num_atoms must be positive")
+    numbers = np.asarray(atomic_numbers)
+    if numbers.shape != (atom_count,):
+        raise ValueError("atomic_numbers must contain one value per atom")
+    if not np.issubdtype(numbers.dtype, np.integer):
+        raise TypeError("atomic_numbers must contain integers")
+    shape = tuple(int(value) for value in positions_shape)
+    if shape != (atom_count, 3):
+        raise ValueError("positions_shape must be (num_atoms, 3)")
+
+    rows = [
+        ("atoms", atom_count),
+        ("atomic numbers", numbers.tolist()),
+        ("positions shape", shape),
+        ("cell / PBC", "none / nonperiodic" if cell is None else "periodic"),
+        ("dtype", str(positions_dtype)),
+        ("device", str(device)),
+    ]
+    return pd.DataFrame(rows, columns=["Field", "Value"])
+
+
+def first_model_result_tables(
+    *,
+    num_graphs: int,
+    energy_eV: float,
+    symbols: Sequence[str],
+    charges_e: Sequence[float] | np.ndarray,
+    forces_eV_A: Sequence[Sequence[float]] | np.ndarray,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    """Build the system- and atom-level tables from the first Toolkit result.
+
+    The caller performs the model call and passes all returned scientific
+    values.  The first table preserves the graph count, energy, and total
+    predicted charge.  The second preserves each atomic charge, Cartesian
+    force component, and force norm.
+    """
+
+    if isinstance(num_graphs, bool) or not isinstance(
+        num_graphs, (int, np.integer)
+    ):
+        raise TypeError("num_graphs must be an integer")
+    graph_count = int(num_graphs)
+    if graph_count <= 0:
+        raise ValueError("num_graphs must be positive")
+    energy = float(energy_eV)
+    if not np.isfinite(energy):
+        raise ValueError("energy_eV must be finite")
+
+    atom_symbols = tuple(str(symbol) for symbol in symbols)
+    if not atom_symbols or any(not symbol.strip() for symbol in atom_symbols):
+        raise ValueError("symbols must contain non-empty atom labels")
+    charges = np.asarray(charges_e, dtype=np.float64)
+    forces = np.asarray(forces_eV_A, dtype=np.float64)
+    if charges.shape != (len(atom_symbols),):
+        raise ValueError("charges_e must contain one value per atom")
+    if forces.shape != (len(atom_symbols), 3):
+        raise ValueError("forces_eV_A must have shape (atoms, 3)")
+    if not np.isfinite(charges).all() or not np.isfinite(forces).all():
+        raise ValueError("charges_e and forces_eV_A must contain finite values")
+
+    system_table = pd.DataFrame(
+        [
+            ("Graphs", graph_count),
+            ("Energy / eV", energy),
+            ("Total predicted charge / e", float(charges.sum())),
+        ],
+        columns=["System result", "Value"],
+    )
+    atom_table = pd.DataFrame(
+        {
+            "atom": [
+                f"{symbol}{index + 1}"
+                for index, symbol in enumerate(atom_symbols)
+            ],
+            "charge (e)": charges,
+            "Fx (eV/Å)": forces[:, 0],
+            "Fy (eV/Å)": forces[:, 1],
+            "Fz (eV/Å)": forces[:, 2],
+            "|F| (eV/Å)": np.linalg.norm(forces, axis=1),
+        }
+    ).round(6)
+    return system_table, atom_table
+
+
 def ir_spectrum_metrics(
     dipoles_e_angstrom: np.ndarray,
     labels: Sequence[str],
@@ -685,6 +789,8 @@ __all__ = [
     "assignments_are_subspace_equivalent",
     "comparison_display_table",
     "dimer_interaction_energy_table",
+    "first_atomic_data_table",
+    "first_model_result_tables",
     "grouped_mapping_rows",
     "h_to_d_mode_mapping_table",
     "ir_comparison_table",

@@ -19,7 +19,10 @@ from aux.artifacts import (  # noqa: E402
     save_ir_trajectory,
     trajectory_graph_frames,
 )
-from aux.checkpoint import validate_b973c_external_components  # noqa: E402
+from aux.checkpoint import (  # noqa: E402
+    aimnet_model_card_table,
+    validate_b973c_external_components,
+)
 from aux.diagnostics import cluster_integrity, mass_only_invariance  # noqa: E402
 from aux.structures import (  # noqa: E402
     DEUTERIUM_MASS_U,
@@ -183,6 +186,54 @@ def test_checkpoint_contract_is_exact() -> None:
     metadata["d3_params"] = {**metadata["d3_params"], "s8": 1.4}
     with pytest.raises(ValueError, match="Unexpected B97-3c D3 parameter"):
         validate_b973c_external_components(metadata)
+
+
+def test_aimnet_model_card_table_preserves_current_rows() -> None:
+    table = aimnet_model_card_table(
+        {
+            "checkpoint_source": "aimnet2_b973c_0",
+            "checkpoint_sha256": "a" * 64,
+            "implemented_species": [1, 6, 7, 8],
+            "needs_coulomb": True,
+            "needs_dispersion": True,
+        },
+        aimnet_version="0.0.test",
+        cutoff_A=5.0,
+        supports_pbc=True,
+        optional_inputs={"cell", "charge"},
+        neighbor_convention="full directed neighbors",
+        device="cuda:0",
+    )
+
+    assert table.columns.tolist() == ["Setting", "Value"]
+    assert table["Setting"].tolist() == [
+        "checkpoint",
+        "checkpoint_sha256",
+        "package",
+        "code_license",
+        "target",
+        "domain",
+        "implemented_atomic_numbers",
+        "weight_license",
+        "total_charge",
+        "spin_multiplicity",
+        "cutoff_A",
+        "external_coulomb",
+        "external_dispersion",
+        "supports_pbc",
+        "optional_inputs",
+        "neighbor_convention",
+        "device",
+        "coordinate_precision",
+    ]
+    card = table.set_index("Setting")["Value"]
+    assert card["checkpoint_sha256"] == "a" * 16 + "…"
+    assert card["package"] == "aimnet 0.0.test through Toolkit AIMNet2Wrapper"
+    assert card["optional_inputs"] == ["cell", "charge"]
+    assert card["external_coulomb"] is True
+    assert card["external_dispersion"] is True
+    assert card["code_license"] == "AIMNet software: MIT"
+    assert card["weight_license"] == "MIT"
 
 
 def test_aux_mechanics_do_not_hide_toolkit_batch_or_pipeline_construction() -> None:

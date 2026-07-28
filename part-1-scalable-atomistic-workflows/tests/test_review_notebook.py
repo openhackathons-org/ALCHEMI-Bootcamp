@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import importlib.util
+import shutil
 from hashlib import sha256
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import nbformat
 import pytest
@@ -33,6 +35,50 @@ def _write_fake_ovito_nbextension(root: Path) -> tuple[Path, Path]:
         encoding="utf-8",
     )
     return script, license_path
+
+
+def _write_packaged_notebook_sources(source_dir: Path) -> None:
+    contents = {
+        "COMPUTE_LAB_RUNBOOK.md": ("## 5. Build and check the recorded result set\n"),
+        "../part-2-batched-adsorption-toolkit/README.md": (
+            "[Part 1](../part-1-scalable-atomistic-workflows/)\n"
+        ),
+        "../THIRD_PARTY_NOTICES.md": (
+            "[reference](part-1-scalable-atomistic-workflows/reference/README.md)\n"
+            "[NCI data](part-1-scalable-atomistic-workflows/data/nci_atlas/README.md)\n"
+        ),
+        "reference/README.md": "# Reference data\n",
+        "data/nci_atlas/README.md": "# NCI data\n",
+    }
+    for source_reference, output_reference in MODULE.PACKAGED_NOTEBOOK_FILES:
+        source = (source_dir / source_reference).resolve()
+        source.parent.mkdir(parents=True, exist_ok=True)
+        if source_reference == output_reference and source.suffix == ".png":
+            source.write_bytes(b"banner bytes")
+        else:
+            source.write_text(contents[source_reference], encoding="utf-8")
+
+
+def _review_html_text(*, embed_banner: bool = False) -> str:
+    output_references = MODULE.LOCAL_NOTEBOOK_OUTPUT_REFERENCES
+    banner = output_references[
+        "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png"
+    ]
+    runbook = output_references[
+        "COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set"
+    ]
+    part_2 = output_references["../part-2-batched-adsorption-toolkit/README.md"]
+    notices = output_references["../THIRD_PARTY_NOTICES.md"]
+    banner_source = "data:image/png;base64,YmFubmVy" if embed_banner else banner
+    return (
+        '<script type="application/vnd.jupyter.widget-state+json">'
+        '{"model_module":"jupyter-ovito"}'
+        "</script>\n"
+        f'<img src="{banner_source}" alt="review banner">\n'
+        f'<a href="{runbook}">runbook</a>\n'
+        f'<a href="{part_2}">Part 2</a>\n'
+        f'<a href="{notices}">notices</a>\n'
+    )
 
 
 def test_saved_progress_widgets_flatten_to_static_html() -> None:
@@ -241,21 +287,11 @@ def test_local_markdown_references_are_rebased_for_release_copy(
 ) -> None:
     source_dir = tmp_path / "part-1"
     output_dir = source_dir / "outputs" / "run-42"
-    local_targets = {
-        "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png": (
-            source_dir
-            / "assets/images/banner_candidates"
-            / "water-ir-v2-04-trajectory-to-spectrum.png"
-        ),
-        "COMPUTE_LAB_RUNBOOK.md": (source_dir / "COMPUTE_LAB_RUNBOOK.md"),
-        "../part-2-batched-adsorption-toolkit/README.md": (
-            tmp_path / "part-2-batched-adsorption-toolkit/README.md"
-        ),
-        "../THIRD_PARTY_NOTICES.md": (tmp_path / "THIRD_PARTY_NOTICES.md"),
-    }
-    for target in local_targets.values():
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.touch()
+    _write_packaged_notebook_sources(source_dir)
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=output_dir,
+    )
 
     reviewed = nbformat.v4.new_notebook(
         cells=[
@@ -283,39 +319,53 @@ def test_local_markdown_references_are_rebased_for_release_copy(
             "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png"
         ),
         "COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set": (
-            "../../COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set"
+            "docs/part-1-scalable-atomistic-workflows/COMPUTE_LAB_RUNBOOK.md"
+            "#5-build-and-check-the-recorded-result-set"
         ),
         "../part-2-batched-adsorption-toolkit/README.md": (
-            "../../../part-2-batched-adsorption-toolkit/README.md"
+            "docs/part-2-batched-adsorption-toolkit/README.md"
         ),
-        "../THIRD_PARTY_NOTICES.md": "../../../THIRD_PARTY_NOTICES.md",
+        "../THIRD_PARTY_NOTICES.md": "docs/THIRD_PARTY_NOTICES.md",
     }
     source = reviewed.cells[0].source
     assert "assets/images/banner_candidates/" in source
-    assert "../../COMPUTE_LAB_RUNBOOK.md#5-" in source
-    assert "../../../part-2-batched-adsorption-toolkit/README.md" in source
-    assert "../../../THIRD_PARTY_NOTICES.md" in source
+    assert (
+        "docs/part-1-scalable-atomistic-workflows/COMPUTE_LAB_RUNBOOK.md#5-" in source
+    )
+    assert "docs/part-2-batched-adsorption-toolkit/README.md" in source
+    assert "docs/THIRD_PARTY_NOTICES.md" in source
+    assert "../../stage/repo" not in source
     assert "attachment:preview.png" in source
     assert "https://example.com" in source
 
 
-def test_local_notebook_assets_are_copied_into_release_directory(
+def test_local_notebook_files_are_copied_into_release_directory(
     tmp_path: Path,
 ) -> None:
     source_dir = tmp_path / "part-1"
     output_dir = tmp_path / "release"
-    relative = Path(MODULE.PACKAGED_NOTEBOOK_ASSETS[0])
-    source = source_dir / relative
-    source.parent.mkdir(parents=True)
-    source.write_bytes(b"banner bytes")
+    _write_packaged_notebook_sources(source_dir)
 
-    staged = MODULE.stage_local_notebook_assets(
+    staged = MODULE.stage_local_notebook_files(
         source_dir=source_dir,
         output_dir=output_dir,
     )
 
-    assert staged == {relative.as_posix(): relative.as_posix()}
-    assert (output_dir / relative).read_bytes() == b"banner bytes"
+    assert staged == dict(MODULE.PACKAGED_NOTEBOOK_FILES)
+    for source_reference, output_reference in MODULE.PACKAGED_NOTEBOOK_FILES:
+        source = (source_dir / source_reference).resolve()
+        copied = output_dir / output_reference
+        replacements = MODULE.PACKAGED_DOCUMENT_LINK_REPLACEMENTS.get(
+            output_reference,
+            {},
+        )
+        if replacements:
+            expected = source.read_text(encoding="utf-8")
+            for original, replacement in replacements.items():
+                expected = expected.replace(original, replacement)
+            assert copied.read_text(encoding="utf-8") == expected
+        else:
+            assert copied.read_bytes() == source.read_bytes()
 
 
 def test_package_review_html_support_copies_and_checksums_official_files(
@@ -326,16 +376,14 @@ def test_package_review_html_support_copies_and_checksums_official_files(
     )
     release = tmp_path / "release"
     release.mkdir()
-    html = release / "alchemi-water-ir-reviewed.html"
-    html.write_text(
-        '<script type="application/vnd.jupyter.widget-state+json">'
-        '{"model_module":"jupyter-ovito"}'
-        "</script>\n",
-        encoding="utf-8",
+    source_dir = tmp_path / "part-1"
+    _write_packaged_notebook_sources(source_dir)
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=release,
     )
-    banner = release / MODULE.PACKAGED_NOTEBOOK_ASSETS[0]
-    banner.parent.mkdir(parents=True)
-    banner.write_bytes(b"review banner")
+    html = release / "alchemi-water-ir-reviewed.html"
+    html.write_text(_review_html_text(), encoding="utf-8")
     existing = release / "notebook-review-validation.json"
     existing.write_text("{}\n", encoding="utf-8")
     checksums = release / "SHA256SUMS-reviewed"
@@ -354,19 +402,22 @@ def test_package_review_html_support_copies_and_checksums_official_files(
     copied_license = release / MODULE.OVITO_WIDGET_LICENSE_NAME
     assert copied_script.read_bytes() == source_script.read_bytes()
     assert copied_license.read_bytes() == source_license.read_bytes()
-    assert packaged == {
+    expected_packaged = {
         html.name: MODULE.sha256_file(html),
         copied_script.name: MODULE.sha256_file(copied_script),
         copied_license.name: MODULE.sha256_file(copied_license),
-        MODULE.PACKAGED_NOTEBOOK_ASSETS[0]: MODULE.sha256_file(banner),
     }
+    expected_packaged.update(
+        {
+            output_reference: MODULE.sha256_file(release / output_reference)
+            for _, output_reference in MODULE.PACKAGED_NOTEBOOK_FILES
+        }
+    )
+    assert packaged == expected_packaged
     entries = MODULE._read_checksum_index(checksums)
     assert entries == {
-        html.name: MODULE.sha256_file(html),
-        copied_license.name: MODULE.sha256_file(copied_license),
-        copied_script.name: MODULE.sha256_file(copied_script),
+        **expected_packaged,
         existing.name: MODULE.sha256_file(existing),
-        MODULE.PACKAGED_NOTEBOOK_ASSETS[0]: MODULE.sha256_file(banner),
     }
     MODULE.validate_review_html_bundle(html, checksums)
 
@@ -376,7 +427,7 @@ def test_package_review_html_support_copies_and_checksums_official_files(
     [
         MODULE.OVITO_WIDGET_SCRIPT_NAME,
         MODULE.OVITO_WIDGET_LICENSE_NAME,
-        MODULE.PACKAGED_NOTEBOOK_ASSETS[0],
+        *(output for _, output in MODULE.PACKAGED_NOTEBOOK_FILES),
     ],
 )
 def test_review_html_validation_catches_missing_release_support(
@@ -386,14 +437,14 @@ def test_review_html_validation_catches_missing_release_support(
     source_script, _ = _write_fake_ovito_nbextension(tmp_path / "installed")
     release = tmp_path / "release"
     release.mkdir()
-    html = release / "alchemi-water-ir-reviewed.html"
-    html.write_text(
-        '{"model_module":"jupyter-ovito"}\n',
-        encoding="utf-8",
+    source_dir = tmp_path / "part-1"
+    _write_packaged_notebook_sources(source_dir)
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=release,
     )
-    banner = release / MODULE.PACKAGED_NOTEBOOK_ASSETS[0]
-    banner.parent.mkdir(parents=True)
-    banner.write_bytes(b"review banner")
+    html = release / "alchemi-water-ir-reviewed.html"
+    html.write_text(_review_html_text(), encoding="utf-8")
     checksums = release / "SHA256SUMS-reviewed"
     MODULE.package_review_html_support(
         html,
@@ -404,3 +455,127 @@ def test_review_html_validation_catches_missing_release_support(
 
     with pytest.raises(FileNotFoundError, match=missing_name):
         MODULE.validate_review_html_bundle(html, checksums)
+
+
+def test_review_bundle_remains_valid_after_relocation(tmp_path: Path) -> None:
+    source_script, _ = _write_fake_ovito_nbextension(tmp_path / "installed")
+    source_dir = tmp_path / "source" / "part-1"
+    release = tmp_path / "build" / "review"
+    release.mkdir(parents=True)
+    _write_packaged_notebook_sources(source_dir)
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=release,
+    )
+    html = release / "alchemi-water-ir-reviewed.html"
+    html.write_text(_review_html_text(), encoding="utf-8")
+    checksums = release / "SHA256SUMS-reviewed"
+    MODULE.package_review_html_support(
+        html,
+        checksums,
+        nbextension_dir=source_script.parent,
+    )
+
+    relocated = tmp_path / "unrelated" / "portable-review"
+    relocated.parent.mkdir()
+    shutil.move(release, relocated)
+    shutil.rmtree(tmp_path / "source")
+    shutil.rmtree(tmp_path / "installed")
+    MODULE.validate_review_html_bundle(
+        relocated / html.name,
+        relocated / checksums.name,
+    )
+    for reference in MODULE.LOCAL_NOTEBOOK_OUTPUT_REFERENCES.values():
+        assert (relocated / urlsplit(reference).path).is_file()
+    for relative, expected in MODULE._read_checksum_index(
+        relocated / checksums.name
+    ).items():
+        path = relocated / relative
+        assert path.is_file()
+        assert MODULE.sha256_file(path) == expected
+
+
+def test_repository_documents_form_a_portable_review_bundle(tmp_path: Path) -> None:
+    source_script, _ = _write_fake_ovito_nbextension(tmp_path / "installed")
+    source_dir = ROOT / "part-1-scalable-atomistic-workflows"
+    release = tmp_path / "review"
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=release,
+    )
+    html = release / "alchemi-water-ir-reviewed.html"
+    html.write_text(_review_html_text(embed_banner=True), encoding="utf-8")
+    checksums = release / "SHA256SUMS-reviewed"
+
+    MODULE.package_review_html_support(
+        html,
+        checksums,
+        nbextension_dir=source_script.parent,
+    )
+
+    relocated = tmp_path / "relocated"
+    shutil.move(release, relocated)
+    MODULE.validate_review_html_bundle(
+        relocated / html.name,
+        relocated / checksums.name,
+    )
+
+
+def test_review_validation_checks_every_indexed_file(tmp_path: Path) -> None:
+    source_script, _ = _write_fake_ovito_nbextension(tmp_path / "installed")
+    source_dir = tmp_path / "part-1"
+    release = tmp_path / "release"
+    release.mkdir()
+    _write_packaged_notebook_sources(source_dir)
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=release,
+    )
+    html = release / "alchemi-water-ir-reviewed.html"
+    html.write_text(_review_html_text(), encoding="utf-8")
+    calculation = release / "calculation.csv"
+    calculation.write_text("energy\n-1.0\n", encoding="utf-8")
+    checksums = release / "SHA256SUMS-reviewed"
+    checksums.write_text(
+        f"{MODULE.sha256_file(calculation)}  {calculation.name}\n",
+        encoding="utf-8",
+    )
+    MODULE.package_review_html_support(
+        html,
+        checksums,
+        nbextension_dir=source_script.parent,
+    )
+    calculation.unlink()
+
+    with pytest.raises(FileNotFoundError, match=calculation.name):
+        MODULE.validate_review_html_bundle(html, checksums)
+
+
+def test_review_validation_checks_every_indexed_digest(tmp_path: Path) -> None:
+    source_script, _ = _write_fake_ovito_nbextension(tmp_path / "installed")
+    source_dir = tmp_path / "part-1"
+    release = tmp_path / "release"
+    release.mkdir()
+    _write_packaged_notebook_sources(source_dir)
+    MODULE.stage_local_notebook_files(
+        source_dir=source_dir,
+        output_dir=release,
+    )
+    html = release / "alchemi-water-ir-reviewed.html"
+    html.write_text(_review_html_text(), encoding="utf-8")
+    calculation = release / "calculation.csv"
+    calculation.write_text("energy\n-1.0\n", encoding="utf-8")
+    checksums = release / "SHA256SUMS-reviewed"
+    checksums.write_text(
+        f"{'0' * 64}  {calculation.name}\n",
+        encoding="utf-8",
+    )
+
+    with pytest.raises(
+        RuntimeError, match=f"checksum does not match for {calculation.name}"
+    ):
+        MODULE.package_review_html_support(
+            html,
+            checksums,
+            nbextension_dir=source_script.parent,
+        )

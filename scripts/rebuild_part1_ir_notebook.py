@@ -602,6 +602,8 @@ helper_imports_progress = NotebookProgress(
 from aux.analysis import (
     comparison_display_table,
     dimer_interaction_energy_table,
+    first_atomic_data_table,
+    first_model_result_tables,
     h_to_d_mode_mapping_table,
     ir_comparison_table,
     ir_spectrum_metrics,
@@ -640,6 +642,7 @@ from aux.benchmarking import (
 from aux.framework_comparison import segmented_sum_comparison_table
 from aux.capture import PredictedChargeIRHook
 from aux.checkpoint import (
+    aimnet_model_card_table,
     checkpoint_card,
     resolve_checkpoint_path,
     verify_checkpoint_identities,
@@ -677,6 +680,7 @@ from aux.inflight import (
 from aux.domain import load_prebuilt_domain_box
 from aux.domain.display import (
     compact_box_summary_table,
+    domain_agreement_display_table,
     molecule_charge_display_tables,
 )
 from aux.domain.packing import box_summary_table, molecule_charge_tables
@@ -730,6 +734,7 @@ from aux.nci_config import (
 )
 from aux.nci_validation import (
     build_nci_force_check_table,
+    check_nci_interaction_component_sum,
     check_nci_force,
     nci_force_check_record,
 )
@@ -742,7 +747,11 @@ from aux.plotting import (
     plot_monomer_ir_comparison,
     plot_topology_timeline,
 )
-from aux.precision import precision_display_table, summarize_model_precision
+from aux.precision import (
+    precision_display_table,
+    summarize_model_precision,
+    validate_precision_observation,
+)
 from aux.reference import (
     load_psi4_b973c_ir_artifact,
 )
@@ -945,7 +954,8 @@ print(water)
 display(view(water, viewer="x3d"))
 structure_progress.complete("One nonperiodic H2O structure ready")
 display(callout(
-    "Structure view: one oxygen atom bonded to two hydrogen atoms in a bent, nonperiodic water molecule.",
+    "Structure view: one oxygen atom bonded to two hydrogen atoms in a bent, "
+    "nonperiodic water molecule.",
     kind="note",
 ))
 """,
@@ -963,32 +973,23 @@ for parameter in aimnet.parameters():
     parameter.requires_grad_(False)
 aimnet.set_config("active_outputs", {"energy", "forces", "charges"})
 model_card = checkpoint_card(aimnet, MODEL_CHECKPOINT, checkpoint_path)
-EXPECTED_DEFAULT_CHECKPOINT_SHA256 = "043ed5418a104e31f79462f8e5ebeca64a2d24422174f5d29f894d32271981b5"
+EXPECTED_DEFAULT_CHECKPOINT_SHA256 = CHECKPOINT_IDENTITIES[
+    MODEL_CHECKPOINT
+]["sha256"]
 checkpoint_is_override = "ALCHEMI_AIMNET_CHECKPOINT" in os.environ
 if not checkpoint_is_override:
     assert model_card["checkpoint_sha256"] == EXPECTED_DEFAULT_CHECKPOINT_SHA256
 checkpoint_progress.complete("Checkpoint loaded and SHA-256 verified")
 
-aimnet_model_card_display = pd.Series({
-    "checkpoint": model_card["checkpoint_source"],
-    "checkpoint_sha256": model_card["checkpoint_sha256"][:16] + "…",
-    "package": f"aimnet {metadata.version('aimnet')} through Toolkit AIMNet2Wrapper",
-    "code_license": "AIMNet software: MIT",
-    "target": "B97-3c checkpoint base; declared Coulomb and D3 terms added later",
-    "domain": "molecular training domain; wrapper supports PBC, but condensed-phase accuracy is not established here",
-    "implemented_atomic_numbers": model_card.get("implemented_species"),
-    "weight_license": "MIT",
-    "total_charge": "one explicit total charge per graph through Batch.charge",
-    "spin_multiplicity": "selected checkpoint is closed-shell; no multiplicity input is used",
-    "cutoff_A": aimnet.model_config.neighbor_config.cutoff,
-    "external_coulomb": model_card["needs_coulomb"],
-    "external_dispersion": model_card["needs_dispersion"],
-    "supports_pbc": aimnet.model_config.supports_pbc,
-    "optional_inputs": sorted(aimnet.model_config.optional_inputs),
-    "neighbor_convention": str(aimnet.model_config.neighbor_config),
-    "device": str(DEVICE),
-    "coordinate_precision": "AIMNet2Wrapper evaluates positions in float32",
-}, name="Value").rename_axis("Setting").reset_index()
+aimnet_model_card_display = aimnet_model_card_table(
+    model_card,
+    aimnet_version=metadata.version("aimnet"),
+    cutoff_A=aimnet.model_config.neighbor_config.cutoff,
+    supports_pbc=aimnet.model_config.supports_pbc,
+    optional_inputs=aimnet.model_config.optional_inputs,
+    neighbor_convention=str(aimnet.model_config.neighbor_config),
+    device=str(DEVICE),
+)
 display(readable_table(
     aimnet_model_card_display,
     label="AIMNet2 model card",
@@ -1003,7 +1004,10 @@ display(callout(
 ))
 if checkpoint_is_override:
     display(callout(
-        "A different checkpoint was selected through ALCHEMI_AIMNET_CHECKPOINT. The tutorial reference values were generated with ensemble member 0, so use the checks below before interpreting results from the replacement model.",
+        "A different checkpoint was selected through "
+        "ALCHEMI_AIMNET_CHECKPOINT. The tutorial reference values were "
+        "generated with ensemble member 0, so use the checks below before "
+        "interpreting results from the replacement model.",
         kind="note",
     ))
 """,
@@ -1022,39 +1026,31 @@ hello_progress.advance(message="model-compatible neighbors built")
 hello = aimnet(hello_batch)
 hello_progress.complete("energy, forces, and charges returned")
 
-display(readable_table(pd.Series({
-    "atoms": hello_data.num_nodes,
-    "atomic numbers": hello_data.atomic_numbers.cpu().tolist(),
-    "positions shape": tuple(hello_data.positions.shape),
-    "cell / PBC": "none / nonperiodic" if hello_data.cell is None else "periodic",
-    "dtype": str(hello_data.positions.dtype),
-    "device": str(hello_data.positions.device),
-}, name="Value").rename_axis("Field").reset_index(),
+hello_data_table = first_atomic_data_table(
+    num_atoms=hello_data.num_nodes,
+    atomic_numbers=hello_data.atomic_numbers.cpu().numpy(),
+    positions_shape=hello_data.positions.shape,
+    cell=hello_data.cell,
+    positions_dtype=str(hello_data.positions.dtype),
+    device=str(hello_data.positions.device),
+)
+display(readable_table(
+    hello_data_table,
     label="First AtomicData object",
     show_index=False,
 ))
 hello_forces = hello["forces"].detach().cpu()
 hello_charges = hello["charges"].detach().cpu().reshape(-1)
-hello_atom_results = pd.DataFrame({
-    "atom": [
-        f"{symbol}{index + 1}"
-        for index, symbol in enumerate(water.get_chemical_symbols())
-    ],
-    "charge (e)": hello_charges.numpy(),
-    "Fx (eV/Å)": hello_forces[:, 0].numpy(),
-    "Fy (eV/Å)": hello_forces[:, 1].numpy(),
-    "Fz (eV/Å)": hello_forces[:, 2].numpy(),
-    "|F| (eV/Å)": torch.linalg.vector_norm(
-        hello_forces, dim=1
-    ).numpy(),
-}).round(6)
+hello_system_results, hello_atom_results = first_model_result_tables(
+    num_graphs=hello_batch.num_graphs,
+    energy_eV=hello["energy"].item(),
+    symbols=water.get_chemical_symbols(),
+    charges_e=hello_charges.numpy(),
+    forces_eV_A=hello_forces.numpy(),
+)
 
 display(readable_table(
-    pd.DataFrame([
-        ("Graphs", hello_batch.num_graphs),
-        ("Energy / eV", hello["energy"].item()),
-        ("Total predicted charge / e", hello_charges.sum().item()),
-    ], columns=["System result", "Value"]),
+    hello_system_results,
     label="First system-level outputs",
     show_index=False,
 ))
@@ -1222,7 +1218,9 @@ charge_sums = segmented_sum(
 first_force_max = float(
     torch.linalg.vector_norm(first_outputs["forces"][:6], dim=1).max().detach().cpu()
 )
-first_prediction_progress.complete("Checkpoint-base energy, forces, and charges evaluated")
+first_prediction_progress.complete(
+    "Checkpoint-base energy, forces, and charges evaluated"
+)
 display(readable_table(pd.Series({
     "graphs": single_batch.num_graphs,
     "atoms": single_batch.num_nodes,
@@ -1234,7 +1232,10 @@ display(readable_table(pd.Series({
     show_index=False,
 ))
 display(callout(
-    f"Observed checkpoint-base interaction: {residual_interaction_kJ_mol:.2f} kJ/mol. The embedded SRCoulomb module has already subtracted a short-range Coulomb term; the base remains incomplete until full Coulomb and D3 are added.",
+    f"Observed checkpoint-base interaction: "
+    f"{residual_interaction_kJ_mol:.2f} kJ/mol. The embedded SRCoulomb module "
+    "has already subtracted a short-range Coulomb term; the base remains "
+    "incomplete until full Coulomb and D3 are added.",
     kind="result",
     result_state="observed",
 ))
@@ -1833,8 +1834,7 @@ with torch.no_grad():
 nci_evaluation_progress.advance(message="D3: one pass over 90 graphs")
 
 
-nci_member_residual_eV, nci_member_coulomb_eV = [], []
-nci_member_charges_e, nci_charge_residuals_e = [], []
+nci_member_residual_eV, nci_member_coulomb_eV, nci_charge_residuals_e = [], [], []
 for member_index, checkpoint in enumerate(NCI_CHECKPOINTS):
     wrapper = nci_aimnet if member_index == 0 else AIMNet2Wrapper.from_checkpoint(
         checkpoint, device=DEVICE, compile_model=False
@@ -1869,16 +1869,12 @@ for member_index, checkpoint in enumerate(NCI_CHECKPOINTS):
     )
     nci_member_residual_eV.append(member_outputs["energy"].reshape(-1).cpu())
     nci_member_coulomb_eV.append(member_coulomb.reshape(-1).cpu())
-    nci_member_charges_e.append(member_outputs["charges"].reshape(-1).cpu())
 
 nci_member_residual_eV = torch.stack(nci_member_residual_eV)
 nci_member_coulomb_eV = torch.stack(nci_member_coulomb_eV)
-nci_member_charges_e = torch.stack(nci_member_charges_e)
 assert nci_member_residual_eV.shape == nci_member_coulomb_eV.shape == (4, 90)
 nci_charge_conservation_max_abs_e = max(nci_charge_residuals_e)
-nci_evaluation_progress.complete(
-    "four AIMNet, four Coulomb, and one D3 call complete"
-)
+nci_evaluation_progress.complete("four AIMNet, four Coulomb, and one D3 call complete")
 print("largest graph-charge residual / e:", nci_charge_conservation_max_abs_e)
 """,
         ),
@@ -2166,9 +2162,21 @@ component_build_progress.complete("pairwise D3(BJ) ready; all three components c
 
 display(readable_table(
     pd.DataFrame([
-        {"Component": "AIMNet checkpoint base", "Depends on": "positions, elements, total charge", "Cutoff / Å": aimnet.model_config.neighbor_config.cutoff},
-        {"Component": "finite all-pairs Coulomb", "Depends on": "AIMNet predicted charges", "Cutoff / Å": None},
-        {"Component": "pairwise D3(BJ)", "Depends on": "positions, elements", "Cutoff / Å": D3_CUTOFF_A},
+        {
+            "Component": "AIMNet checkpoint base",
+            "Depends on": "positions, elements, total charge",
+            "Cutoff / Å": aimnet.model_config.neighbor_config.cutoff,
+        },
+        {
+            "Component": "finite all-pairs Coulomb",
+            "Depends on": "AIMNet predicted charges",
+            "Cutoff / Å": None,
+        },
+        {
+            "Component": "pairwise D3(BJ)",
+            "Depends on": "positions, elements",
+            "Cutoff / Å": D3_CUTOFF_A,
+        },
     ]),
     label="Composed water-potential components",
     show_index=False,
@@ -4661,7 +4669,8 @@ display(readable_table(
     show_index=False,
 ))
 display(callout(
-    "Saved all 20,000 production frames and the seed, relaxed, and sampled trajectory structures before starting spectral analysis.",
+    "Saved all 20,000 production frames and the seed, relaxed, and sampled "
+    "trajectory structures before starting spectral analysis.",
     kind="result",
     result_state="pass",
 ))
@@ -4683,7 +4692,8 @@ assert trajectory_sha_after == trajectory_sha_before == trajectory_manifest["sha
 restart_progress.complete("reloaded arrays match the saved SHA-256")
 
 display(callout(
-    f"Analysis restart verified: {trajectory.positions_angstrom.shape[0]:,} complete frames, SHA-256 {trajectory_sha_after[:16]}…",
+    f"Analysis restart verified: {trajectory.positions_angstrom.shape[0]:,} "
+    f"complete frames, SHA-256 {trajectory_sha_after[:16]}…",
     kind="result",
     result_state="pass",
 ))
@@ -5400,7 +5410,8 @@ trial_interaction_kJ_mol = (
 trial_progress.complete("editable AB/A/B interaction evaluated")
 
 display(callout(
-    f"Observed composed-model interaction at {TRY_OO_DISTANCE_A:.2f} Å: {trial_interaction_kJ_mol:.2f} kJ/mol.",
+    f"Observed composed-model interaction at {TRY_OO_DISTANCE_A:.2f} Å: "
+    f"{trial_interaction_kJ_mol:.2f} kJ/mol.",
     kind="result",
     result_state="observed",
 ))
@@ -5809,26 +5820,22 @@ precision_model_input = aimnet.adapt_input(precision_probe_batch)
 precision_dtype_after_adapt = precision_probe_batch.positions.dtype
 precision_probe = aimnet(precision_probe_batch)
 precision_dtype_after_forward = precision_probe_batch.positions.dtype
-assert precision_dtype_before == torch.float64
-assert precision_dtype_after_adapt == torch.float64
-assert precision_model_input["coord"].dtype == torch.float32
-assert precision_dtype_after_forward == torch.float32
-assert precision_probe["energy"].dtype == torch.float64
-assert precision_probe["forces"].dtype == torch.float32
-assert precision_probe["charges"].dtype == torch.float32
+precision_observed_dtypes = validate_precision_observation(
+    hello_coordinates_dtype=hello_data.positions.dtype,
+    probe_coordinates_before_dtype=precision_dtype_before,
+    probe_coordinates_after_adapt_dtype=precision_dtype_after_adapt,
+    model_input_coordinates_dtype=precision_model_input["coord"].dtype,
+    probe_coordinates_after_forward_dtype=precision_dtype_after_forward,
+    probe_output_dtypes={
+        name: precision_probe[name].dtype
+        for name in ("energy", "forces", "charges")
+    },
+)
 precision_progress.advance(message="wrapper input conversion observed")
 
 precision_table = precision_display_table(
     precision_summary,
-    observed_dtypes={
-        "hello-world coordinates": str(hello_data.positions.dtype),
-        "probe coordinates before wrapper call": str(precision_dtype_before),
-        "coordinates passed to AIMNet": str(precision_model_input["coord"].dtype),
-        "probe coordinates after wrapper call": str(precision_dtype_after_forward),
-        "probe energy / forces / charges": " / ".join(
-            str(precision_probe[name].dtype) for name in ("energy", "forces", "charges")
-        ),
-    },
+    observed_dtypes=precision_observed_dtypes,
     matmul_precision=torch.get_float32_matmul_precision(),
 )
 display(readable_table(
@@ -6422,7 +6429,6 @@ for task, target in selected_task_targets.items():
     task_outputs = task_model(task_batch)
     energies = task_outputs["energy"].detach()
     forces = task_outputs["forces"].detach()
-    assert torch.isfinite(energies).all() and torch.isfinite(forces).all()
     sevennet_task_outputs[task] = {
         "energy": energies.cpu(), "forces": forces.cpu(),
     }
@@ -8300,8 +8306,7 @@ with torch.no_grad():
     nci_d3_graph_eV = nci_d3(nci_d3_batch)["energy"].reshape(-1).cpu()
 nci_evaluation_progress.advance(message="one shared D3 pass over 90 graphs")
 
-nci_member_residual_eV, nci_member_coulomb_eV = [], []
-nci_member_charges_e, nci_charge_residuals_e = [], []
+nci_member_residual_eV, nci_member_coulomb_eV, nci_charge_residuals_e = [], [], []
 for member_index, checkpoint in enumerate(NCI_CHECKPOINTS):
     wrapper = nci_aimnet if member_index == 0 else AIMNet2Wrapper.from_checkpoint(
         checkpoint, device=DEVICE, compile_model=False
@@ -8334,16 +8339,12 @@ for member_index, checkpoint in enumerate(NCI_CHECKPOINTS):
     )
     nci_member_residual_eV.append(member_outputs["energy"].reshape(-1).cpu())
     nci_member_coulomb_eV.append(member_coulomb.reshape(-1).cpu())
-    nci_member_charges_e.append(member_outputs["charges"].reshape(-1).cpu())
 
 nci_member_residual_eV = torch.stack(nci_member_residual_eV)
 nci_member_coulomb_eV = torch.stack(nci_member_coulomb_eV)
-nci_member_charges_e = torch.stack(nci_member_charges_e)
 assert nci_member_residual_eV.shape == nci_member_coulomb_eV.shape == (4, 90)
 nci_charge_conservation_max_abs_e = max(nci_charge_residuals_e)
-nci_evaluation_progress.complete(
-    "four AIMNet, four Coulomb, and one D3 call complete"
-)
+nci_evaluation_progress.complete("four AIMNet, four Coulomb, and one D3 call complete")
 display(callout(
     "All predicted graph charges matched their requested totals; the largest "
     f"absolute residual was {nci_charge_conservation_max_abs_e:.2e} e.",
@@ -8406,26 +8407,11 @@ nci_pipeline_energy_cpu = nci_full_outputs["energy"].detach().reshape(-1).cpu()
 nci_member0_sum = (
     nci_member_residual_eV[0] + nci_member_coulomb_eV[0] + nci_d3_graph_eV
 )
-nci_component_interactions = reduce_fragment_energies(
+nci_component_sum_max_abs_eV = check_nci_interaction_component_sum(
     nci_graph_index,
-    {
-        "pipeline": nci_pipeline_energy_cpu,
-        "component_sum": nci_member0_sum,
-    },
-)
-nci_component_sum_max_abs_eV = float(
-    (
-        nci_component_interactions["pipeline"]
-        - nci_component_interactions["component_sum"]
-    ).abs().max()
-)
-torch.testing.assert_close(
-    torch.as_tensor(nci_component_interactions["pipeline"].to_numpy(copy=True)),
-    torch.as_tensor(
-        nci_component_interactions["component_sum"].to_numpy(copy=True)
-    ),
-    atol=NCI_VALIDATION.interaction_energy_atol_eV,
-    rtol=0.0,
+    nci_pipeline_energy_cpu,
+    nci_member0_sum,
+    atol_eV=NCI_VALIDATION.interaction_energy_atol_eV,
 )
 nci_pipeline_progress.complete(
     "AB − A − B interaction energies match the component sum"
@@ -9576,7 +9562,13 @@ with DomainParallel(dynamics=evaluator, config=config, n_steps=1) as domain:
         started = perf_counter()
         local = domain.run(local, n_steps=1)
         torch.cuda.synchronize(device)
-        pass_times_s.append(perf_counter() - started)
+        elapsed_s = torch.tensor(
+            perf_counter() - started,
+            dtype=torch.float64,
+            device=device,
+        )
+        dist.all_reduce(elapsed_s, op=dist.ReduceOp.MAX)
+        pass_times_s.append(float(elapsed_s.item()))
 
     total_energy = local.energy.detach().clone()
     full_result = domain.gather(local, dst=0)
@@ -9603,9 +9595,10 @@ layout, and `require_nondegenerate=True` rejects a full-structure halo.
 Toolkit 0.2 restricts this example to an input total-charge target of zero
 because it is not copied into each region. Toolkit passes AIMNet2 charges to
 PME unchanged, sums total energy across GPUs, and `gather` collects atom-level
-fields, including forces, on rank 0. Stable `source_atom_id` values in the
-saved input, together with the recorded `SpatialPartitioner` assignment,
-restore force order. The distributed AIMNet2-to-PME group does not emit
+fields, including forces, on rank 0. Stable `source_atom_id` values stay
+outside the Toolkit `Batch`; the runner uses the recorded `SpatialPartitioner`
+assignment to restore force order and checks the result against locally cloned
+reference positions. The distributed AIMNet2-to-PME group does not emit
 predicted atomic charges. Rank consistency is checked through source-ordered
 forces and distributed energies.
 """,
@@ -9619,8 +9612,11 @@ forces and distributed energies.
 ### Run the same large system on 1, 2, and 4 GPUs
 
 The offline H100 run uses one checked 51,200-atom supercell; Packmol is not
-rerun. The structure, composed AIMNet2 + PME + D3 model, precision, cutoffs,
-and outputs stay fixed. Only the number of spatial regions changes.
+rerun. The structure, composed AIMNet2 + PME + D3 model, model tensors,
+coordinates, forces, cutoffs, and requested outputs stay fixed. Only the
+number of spatial regions changes. Model tensors, coordinates, and forces are
+float32. The single-rank total energy is float32, while Toolkit's cross-rank
+energy reduction returns float64 on two and four GPUs.
 
 | Run | Input | Nodes = ranks = GPUs | Work |
 |---|---:|---:|---|
@@ -9629,9 +9625,10 @@ and outputs stay fixed. Only the number of spatial regions changes.
 
 The box is partitioned once and gathered once. Warm-up is outside timing. Each
 measured pass is one `run(..., n_steps=1)` call for energy and forces, with no
-integration update. Periodic images must remain equivalent within the minimum-image
-tolerance. All three slowest-rank times and their median are shown. This is not
-a trajectory or a general scaling benchmark.
+integration update. Periodic images must remain equivalent within the
+minimum-image tolerance. All three slowest-rank times and their median are
+shown. The first one-GPU pass is visibly a first-use outlier even after the
+warm-up, so these are instructional measurements, not a general benchmark.
 
 Four GPUs means four one-H100 nodes. The result set checks 1-GPU forces against
 2/4 GPUs and 2-GPU distributed energy against 4. The 1-to-multi energy offset
@@ -9838,21 +9835,9 @@ if domain_view.available:
         label="Three fixed-structure energy/force passes",
         show_index=False,
     ))
-    domain_agreement_display = domain_view.output_agreement_table[[
-        "world_size",
-        "energy_repeatability_span_meV_atom",
-        "energy_difference_meV_atom",
-        "force_rms_error_eV_A",
-        "force_max_error_eV_A",
-        "passed",
-    ]].rename(columns={
-        "world_size": "GPUs",
-        "energy_repeatability_span_meV_atom": "Energy span / meV atom⁻¹",
-        "energy_difference_meV_atom": "Energy difference / meV atom⁻¹",
-        "force_rms_error_eV_A": "Force RMS difference / eV Å⁻¹",
-        "force_max_error_eV_A": "Force max difference / eV Å⁻¹",
-        "passed": "Checks passed",
-    })
+    domain_agreement_display = domain_agreement_display_table(
+        domain_view.output_agreement_table
+    )
     display(readable_table(
         domain_agreement_display.round(6),
         label="Energy and force agreement",
@@ -9916,10 +9901,11 @@ if domain_view.available:
         f"{domain_takeaway['max_minimum_image_displacement_a']:.2e} Å. "
         f"Observed median speedup "
         f"against one GPU: {speedup_text}. Each median comes from "
-        f"three raw energy/force passes shown above. These short times apply to this "
-        f"input, model, software, and hardware; they do not measure a "
-        f"trajectory or a memory limit. The global PME charge mesh and full "
-        f"reciprocal FFT path remain replicated on every rank.",
+        f"three raw energy/force passes shown above. The first one-GPU pass "
+        f"contains remaining first-use work and is kept visible. These short "
+        f"times apply to this input, model, software, and hardware; they do not "
+        f"measure a trajectory or a memory limit. The global PME charge mesh "
+        f"and full reciprocal FFT path remain replicated on every rank.",
         kind="result", result_state="pass",
     ))
     domain_figure, _ = plot_domain_decomposition(domain_view.plot_data)

@@ -75,6 +75,77 @@ def summarize_model_precision(
     )
 
 
+def validate_precision_observation(
+    *,
+    hello_coordinates_dtype: torch.dtype,
+    probe_coordinates_before_dtype: torch.dtype,
+    probe_coordinates_after_adapt_dtype: torch.dtype,
+    model_input_coordinates_dtype: torch.dtype,
+    probe_coordinates_after_forward_dtype: torch.dtype,
+    probe_output_dtypes: Mapping[str, torch.dtype],
+) -> dict[str, str]:
+    """Check the visible AIMNet dtype observations and format their display rows.
+
+    The caller performs the Toolkit conversion, input adaptation, and model
+    call.  Passing the observed dtypes here keeps those public operations
+    visible while centralizing the exact assertions used by the lesson.
+    """
+
+    required_outputs = {"energy", "forces", "charges"}
+    if set(probe_output_dtypes) != required_outputs:
+        raise ValueError(
+            "probe_output_dtypes must contain exactly: "
+            + ", ".join(sorted(required_outputs))
+        )
+
+    expected = (
+        ("hello-world coordinates", hello_coordinates_dtype, torch.float32),
+        (
+            "probe coordinates before wrapper call",
+            probe_coordinates_before_dtype,
+            torch.float64,
+        ),
+        (
+            "probe coordinates after input adaptation",
+            probe_coordinates_after_adapt_dtype,
+            torch.float64,
+        ),
+        (
+            "coordinates passed to AIMNet",
+            model_input_coordinates_dtype,
+            torch.float32,
+        ),
+        (
+            "probe coordinates after wrapper call",
+            probe_coordinates_after_forward_dtype,
+            torch.float32,
+        ),
+        ("probe energy", probe_output_dtypes["energy"], torch.float64),
+        ("probe forces", probe_output_dtypes["forces"], torch.float32),
+        ("probe charges", probe_output_dtypes["charges"], torch.float32),
+    )
+    for label, observed, required in expected:
+        if observed != required:
+            raise AssertionError(
+                f"{label} used {observed}; expected {required}"
+            )
+
+    return {
+        "hello-world coordinates": str(hello_coordinates_dtype),
+        "probe coordinates before wrapper call": str(
+            probe_coordinates_before_dtype
+        ),
+        "coordinates passed to AIMNet": str(model_input_coordinates_dtype),
+        "probe coordinates after wrapper call": str(
+            probe_coordinates_after_forward_dtype
+        ),
+        "probe energy / forces / charges": " / ".join(
+            str(probe_output_dtypes[name])
+            for name in ("energy", "forces", "charges")
+        ),
+    }
+
+
 def precision_display_table(
     summary: ModelPrecisionSummary,
     *,
@@ -139,4 +210,5 @@ __all__ = [
     "ModelPrecisionSummary",
     "precision_display_table",
     "summarize_model_precision",
+    "validate_precision_observation",
 ]

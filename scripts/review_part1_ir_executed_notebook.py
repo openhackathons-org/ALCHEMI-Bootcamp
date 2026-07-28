@@ -11,8 +11,10 @@ import shutil
 import sys
 import sysconfig
 from datetime import datetime, timezone
+from html.parser import HTMLParser
 from importlib.util import find_spec
 from pathlib import Path
+from urllib.parse import urlsplit
 
 import nbformat
 
@@ -21,9 +23,13 @@ PART_ROOT = REPO_ROOT / "part-1-scalable-atomistic-workflows"
 if str(PART_ROOT) not in sys.path:
     sys.path.insert(0, str(PART_ROOT))
 
-from aux.release_links import (
+from aux.release_links import (  # noqa: E402
+    LOCAL_NOTEBOOK_LINKS,
+    LOCAL_NOTEBOOK_OUTPUT_REFERENCES,
     LOCAL_NOTEBOOK_REFERENCES,
-    PACKAGED_NOTEBOOK_ASSETS,
+    PACKAGED_DOCUMENT_LINK_REPLACEMENTS,
+    PACKAGED_NOTEBOOK_DOCUMENTS,
+    PACKAGED_NOTEBOOK_FILES,
     local_reference_replacements,
 )
 
@@ -60,6 +66,31 @@ KNOWN_UPSTREAM_WARNING_PATTERNS = tuple(
         ),
     )
 )
+
+
+class _HTMLReferenceParser(HTMLParser):
+    """Collect file-like link and image targets from exported HTML."""
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.references: set[str] = set()
+
+    def handle_starttag(
+        self,
+        tag: str,
+        attrs: list[tuple[str, str | None]],
+    ) -> None:
+        del tag
+        for name, value in attrs:
+            if name in {"href", "src"} and value is not None:
+                self.references.add(value)
+
+
+def _html_references(html: str) -> set[str]:
+    parser = _HTMLReferenceParser()
+    parser.feed(html)
+    parser.close()
+    return parser.references
 
 
 def _saved_progress_html(executed: nbformat.NotebookNode) -> dict[str, str]:
@@ -168,6 +199,12 @@ def rebase_local_markdown_references(
         source_dir=source_dir,
         output_dir=output_dir,
     )
+    for replacement in replacements.values():
+        packaged_path = (output_dir.resolve() / urlsplit(replacement).path).resolve()
+        if not packaged_path.is_file():
+            raise FileNotFoundError(
+                f"packaged notebook reference is not a copied file: {replacement!r}"
+            )
     for reference, replacement in replacements.items():
         matches = 0
         for cell in reviewed.cells:
@@ -182,28 +219,46 @@ def rebase_local_markdown_references(
     return replacements
 
 
-def stage_local_notebook_assets(
+def stage_local_notebook_files(
     *,
     source_dir: Path,
     output_dir: Path,
 ) -> dict[str, str]:
-    """Copy notebook images into the portable learner-review directory."""
+    """Copy notebook images and linked documents into the learner-review copy."""
 
     staged: dict[str, str] = {}
-    for reference in PACKAGED_NOTEBOOK_ASSETS:
-        source = (source_dir.resolve() / reference).resolve()
-        destination = (output_dir.resolve() / reference).resolve()
+    source_dir = source_dir.resolve()
+    output_dir = output_dir.resolve()
+    for source_reference, output_reference in PACKAGED_NOTEBOOK_FILES:
+        source = (source_dir / source_reference).resolve()
+        destination = (output_dir / output_reference).resolve()
         try:
-            destination.relative_to(output_dir.resolve())
+            destination.relative_to(output_dir)
         except ValueError as error:
             raise RuntimeError(
-                f"release asset escapes the output directory: {reference!r}"
+                f"release file escapes the output directory: {output_reference!r}"
             ) from error
         if not source.is_file():
-            raise FileNotFoundError(f"missing notebook release asset: {source}")
+            raise FileNotFoundError(f"missing notebook release file: {source}")
         destination.parent.mkdir(parents=True, exist_ok=True)
-        _copy_without_overwriting_different_file(source, destination)
-        staged[reference] = reference
+        replacements = PACKAGED_DOCUMENT_LINK_REPLACEMENTS.get(
+            output_reference,
+            {},
+        )
+        if replacements:
+            text = source.read_text(encoding="utf-8")
+            for original, replacement in replacements.items():
+                matches = text.count(original)
+                if matches != 1:
+                    raise RuntimeError(
+                        f"expected one packaged document link {original!r} in "
+                        f"{source}; found {matches}"
+                    )
+                text = text.replace(original, replacement)
+            _write_without_overwriting_different_text(text, destination)
+        else:
+            _copy_without_overwriting_different_file(source, destination)
+        staged[source_reference] = output_reference
     return staged
 
 
@@ -311,6 +366,20 @@ def _copy_without_overwriting_different_file(source: Path, destination: Path) ->
     shutil.copy2(source, destination)
 
 
+def _write_without_overwriting_different_text(text: str, destination: Path) -> None:
+    """Write one rebased document without replacing a different release copy."""
+
+    if destination.exists():
+        if not destination.is_file():
+            raise FileExistsError(f"release path is not a file: {destination}")
+        if destination.read_text(encoding="utf-8") != text:
+            raise FileExistsError(
+                f"refusing to replace a different release file: {destination}"
+            )
+        return
+    destination.write_text(text, encoding="utf-8")
+
+
 def _read_checksum_index(path: Path) -> dict[str, str]:
     """Read a sha256sum-compatible index and reject ambiguous entries."""
 
@@ -379,33 +448,96 @@ def validate_review_html_bundle(html_path: Path, checksums_path: Path) -> None:
         raise RuntimeError(
             f"reviewed HTML has no saved {OVITO_WIDGET_MODULE} widget state"
         )
+    html_references = _html_references(html)
+    expected_html_references = tuple(
+        LOCAL_NOTEBOOK_OUTPUT_REFERENCES[reference]
+        for reference in LOCAL_NOTEBOOK_LINKS
+    )
+    missing_references = [
+        reference
+        for reference in expected_html_references
+        if reference not in html_references
+    ]
+    if missing_references:
+        raise RuntimeError(
+            f"reviewed HTML is missing packaged local references: {missing_references}"
+        )
+    for reference in expected_html_references:
+        path = (html_path.parent / urlsplit(reference).path).resolve()
+        try:
+            path.relative_to(html_path.parent)
+        except ValueError as error:
+            raise RuntimeError(
+                f"reviewed HTML reference escapes the review directory: {reference}"
+            ) from error
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"reviewed HTML reference is not a bundled file: {reference}"
+            )
 
     script_path = html_path.with_name(OVITO_WIDGET_SCRIPT_NAME)
     license_path = html_path.with_name(OVITO_WIDGET_LICENSE_NAME)
-    asset_paths = tuple(
-        html_path.parent / reference for reference in PACKAGED_NOTEBOOK_ASSETS
+    local_paths = tuple(
+        html_path.parent / output_reference
+        for _, output_reference in PACKAGED_NOTEBOOK_FILES
     )
     missing = [
         path.relative_to(html_path.parent).as_posix()
-        for path in (script_path, license_path, *asset_paths)
+        for path in (script_path, license_path, *local_paths)
         if not path.is_file()
     ]
     if missing:
         raise FileNotFoundError(
-            f"reviewed HTML bundle is missing OVITO support files: {missing}"
+            f"reviewed HTML bundle is missing support files: {missing}"
         )
     validate_ovito_nbextension_source(script_path, license_path)
 
     entries = _read_checksum_index(checksums_path)
     base = checksums_path.resolve().parent
-    for path in (html_path, script_path, license_path, *asset_paths):
-        relative = path.resolve().relative_to(base).as_posix()
-        expected = entries.get(relative)
-        if expected is None:
-            raise RuntimeError(f"checksum index is missing {relative}")
-        observed = sha256_file(path)
-        if observed != expected:
+    for relative, expected in entries.items():
+        path = (base / relative).resolve()
+        try:
+            path.relative_to(base)
+        except ValueError as error:
+            raise RuntimeError(
+                f"checksum entry escapes the review directory: {relative}"
+            ) from error
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"checksum index references a missing file: {relative}"
+            )
+        if sha256_file(path) != expected:
             raise RuntimeError(f"checksum does not match for {relative}")
+
+    for path in (html_path, script_path, license_path, *local_paths):
+        relative = path.resolve().relative_to(base).as_posix()
+        if relative not in entries:
+            raise RuntimeError(f"checksum index is missing {relative}")
+
+    link_pattern = re.compile(r"!?\[[^\]]*]\(([^)]+)\)")
+    for _, output_reference in PACKAGED_NOTEBOOK_DOCUMENTS:
+        document = (base / output_reference).resolve()
+        for raw_reference in link_pattern.findall(document.read_text(encoding="utf-8")):
+            reference = raw_reference.strip().split("#", maxsplit=1)[0]
+            if (
+                not reference
+                or "://" in reference
+                or reference.startswith(("mailto:", "/"))
+            ):
+                continue
+            target = (document.parent / reference).resolve()
+            try:
+                target.relative_to(base)
+            except ValueError as error:
+                raise RuntimeError(
+                    f"packaged document link escapes the review directory: "
+                    f"{output_reference}: {raw_reference}"
+                ) from error
+            if not target.is_file():
+                raise FileNotFoundError(
+                    f"packaged document link is not a bundled file: "
+                    f"{output_reference}: {raw_reference}"
+                )
 
 
 def package_review_html_support(
@@ -429,23 +561,24 @@ def package_review_html_support(
     destination_license = html_path.with_name(OVITO_WIDGET_LICENSE_NAME)
     _copy_without_overwriting_different_file(source_script, destination_script)
     _copy_without_overwriting_different_file(source_license, destination_license)
-    asset_paths = tuple(
-        html_path.parent / reference for reference in PACKAGED_NOTEBOOK_ASSETS
+    local_paths = tuple(
+        html_path.parent / output_reference
+        for _, output_reference in PACKAGED_NOTEBOOK_FILES
     )
-    missing_assets = [
+    missing_files = [
         path.relative_to(html_path.parent).as_posix()
-        for path in asset_paths
+        for path in local_paths
         if not path.is_file()
     ]
-    if missing_assets:
+    if missing_files:
         raise FileNotFoundError(
-            f"reviewed notebook bundle is missing local assets: {missing_assets}"
+            f"reviewed notebook bundle is missing local files: {missing_files}"
         )
     release_files = (
         html_path,
         destination_script,
         destination_license,
-        *asset_paths,
+        *local_paths,
     )
     update_release_checksums(checksums_path, release_files)
     validate_review_html_bundle(html_path, checksums_path)
@@ -466,7 +599,7 @@ def build_parser() -> argparse.ArgumentParser:
         type=Path,
         help=(
             "copy OVITO's installed widget beside an exported reviewed HTML file "
-            "and add all three release files to --checksums"
+            "and add the portable review files to --checksums"
         ),
     )
     parser.add_argument("--checksums", type=Path)
@@ -547,7 +680,7 @@ def main() -> int:
     saved_widget_models_preserved = preserve_saved_widget_state(reviewed, executed)
     progress_outputs_flattened = flatten_saved_progress_cards(reviewed, executed)
     upstream_warning_streams_removed = remove_known_upstream_warnings(reviewed)
-    packaged_assets = stage_local_notebook_assets(
+    packaged_files = stage_local_notebook_files(
         source_dir=args.source.resolve().parent,
         output_dir=args.output.resolve().parent,
     )
@@ -566,7 +699,7 @@ def main() -> int:
         "progress_outputs_flattened": progress_outputs_flattened,
         "saved_widget_models_preserved": saved_widget_models_preserved,
         "upstream_warning_streams_removed": upstream_warning_streams_removed,
-        "packaged_local_assets": packaged_assets,
+        "packaged_local_files": packaged_files,
         "rebased_local_markdown_references": rebased_references,
         "reason": (
             "Refreshed learner-facing Markdown, removed only exact one-time "

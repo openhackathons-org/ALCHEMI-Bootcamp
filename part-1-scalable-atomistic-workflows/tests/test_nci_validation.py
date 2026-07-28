@@ -6,6 +6,7 @@ from pathlib import Path
 import sys
 
 from ase import Atoms
+import pandas as pd
 import pytest
 import torch
 
@@ -17,6 +18,7 @@ from aux.nci_config import NCIValidationSettings  # noqa: E402
 from aux.nci_validation import (  # noqa: E402
     build_nci_force_check_table,
     check_nci_force,
+    check_nci_interaction_component_sum,
     nci_force_check_record,
 )
 
@@ -43,6 +45,41 @@ SETTINGS = NCIValidationSettings(
     finite_difference_rtol=1.0e-8,
     toolkit_official_force_atol_eV_A=1.0e-12,
 )
+
+
+def _one_nci_fragment_group() -> pd.DataFrame:
+    return pd.DataFrame(
+        {
+            "graph_index": [0, 1, 2],
+            "subset": ["unit"] * 3,
+            "system_id": ["system"] * 3,
+            "system_name": ["test dimer"] * 3,
+            "interaction_class": ["unit-test"] * 3,
+            "scale": [1.0] * 3,
+            "fragment": ["AB", "A", "B"],
+        }
+    )
+
+
+def test_component_sum_check_compares_ab_minus_a_minus_b_with_tolerance() -> None:
+    graph_index = _one_nci_fragment_group()
+
+    difference = check_nci_interaction_component_sum(
+        graph_index,
+        pipeline_graph_energies_eV=[10.002, 4.001, 5.001],
+        component_graph_energies_eV=[10.0, 4.0, 5.0],
+        atol_eV=1.0e-12,
+    )
+
+    assert difference < 1.0e-12
+
+    with pytest.raises(AssertionError, match="AB - A - B"):
+        check_nci_interaction_component_sum(
+            graph_index,
+            pipeline_graph_energies_eV=[10.01, 4.0, 5.0],
+            component_graph_energies_eV=[10.0, 4.0, 5.0],
+            atol_eV=1.0e-3,
+        )
 
 
 def test_nci_force_check_compares_net_force_derivative_and_toolkit_route() -> None:

@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from pathlib import Path
 from typing import Any
+
+import pandas as pd
 
 from .artifacts import sha256_file
 
@@ -103,3 +105,84 @@ def checkpoint_card(
         checkpoint_sha256=sha256_file(path),
     )
     return metadata
+
+
+def aimnet_model_card_table(
+    model_card: Mapping[str, Any],
+    *,
+    aimnet_version: str,
+    cutoff_A: float,
+    supports_pbc: bool,
+    optional_inputs: Iterable[str],
+    neighbor_convention: str,
+    device: str,
+) -> pd.DataFrame:
+    """Format the current AIMNet2 lesson metadata as a two-column model card.
+
+    Checkpoint loading, wrapper configuration, and model-output selection stay
+    in the notebook.  The caller passes their observed values to this display
+    helper after ``checkpoint_card`` has validated the checkpoint metadata.
+    """
+
+    required = {
+        "checkpoint_source",
+        "checkpoint_sha256",
+        "needs_coulomb",
+        "needs_dispersion",
+    }
+    missing = required - set(model_card)
+    if missing:
+        raise ValueError(f"model_card is missing fields: {sorted(missing)!r}")
+    checkpoint_sha256 = str(model_card["checkpoint_sha256"])
+    if len(checkpoint_sha256) != 64:
+        raise ValueError("checkpoint_sha256 must contain 64 hexadecimal characters")
+    try:
+        int(checkpoint_sha256, 16)
+    except ValueError as exc:
+        raise ValueError(
+            "checkpoint_sha256 must contain 64 hexadecimal characters"
+        ) from exc
+
+    rows = [
+        ("checkpoint", model_card["checkpoint_source"]),
+        ("checkpoint_sha256", checkpoint_sha256[:16] + "…"),
+        (
+            "package",
+            f"aimnet {aimnet_version} through Toolkit AIMNet2Wrapper",
+        ),
+        ("code_license", "AIMNet software: MIT"),
+        (
+            "target",
+            "B97-3c checkpoint base; declared Coulomb and D3 terms added later",
+        ),
+        (
+            "domain",
+            "molecular training domain; wrapper supports PBC, but "
+            "condensed-phase accuracy is not established here",
+        ),
+        (
+            "implemented_atomic_numbers",
+            model_card.get("implemented_species"),
+        ),
+        ("weight_license", "MIT"),
+        (
+            "total_charge",
+            "one explicit total charge per graph through Batch.charge",
+        ),
+        (
+            "spin_multiplicity",
+            "selected checkpoint is closed-shell; no multiplicity input is used",
+        ),
+        ("cutoff_A", cutoff_A),
+        ("external_coulomb", model_card["needs_coulomb"]),
+        ("external_dispersion", model_card["needs_dispersion"]),
+        ("supports_pbc", supports_pbc),
+        ("optional_inputs", sorted(map(str, optional_inputs))),
+        ("neighbor_convention", str(neighbor_convention)),
+        ("device", str(device)),
+        (
+            "coordinate_precision",
+            "AIMNet2Wrapper evaluates positions in float32",
+        ),
+    ]
+    return pd.DataFrame(rows, columns=["Setting", "Value"])

@@ -44,8 +44,7 @@ def compact_box_summary_table(details: pd.DataFrame) -> pd.DataFrame:
         )
     periodic_row = periodic.iloc[0]
     component_text = "; ".join(
-        f"{row.component}: {int(row.molecules)} × "
-        f"{int(row.atoms_per_molecule)} atoms"
+        f"{row.component}: {int(row.molecules)} × {int(row.atoms_per_molecule)} atoms"
         for row in components.itertuples(index=False)
     )
     numeric = np.asarray(
@@ -62,7 +61,9 @@ def compact_box_summary_table(details: pd.DataFrame) -> pd.DataFrame:
     if not np.isfinite(numeric).all():
         raise ValueError("periodic box summary contains non-finite values")
     if numeric[0] <= 0 or numeric[1] <= 0 or np.any(numeric[3:] <= 0):
-        raise ValueError("periodic box counts, cell, density, and distance must be positive")
+        raise ValueError(
+            "periodic box counts, cell, density, and distance must be positive"
+        )
 
     return pd.DataFrame(
         [
@@ -173,8 +174,219 @@ def molecule_charge_display_tables(
     )
 
 
+def _display_bool(
+    value: object, *, name: str, allow_missing: bool = False
+) -> bool | None:
+    if pd.isna(value):
+        if allow_missing:
+            return None
+        raise ValueError(f"{name} must be true or false")
+    if not isinstance(value, (bool, np.bool_)):
+        raise ValueError(f"{name} must be true or false")
+    return bool(value)
+
+
+def domain_agreement_display_table(agreement: pd.DataFrame) -> pd.DataFrame:
+    """Make the dtype and scope of each saved output check explicit.
+
+    The one-GPU total is a float32 model output, so its observed pass-to-pass
+    span is a diagnostic rather than the float64 distributed-repeatability
+    check used for the two- and four-GPU layouts.
+    """
+
+    required = {
+        "world_size",
+        "energy_dtype",
+        "energy_repeatability_span_meV_atom",
+        "energy_repeatability_check_required",
+        "energy_repeatability_passed",
+        "energy_reference_world_size",
+        "energy_difference_meV_atom",
+        "energy_check_required",
+        "energy_passed",
+        "force_reference_world_size",
+        "force_rms_error_eV_A",
+        "force_max_error_eV_A",
+        "force_passed",
+    }
+    _require_columns(agreement, required, name="output agreement")
+    columns = (
+        "GPUs",
+        "Model tensors / coordinates / forces",
+        "Energy total",
+        "Energy repeatability",
+        "Distributed energy",
+        "Forces",
+        "Energy span / meV atom⁻¹",
+        "Energy difference / meV atom⁻¹",
+        "Force RMS difference / eV Å⁻¹",
+        "Force max difference / eV Å⁻¹",
+    )
+    source = agreement.copy(deep=True)
+    if source.empty:
+        return pd.DataFrame(columns=columns)
+
+    worlds = pd.to_numeric(source["world_size"], errors="coerce")
+    if (
+        worlds.isna().any()
+        or not np.equal(worlds.to_numpy(), np.floor(worlds.to_numpy())).all()
+        or (worlds <= 0).any()
+    ):
+        raise ValueError("output agreement world_size values must be positive integers")
+    source["world_size"] = worlds.astype(int)
+    if source["world_size"].duplicated().any():
+        raise ValueError("output agreement must contain one row per GPU layout")
+    source = source.sort_values("world_size").reset_index(drop=True)
+    world_sizes = set(source["world_size"].tolist())
+
+    numeric_columns = (
+        "energy_repeatability_span_meV_atom",
+        "energy_difference_meV_atom",
+        "force_rms_error_eV_A",
+        "force_max_error_eV_A",
+    )
+    numeric = source.loc[:, numeric_columns].apply(pd.to_numeric, errors="coerce")
+    if not np.isfinite(numeric.to_numpy(dtype=np.float64)).all():
+        raise ValueError("output agreement diagnostics must be finite")
+    if (numeric.to_numpy(dtype=np.float64) < 0).any():
+        raise ValueError("output agreement diagnostics must be non-negative")
+
+    energy_references = pd.to_numeric(
+        source["energy_reference_world_size"], errors="coerce"
+    )
+    force_references = pd.to_numeric(
+        source["force_reference_world_size"], errors="coerce"
+    )
+    if (
+        energy_references.isna().any()
+        or force_references.isna().any()
+        or energy_references.nunique() != 1
+        or force_references.nunique() != 1
+    ):
+        raise ValueError(
+            "output agreement must identify one energy and force reference"
+        )
+    energy_reference = int(energy_references.iloc[0])
+    force_reference = int(force_references.iloc[0])
+    if energy_reference not in world_sizes or force_reference not in world_sizes:
+        raise ValueError("output agreement references must be present in the table")
+
+    records: list[dict[str, object]] = []
+    for row in source.itertuples(index=False):
+        world_size = int(row.world_size)
+        energy_dtype = str(row.energy_dtype)
+        if world_size == 1:
+            if energy_dtype != "torch.float32":
+                raise ValueError("the one-GPU total energy must be torch.float32")
+            energy_total = "float32 model total"
+        else:
+            if energy_dtype != "torch.float64":
+                raise ValueError(
+                    "multi-rank total energies must use the float64 reduction"
+                )
+            energy_total = "float64 multi-rank reduction"
+
+        repeatability_required = _display_bool(
+            row.energy_repeatability_check_required,
+            name=f"{world_size}-GPU repeatability requirement",
+        )
+        repeatability_passed = _display_bool(
+            row.energy_repeatability_passed,
+            name=f"{world_size}-GPU repeatability result",
+            allow_missing=True,
+        )
+        if repeatability_required:
+            if repeatability_passed is None:
+                raise ValueError(
+                    f"{world_size}-GPU repeatability result must be reported"
+                )
+            repeatability_status = "Passed" if repeatability_passed else "Failed"
+        else:
+            if repeatability_passed is not None:
+                raise ValueError(
+                    f"{world_size}-GPU repeatability result must stay unreported"
+                )
+            repeatability_status = (
+                "Not checked: float32 total"
+                if energy_dtype == "torch.float32"
+                else "Not checked"
+            )
+
+        energy_check_required = _display_bool(
+            row.energy_check_required,
+            name=f"{world_size}-GPU distributed-energy requirement",
+        )
+        energy_passed = _display_bool(
+            row.energy_passed,
+            name=f"{world_size}-GPU distributed-energy result",
+            allow_missing=True,
+        )
+        if world_size == energy_reference:
+            if energy_check_required or energy_passed is not None:
+                raise ValueError(
+                    "the distributed-energy reference must not compare with itself"
+                )
+            distributed_energy_status = (
+                f"Reference: {energy_reference}-GPU float64 reduction"
+            )
+        elif energy_check_required:
+            if energy_passed is None:
+                raise ValueError(
+                    f"{world_size}-GPU distributed-energy result must be reported"
+                )
+            distributed_energy_status = (
+                f"Passed vs {energy_reference} GPU"
+                if energy_passed
+                else f"Failed vs {energy_reference} GPU"
+            )
+        else:
+            if energy_passed is not None:
+                raise ValueError(
+                    f"{world_size}-GPU distributed-energy result must stay unreported"
+                )
+            distributed_energy_status = (
+                "Not compared: float32 total"
+                if energy_dtype == "torch.float32"
+                else "Not checked"
+            )
+
+        force_passed = _display_bool(
+            row.force_passed,
+            name=f"{world_size}-GPU force result",
+        )
+        if world_size == force_reference:
+            if not force_passed:
+                raise ValueError("the force reference must agree with itself")
+            force_status = f"Reference: {force_reference} GPU"
+        else:
+            force_status = (
+                f"Passed vs {force_reference} GPU"
+                if force_passed
+                else f"Failed vs {force_reference} GPU"
+            )
+
+        records.append(
+            {
+                "GPUs": world_size,
+                "Model tensors / coordinates / forces": "float32",
+                "Energy total": energy_total,
+                "Energy repeatability": repeatability_status,
+                "Distributed energy": distributed_energy_status,
+                "Forces": force_status,
+                "Energy span / meV atom⁻¹": float(
+                    row.energy_repeatability_span_meV_atom
+                ),
+                "Energy difference / meV atom⁻¹": float(row.energy_difference_meV_atom),
+                "Force RMS difference / eV Å⁻¹": float(row.force_rms_error_eV_A),
+                "Force max difference / eV Å⁻¹": float(row.force_max_error_eV_A),
+            }
+        )
+    return pd.DataFrame.from_records(records, columns=columns)
+
+
 __all__ = (
     "MoleculeChargeDisplayTables",
     "compact_box_summary_table",
+    "domain_agreement_display_table",
     "molecule_charge_display_tables",
 )

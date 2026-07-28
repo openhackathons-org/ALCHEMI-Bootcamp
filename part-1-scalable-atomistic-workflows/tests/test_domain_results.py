@@ -18,6 +18,7 @@ PART_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PART_DIR))
 
 from aux.domain.config import DOMAIN_METHODOLOGY  # noqa: E402
+from aux.domain.display import domain_agreement_display_table  # noqa: E402
 from aux.domain.results import (  # noqa: E402
     BUNDLE_SCHEMA,
     DISTRIBUTED_COLUMNS,
@@ -918,6 +919,15 @@ def test_complete_bundle_returns_short_learner_tables(tmp_path: Path) -> None:
 
     assert view.available
     assert view.reason == ""
+    settings = dict(
+        view.run_settings_table.loc[:, ["setting", "value"]].itertuples(
+            index=False, name=None
+        )
+    )
+    assert settings["Model tensors, coordinates, forces"] == "float32"
+    assert settings["Total energy"] == (
+        "float32 on 1 GPU; float64 distributed reduction on 2/4 GPUs"
+    )
     assert view.layout_table.to_dict("records") == [
         {
             "world_size": 1,
@@ -1031,6 +1041,22 @@ def test_complete_bundle_returns_short_learner_tables(tmp_path: Path) -> None:
         > 1000.0 * DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom
     )
     assert agreement["passed"].all()
+    agreement_display = domain_agreement_display_table(agreement)
+    assert agreement_display["Energy repeatability"].tolist() == [
+        "Not checked: float32 total",
+        "Passed",
+        "Passed",
+    ]
+    assert agreement_display["Distributed energy"].tolist() == [
+        "Not compared: float32 total",
+        "Reference: 2-GPU float64 reduction",
+        "Passed vs 2 GPU",
+    ]
+    assert agreement_display["Forces"].tolist() == [
+        "Reference: 1 GPU",
+        "Passed vs 1 GPU",
+        "Passed vs 1 GPU",
+    ]
     assert view.charge_diagnostics_table.iloc[0]["atom_count"] == FIXED_ATOMS
     assert view.charge_diagnostics_table.iloc[0]["finite"]
     assert view.electrostatics_table.iloc[0]["passed"]
