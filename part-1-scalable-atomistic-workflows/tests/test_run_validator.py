@@ -951,6 +951,7 @@ def packaged_runtime_check() -> dict[str, object]:
     return {
         "schema": "alchemi.part1-runtime-check.v2",
         "source": {
+            "checked": True,
             "clean_checkout": True,
             **source_revision,
             "manifest_path": VALIDATOR.SOURCE_MANIFEST_RELATIVE_PATH,
@@ -1069,6 +1070,11 @@ def test_packaged_runtime_check_is_validated_and_hashed(tmp_path: Path) -> None:
             ("commits", "nvalchemi-toolkit"),
             "0" * 40,
             "Toolkit commits",
+        ),
+        (
+            ("source", "checked"),
+            False,
+            "did not check the tutorial source",
         ),
         (
             ("source", "clean_checkout"),

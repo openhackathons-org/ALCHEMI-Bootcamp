@@ -1168,6 +1168,7 @@ def validate_packaged_source_identity(
 
     source = require_mapping(value, "packaged runtime check source")
     expected_fields = {
+        "checked",
         "clean_checkout",
         "repository_commit",
         "repository_tree",
@@ -1176,7 +1177,14 @@ def validate_packaged_source_identity(
         "files_sha256",
     }
     if set(source) != expected_fields:
-        raise ValueError("packaged runtime source fields are incomplete")
+        missing = sorted(expected_fields.difference(source))
+        unexpected = sorted(set(source).difference(expected_fields))
+        raise ValueError(
+            "packaged runtime source fields differ from the expected schema: "
+            f"missing={missing}, unexpected={unexpected}"
+        )
+    if source.get("checked") is not True:
+        raise RuntimeError("packaged runtime did not check the tutorial source")
     if source.get("clean_checkout") is not True:
         raise RuntimeError("packaged runtime did not use a clean tutorial checkout")
     if source.get("manifest_path") != SOURCE_MANIFEST_RELATIVE_PATH:
@@ -1224,6 +1232,7 @@ def validate_packaged_source_identity(
             )
 
     return {
+        "checked": True,
         "clean_checkout": True,
         **live_revision,
         "manifest_path": SOURCE_MANIFEST_RELATIVE_PATH,
