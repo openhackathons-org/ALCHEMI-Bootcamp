@@ -16,6 +16,7 @@ import pytest
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 RUNTIME_CHECK_PATH = REPOSITORY_ROOT / "build" / "verify_part1_runtime.py"
+RUN_VALIDATOR_PATH = REPOSITORY_ROOT / "scripts" / "validate_part1_ir_run.py"
 ENVIRONMENT_PATH = REPOSITORY_ROOT / "build" / "environment.yml"
 SETUP_SBATCH_PATH = REPOSITORY_ROOT / "scripts" / "slurm_part1_sevennet_setup.sbatch"
 DOMAIN_SBATCH_PATH = (
@@ -75,7 +76,19 @@ def _load_runtime_check() -> ModuleType:
     return module
 
 
+def _load_run_validator() -> ModuleType:
+    spec = importlib.util.spec_from_file_location(
+        "part1_run_validator",
+        RUN_VALIDATOR_PATH,
+    )
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+
 RUNTIME_CHECK = _load_runtime_check()
+RUN_VALIDATOR = _load_run_validator()
 
 
 def _git(repository: Path, *arguments: str) -> None:
@@ -223,6 +236,24 @@ def test_clean_source_check_rejects_untracked_files_and_tracked_edits(
     tracked.write_text("changed\n", encoding="utf-8")
     with pytest.raises(RuntimeError, match="tracked or untracked"):
         RUNTIME_CHECK.verify_clean_tracked_source(checkout)
+
+
+def test_clean_runtime_source_report_matches_packaged_validator(
+    tmp_path: Path,
+) -> None:
+    checkout = _clean_test_checkout(tmp_path)
+    report = RUNTIME_CHECK.source_report(
+        checkout,
+        require_clean_source=True,
+        skip_source_check=False,
+    )
+
+    validated = RUN_VALIDATOR.validate_packaged_source_identity(
+        report,
+        source_root=checkout,
+    )
+
+    assert validated == report
 
 
 def test_source_manifest_covers_local_part1_document_links() -> None:
