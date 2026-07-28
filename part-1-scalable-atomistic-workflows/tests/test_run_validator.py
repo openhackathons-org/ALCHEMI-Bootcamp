@@ -930,7 +930,7 @@ def test_stage_7_saved_tables_are_required_outputs() -> None:
         "domain_single_gpu_result.csv",
         "part1_results_summary.csv",
     } <= set(VALIDATOR.REQUIRED_FILES)
-    assert "domain_box" in VALIDATOR.REQUIRED_DIRECTORIES
+    assert VALIDATOR.REQUIRED_DIRECTORIES == ("water_ir_relaxed.zarr",)
 
 
 def packaged_runtime_check() -> dict[str, object]:
