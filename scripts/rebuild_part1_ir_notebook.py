@@ -1078,7 +1078,7 @@ assert precision_dtype_before == torch.float64
 assert precision_dtype_after_adapt == torch.float64
 assert precision_model_input["coord"].dtype == torch.float32
 assert precision_dtype_after_forward == torch.float32
-assert precision_probe["energy"].dtype == torch.float32
+assert precision_probe["energy"].dtype == torch.float64
 assert precision_probe["forces"].dtype == torch.float32
 assert precision_probe["charges"].dtype == torch.float32
 precision_progress.advance(message="wrapper input conversion observed")
@@ -1109,7 +1109,7 @@ display(readable_table(pd.DataFrame([
     {"Quantity": "float32 matmul setting", "Observed": torch.get_float32_matmul_precision()},
 ]), label="Precision used by the first model", show_index=False))
 display(callout(
-    "The probe begins with float64 coordinates. Input adaptation makes a float32 copy, and the full AIMNet2 wrapper converts the batch positions to float32 in place because the model kernels require it. The checkpoint weights and returned energy, forces, and charges remain float32. A float64 copy of a stored weight represents the same learned value with no recovered digits. The spacing values show numerical resolution at this energy scale, not scientific model error.",
+    "The probe begins with float64 coordinates; AIMNet receives float32 coordinates and converts the batch positions in place. Energy is float64 because AIMNet preserves atomic reference-energy shifts and accumulates system energy in float64; forces and charges are float32. Check precision per tensor. A float64 copy of a stored weight recovers no new information, and spacing shows numerical resolution rather than model error.",
     kind="result",
     result_state="observed",
 ))
@@ -5737,7 +5737,7 @@ assert precision_dtype_before == torch.float64
 assert precision_dtype_after_adapt == torch.float64
 assert precision_model_input["coord"].dtype == torch.float32
 assert precision_dtype_after_forward == torch.float32
-assert precision_probe["energy"].dtype == torch.float32
+assert precision_probe["energy"].dtype == torch.float64
 assert precision_probe["forces"].dtype == torch.float32
 assert precision_probe["charges"].dtype == torch.float32
 precision_progress.advance(message="wrapper input conversion observed")
@@ -5760,11 +5760,11 @@ display(readable_table(
 ))
 precision_progress.complete("storage, input dtypes, and numerical spacing shown")
 display(callout(
-    "Observed: the probe begins with float64 coordinates. Input adaptation makes "
-    "a float32 copy, and the full AIMNet2 wrapper converts the batch positions "
-    "to float32 in place because the model kernels require it. "
-    "Energy, forces, and charges return in float32. "
-    "The spacing values show numerical resolution, not model error.",
+    "Observed: the probe begins with float64 coordinates; AIMNet receives "
+    "float32 coordinates and converts the batch positions in place. "
+    "Energy is float64 because AIMNet preserves atomic reference-energy shifts "
+    "and accumulates system energy in float64; forces and charges are float32. "
+    "Check precision per tensor; spacing is numerical resolution, not model error.",
     kind="result", result_state="observed",
 ))
 del precision_model_input, precision_probe
