@@ -76,14 +76,14 @@ surface science, or spectroscopy.
 
 ## Current size and pacing checks
 
-- 129 notebook cells, including 34 hidden code cells.
-- 54 learner-visible code cells and 1,791 visible source lines.
-- 6,443 learner-facing Markdown words after HTML tags are removed.
+- 133 notebook cells, including 38 hidden code cells.
+- 54 learner-visible code cells and 1,779 visible source lines.
+- 6,304 learner-facing Markdown words after HTML tags are removed.
 - Stage 1 begins at cell 9; the first model result is at cell 13.
 - The longest learner-visible code cell is 59 lines.
-- An older six-stage run on one H100 recorded about 13 minutes of code time,
-  including a 10-minute dynamics calculation. It is a pacing reference only;
-  the current merged notebook remains unmeasured.
+- Exact job `3317215` recorded 12 min 51 s of code time and 13 min 1 s of
+  notebook wall time on one H100 PCIe. Stage 6 took 9 min 27 s; all other
+  setup and stage work took 3 min 24 s.
 
 ## Verification before release
 
@@ -108,22 +108,23 @@ surface science, or spectroscopy.
 
 ## Current release status
 
-The source notebook is ready for source and content inspection only. It is not
-yet ready for an executed learner review or release.
+The source, exact H100 execution, reviewed notebook, and reviewed HTML are ready
+for learner inspection. The remaining release check is the presenter's manual
+review in the target notebook theme.
 
-The results below were observed on 2026-07-27 in the `v2` checkout on
-`P3-Ultra`.
+The local checks below were observed on 2026-07-27 in the `v2` checkout on
+`P3-Ultra`. The exact GPU checks ran on Compute Lab H100 PCIe nodes.
 
 | Check | Current result |
 |---|---|
-| Source notebook | 129 cells, 54 learner-visible code cells, 34 hidden helper cells, and no visible code cell longer than 59 lines |
-| Notebook identity | SHA-256 `d8d5f2ac57a94189b8f744eaa57851cbc187ab99bacee3c9e3740ab2a8b9af10` |
+| Source notebook | 133 cells, 92 code cells, 54 learner-visible code cells, 38 hidden helper cells, and no visible code cell longer than 59 lines |
+| Notebook identity | SHA-256 `39128b84f6e99d9ffdb5c561853335d4179c12b30776f0e8e6a5d68385d8270b` |
 | Deterministic generation | Two independent rebuilds produced the same notebook bytes |
-| Executed notebook | Not available for the current source; all 88 code cells have null execution counts and no saved outputs |
-| Current focused tests | The installed result set, strict loader, container file classification, notebook contract, and full-run validator passed 100 focused local tests. |
-| Broad local compatible tests | 830 passed, 1 hardware-only test skipped, 8 tests requiring the newer Toolkit API were deselected, and 2 subtests passed. The local environment is older than the declared image, so the complete suite still has to run in the exact pinned environment. |
+| Executed notebook | Job `3317215` completed all 92 code cells with no failed cell or error output. Code time was 12 min 51 s and notebook wall time was 13 min 1 s. |
+| Exact pinned tests | Job `3317136` passed 814 tests and 2 subtests in the declared H100 environment. The scheduler job completed with exit `0:0`. |
+| Post-run packaging tests | The portable-banner, reviewed-notebook, validator-link, and runbook checks passed 14 focused local tests. |
 | Source checks | All shell and Slurm launch files pass `bash -n`; all Python sources compile and pass Ruff checks and formatting; notebook JSON, deterministic regeneration, the base-box checksums, the reference-data checksums, and `git diff --check` pass. |
-| Static learner review | The HTML render contains seven stage cards, seven progress bars, 32 callouts, and ten process diagrams. Scientific review led to interaction-level NCI route checks, corrected ionic-system charge wording, and an enforced upstream NCI revision check. Exact Toolkit 0.2 API review led to a fixed-step `FusedStage` in the offline pipeline sketch. No other medium or larger source issue remains from those reviews. |
+| Automated browser review | Headless Microsoft Edge loaded the portable HTML with seven stage cards, 99 saved progress bars, all 92 code outputs, six canvases, and four interactive OVITO viewports. The banner and local OVITO bundle loaded without HTTP failures. No notebook error, failed request, body overflow, or missing-widget message was found. |
 | Rendered human review | Pending for the executed notebook in the target theme, including pacing, table width, figures, widgets, hidden inputs, and callout consistency |
 | Current H100 execution | Jobs `3311164`, `3311328`, and `3311123` completed on one, two, and four H100 PCIe nodes with exit `0:0` in `5:53`, `3:49`, and `3:54` of scheduler wall time. All source and result checksum indexes pass. |
 | Recorded scaling results | The same 51,200-atom input passed every required output check. Median fixed energy/force times were `0.268238 s`, `0.273560 s`, and `0.228844 s`, or `1.00×`, `0.98×`, and `1.17×`. These three-pass tutorial timings are installed; `DistributedPipeline` correctness and timing remain **NOT REPORTED**. |
@@ -138,11 +139,13 @@ before installing it locally. The first successful target build must still be
 turned into exact Conda and Python lock inputs and reproduced once before the
 environment can be called fully reproducible.
 
-The H100 run must execute the complete notebook with the declared Core 0.2 and
-Toolkit-Ops 0.4 environment. The domain runner must then read the distributed
-energy before gather, reconstruct atom-level forces on rank 0, and check finite
-values, atom identity, output shape, force agreement, and distributed-energy
-agreement before the notebook may display recorded multi-GPU results.
+The complete notebook ran against Core commit
+`331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409` and Toolkit-Ops commit
+`e8e7a7464f6745277a156a3d6f433d06b58c60e3`. The domain runner read the
+distributed energy before gather, reconstructed atom-level forces on rank 0,
+and checked finite values, atom identity, output shape, force agreement, and
+distributed-energy agreement before the notebook displayed the recorded
+multi-GPU results.
 
 The current checkout also retains historical Part 2 and Part 3 scientific data.
 Those files must be excluded from this release, replaced with redistributable

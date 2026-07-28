@@ -588,13 +588,16 @@ cp "$NOTEBOOK_DIR/SHA256SUMS" \
 )
 ```
 
-The static widget loader asks for `jupyter-ovito.js` beside the HTML file. The
-packaging command finds OVITO's installed classic-notebook `index.js` and
-copies it to that name without changing its contents. It also copies
-`index.js.LICENSE.txt`, which carries the bundled Three.js and Lodash notices,
-and adds the HTML and both support files to `SHA256SUMS-reviewed`. It fails if
-the exported HTML has no saved OVITO state, either support file is missing, or
-an existing release file has different contents.
+The review command copies the banner into `assets/` below the result directory,
+so the reviewed notebook and HTML do not depend on the temporary Compute Lab
+checkout path. The static widget loader asks for `jupyter-ovito.js` beside the
+HTML file. The packaging command finds OVITO's installed classic-notebook
+`index.js` and copies it to that name without changing its contents. It also
+copies `index.js.LICENSE.txt`, which carries the bundled Three.js and Lodash
+notices, and adds the HTML, banner, and both support files to
+`SHA256SUMS-reviewed`. It fails if the exported HTML has no saved OVITO state,
+any required file is missing, or an existing release file has different
+contents.
 
 These generated JavaScript bytes are not committed to this repository. They
 come from the checked OVITO 3.15.4 Conda installation when the release is
@@ -611,6 +614,7 @@ The final notebook directory must contain at least:
 - the source, executed, original, and reviewed notebooks;
 - `alchemi-water-ir-reviewed.html`, `jupyter-ovito.js`, and
   `index.js.LICENSE.txt`;
+- `assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png`;
 - `part1-runtime.json`;
 - `part1-d3-cache.json`;
 - `notebook-timings.json`;
