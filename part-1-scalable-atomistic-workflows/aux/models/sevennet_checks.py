@@ -303,6 +303,9 @@ def _supported_element_value(model: Any) -> str:
             ) from exc
         if atomic_number != value:
             raise ValueError("SevenNet type_map keys must be integer atomic numbers")
+        # SevenNet-Omni reserves Z=0 for its internal non-element entry.
+        if atomic_number == 0:
+            continue
         if not 1 <= atomic_number < len(chemical_symbols):
             raise ValueError(
                 "SevenNet type_map contains an unsupported atomic number: "
@@ -311,8 +314,17 @@ def _supported_element_value(model: Any) -> str:
         atomic_numbers.append(atomic_number)
 
     atomic_numbers = sorted(atomic_numbers)
+    if not atomic_numbers:
+        raise ValueError("SevenNet type_map contains no chemical elements")
     if len(set(atomic_numbers)) != len(atomic_numbers):
         raise ValueError("SevenNet type_map contains duplicate atomic numbers")
+    complete_periodic_table = list(range(1, len(chemical_symbols)))
+    if atomic_numbers == complete_periodic_table:
+        return (
+            f"{len(atomic_numbers)} elements: "
+            f"{chemical_symbols[1]}–{chemical_symbols[-1]} "
+            f"(Z=1–{atomic_numbers[-1]})"
+        )
     elements = ", ".join(
         f"{chemical_symbols[number]} (Z={number})" for number in atomic_numbers
     )
