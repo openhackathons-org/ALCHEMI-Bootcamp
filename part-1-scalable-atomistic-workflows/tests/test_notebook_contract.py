@@ -211,13 +211,13 @@ def test_notebook_has_seven_stylized_sequential_stage_cards() -> None:
         assert f"## Stage {stage}" not in source
 
     stage_3 = _source(by_id["stage-3"])
-    assert "23 s on one H100 PCIe in the checked run" in stage_3
+    assert "22 s on one H100 PCIe in the checked run" in stage_3
     roadmap = _source(by_id["roadmap"])
     roadmap_text = " ".join(roadmap.split())
     assert "Checked H100 pacing" in roadmap_text
-    assert "Stage 3: NCI calculation | 23 s" in roadmap_text
-    assert "Stage 7: scaling paths | 29 s" in roadmap_text
-    assert "Complete notebook code** | **13 min 19 s" in roadmap_text
+    assert "Stage 3: NCI calculation | 22 s" in roadmap_text
+    assert "Stage 7: scaling paths | 30 s" in roadmap_text
+    assert "Complete notebook code** | **12 min 51 s" in roadmap_text
     assert "exercise `DomainParallel` on one GPU without decomposition" in roadmap_text
     assert "`DomainParallel`" in roadmap
     for depth in (
@@ -340,8 +340,8 @@ def test_notebook_hero_and_presentation_blocks_share_one_visual_system() -> None
     assert "periodic PME" in title
     assert "DomainParallel" in title
     assert "DistributedPipeline" in title
-    assert "checked run took 13 min 28 s of notebook wall time" in title
-    assert "Stage 6 accounted for 9 min 29 s" in title
+    assert "checked run took 13 min 1 s of notebook wall time" in title
+    assert "Stage 6 accounted for 9 min 27 s" in title
     assert banner_relative in title
     assert banner.is_file()
     png = banner.read_bytes()[:24]

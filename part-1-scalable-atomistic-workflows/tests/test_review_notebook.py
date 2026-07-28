@@ -148,6 +148,95 @@ def test_saved_widget_state_is_preserved_for_review_copy() -> None:
     assert reviewed.metadata["widgets"] is not executed.metadata["widgets"]
 
 
+def test_only_exact_known_upstream_warning_streams_are_removed() -> None:
+    known_warnings = [
+        (
+            "/env/lib/python3.12/site-packages/physicsnemo/utils/logging/"
+            "launch.py:327: SyntaxWarning: invalid escape sequence '\\.'\n"
+            '  key = re.sub("[^a-zA-Z0-9\\.\\-\\s\\/\\_]+", "", key)\n'
+        ),
+        (
+            "/env/lib/python3.12/site-packages/nvalchemi/models/aimnet2.py:342: "
+            "UserWarning: Converting a tensor with requires_grad=True to a scalar "
+            "may lead to unexpected behavior.\n"
+            "Consider using tensor.detach() first. (Triggered internally.)\n"
+            "  values = [float(v) for v in (rc_s, rc_v) if v is not None]\n"
+        ),
+        (
+            "/env/lib/python3.12/site-packages/torch/_inductor/compile_fx.py:320: "
+            "UserWarning: TensorFloat32 tensor cores for float32 matrix "
+            "multiplication available but not enabled. Consider setting the "
+            "matmul precision.\n"
+            "  warnings.warn(\n"
+        ),
+        (
+            "Sets are not currently considered sequences, but this may change in "
+            "the future, so consider avoiding using them.\n"
+        ),
+    ]
+    reviewed = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_code_cell(
+                "run()",
+                id="calculation",
+                execution_count=1,
+                outputs=[
+                    *[
+                        nbformat.v4.new_output(
+                            "stream",
+                            name="stderr",
+                            text=warning,
+                        )
+                        for warning in known_warnings
+                    ],
+                    nbformat.v4.new_output(
+                        "stream",
+                        name="stderr",
+                        text="unexpected warning stays visible\n",
+                    ),
+                    nbformat.v4.new_output(
+                        "stream",
+                        name="stdout",
+                        text="calculation complete\n",
+                    ),
+                ],
+            )
+        ]
+    )
+
+    assert MODULE.remove_known_upstream_warnings(reviewed) == 4
+    assert [output.text for output in reviewed.cells[0].outputs] == [
+        "unexpected warning stays visible\n",
+        "calculation complete\n",
+    ]
+
+
+def test_known_warning_is_not_removed_when_stderr_contains_other_text() -> None:
+    reviewed = nbformat.v4.new_notebook(
+        cells=[
+            nbformat.v4.new_code_cell(
+                "run()",
+                id="calculation",
+                execution_count=1,
+                outputs=[
+                    nbformat.v4.new_output(
+                        "stream",
+                        name="stderr",
+                        text=(
+                            "Sets are not currently considered sequences, but this "
+                            "may change in the future, so consider avoiding using "
+                            "them.\nreal error follows\n"
+                        ),
+                    )
+                ],
+            )
+        ]
+    )
+
+    assert MODULE.remove_known_upstream_warnings(reviewed) == 0
+    assert len(reviewed.cells[0].outputs) == 1
+
+
 def test_local_markdown_references_are_rebased_for_release_copy(
     tmp_path: Path,
 ) -> None:

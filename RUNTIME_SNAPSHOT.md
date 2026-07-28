@@ -127,15 +127,28 @@ electrostatics, force, or multi-GPU checks.
 
 ### Complete Part 1 run with the current Toolkit versions
 
-Compute Lab job `3315568` ran the preceding 88-code-cell notebook on one
-NVIDIA H100 PCIe with Toolkit Core `331d6b2`, Toolkit-Ops `e8e7a74`, Torch
-`2.12.0+cu130`, and CUDA `13.0`. It completed with exit `0:0`. Notebook code
-took `798.752 s`, notebook wall time was `808.478 s`, and scheduler elapsed
-time was `15:40`. Its eight Stage 3 code cells took `22.988 s`.
+Compute Lab job `3317215` ran commit
+`1eca73058c5bae4a164f3b07c3e12fa944030086` on one NVIDIA H100 PCIe with
+Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`. All 92 code cells completed;
+none failed. The job completed with exit `0:0`.
 
-The current learner cleanup has 92 code cells, including ten in Stage 3. Its
-exact-source H100 rerun is pending, so the numbers above are pacing data for the
-immediately preceding checked source.
+| Current source section | Code time |
+|---|---:|
+| Setup and imports | 23.476 s |
+| Stage 1 | 18.211 s |
+| Stage 2 | 19.250 s |
+| Stage 3, ten code cells | 22.064 s |
+| Stage 4 | 17.649 s |
+| Stage 5 | 72.690 s |
+| Stage 6 | 567.180 s |
+| Stage 7 | 30.238 s |
+| **Total code time** | **770.760 s (12:51)** |
+
+Notebook wall time was `781.144 s` (`13:01`), and scheduler elapsed time was
+`15:49`. These times cover the final learner computation. Job `3315568` remains
+the historical record for the preceding 88-code-cell source. The final notebook
+changes only the displayed timing text; its 92 code cells are byte-for-byte the
+same as the notebook that ran.
 
 ### Historical focused NCI Stage 3 run
 
@@ -163,7 +176,7 @@ The timed source notebook SHA-256 is
 `9cbb4c88a1483a83d04c82d9fb144fe992f7a0cc4f96ceed3ca51210d976fb11`.
 The local saved bundle is
 `part-1-scalable-atomistic-workflows/outputs/h100-nci-stage3-3222436/`; all
-files pass its `SHA256SUMS` check. Complete job `3315568` supersedes this
+files pass its `SHA256SUMS` check. Complete job `3317215` supersedes this
 focused run for whole-notebook pacing; the focused run remains the saved
 scientific check for Stage 3.
 
@@ -579,8 +592,8 @@ define a shared intensity scale or IR MAE.
 This saved run applies only to its recorded source. Current SevenNet-source job
 `3189534` supersedes it as the accepted historical execution. The present
 source does not redistribute AIMNet, SevenNet, or generated D3 cache files.
-It still needs a clean image rebuild, a full H100 run with the current Toolkit
-versions, and human review of the executed notebook. The checked
+It still needs a clean image rebuild and human review of the executed
+notebook. The checked
 `DomainParallel` result set is installed. The
 separate `DistributedPipeline` timing remains `NOT REPORTED` until stock Core
 passes the transfer checks; that deferred timing is not a Part 1 release
