@@ -34,19 +34,20 @@ def test_precision_summary_counts_storage_and_spacing() -> None:
     assert summary.widening_preserves_stored_values
 
 
-def test_precision_table_requires_the_four_visible_dtype_observations() -> None:
+def test_precision_table_requires_the_visible_dtype_observations() -> None:
     summary = summarize_model_precision(TinyFloatModel(), reference_energy_eV=1.0)
     observed = {
         "hello-world coordinates": "torch.float32",
-        "float64 probe coordinates": "torch.float64",
+        "probe coordinates before wrapper call": "torch.float64",
         "coordinates passed to AIMNet": "torch.float32",
-        "probe energy / forces / charges": "torch.float32 / torch.float64 / torch.float32",
+        "probe coordinates after wrapper call": "torch.float32",
+        "probe energy / forces / charges": "torch.float32 / torch.float32 / torch.float32",
     }
 
     table = precision_display_table(
         summary, observed_dtypes=observed, matmul_precision="highest"
     )
-    assert table.shape == (12, 2)
+    assert table.shape == (13, 2)
     assert set(observed).issubset(set(table["Quantity"]))
 
     with pytest.raises(ValueError, match="observed_dtypes"):

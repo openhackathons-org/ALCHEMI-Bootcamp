@@ -1212,11 +1212,13 @@ def test_precision_lesson_distinguishes_tensor_storage_from_model_math() -> None
         "Atomic numbers and neighbor indices remain integer tensors",
         "`Tensor.to(dtype)` returns a converted tensor",
         "`Module.to(dtype)` changes the module's floating parameters and buffers in place",
-        "A float64 coordinate tensor does not turn it into a float64 model",
+        "the full wrapper then converts the batch positions, and any cell tensor, "
+        "to float32 in place",
+        "A float64 coordinate tensor does not turn AIMNet2 into a float64 model",
         "widening saved float32 weights cannot recover information",
         "torch.set_float32_matmul_precision",
         "highest",
-        "not model weights or input dtypes",
+        "does not change model weights or input dtypes",
     ):
         assert term in note
 
@@ -1228,12 +1230,14 @@ def test_precision_lesson_distinguishes_tensor_storage_from_model_math() -> None
         "parameter.element_size()",
         "dtype=torch.float64",
         "aimnet.adapt_input(precision_probe_batch)",
+        "precision_dtype_after_adapt == torch.float64",
         'precision_model_input["coord"].dtype == torch.float32',
+        "precision_dtype_after_forward == torch.float32",
         "torch.nextafter(",
         "torch.get_float32_matmul_precision()",
         "precision_summary.widening_preserves_stored_values",
-        "A force may return",
-        "float32 model calculation",
+        "converts the batch positions",
+        "Energy, forces, and charges return in float32",
         "numerical resolution, not model error",
     ):
         assert term in implementation
