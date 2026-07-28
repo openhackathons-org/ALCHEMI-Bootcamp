@@ -125,7 +125,19 @@ cutoff and `1e-4` target. The independent `estimate_ewald_parameters` call at
 and parameter resolution only. They do not replace the H100 model,
 electrostatics, force, or multi-GPU checks.
 
-### Focused NCI Stage 3 run with the current Toolkit versions
+### Complete Part 1 run with the current Toolkit versions
+
+Compute Lab job `3315568` ran the preceding 88-code-cell notebook on one
+NVIDIA H100 PCIe with Toolkit Core `331d6b2`, Toolkit-Ops `e8e7a74`, Torch
+`2.12.0+cu130`, and CUDA `13.0`. It completed with exit `0:0`. Notebook code
+took `798.752 s`, notebook wall time was `808.478 s`, and scheduler elapsed
+time was `15:40`. Its eight Stage 3 code cells took `22.988 s`.
+
+The current learner cleanup has 92 code cells, including ten in Stage 3. Its
+exact-source H100 rerun is pending, so the numbers above are pacing data for the
+immediately preceding checked source.
+
+### Historical focused NCI Stage 3 run
 
 Compute Lab job `3222436` ran the six Stage 3 cells on one NVIDIA H100 NVL with
 Toolkit Core `331d6b2`, Toolkit-Ops `e8e7a74`, Torch `2.12.0+cu130`, and CUDA
@@ -151,9 +163,9 @@ The timed source notebook SHA-256 is
 `9cbb4c88a1483a83d04c82d9fb144fe992f7a0cc4f96ceed3ca51210d976fb11`.
 The local saved bundle is
 `part-1-scalable-atomistic-workflows/outputs/h100-nci-stage3-3222436/`; all
-files pass its `SHA256SUMS` check. This focused result does not replace the
-required end-to-end run of the complete seven-stage notebook with the current
-Toolkit versions.
+files pass its `SHA256SUMS` check. Complete job `3315568` supersedes this
+focused run for whole-notebook pacing; the focused run remains the saved
+scientific check for Stage 3.
 
 The current tutorial uses the AIMNet checkpoint calculator's finite all-pairs
 `simple` Coulomb path and a separate custom adapter for raw SevenNet-Omni 0.13.

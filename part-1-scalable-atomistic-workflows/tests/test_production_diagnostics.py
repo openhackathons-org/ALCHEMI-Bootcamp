@@ -21,6 +21,7 @@ from aux import analysis as analysis_module  # noqa: E402
 from aux.diagnostics import (  # noqa: E402
     ProductionDiagnostics,
     analyze_production_trajectory,
+    build_production_diagnostics_display_tables,
     cluster_integrity,
 )
 from aux.structures import make_ir_structures  # noqa: E402
@@ -209,6 +210,68 @@ def test_production_result_matches_original_notebook_formulas_and_tables() -> No
     assert result.cluster_intact is True
     assert result.cluster_dft_comparison_valid is True
     assert result.energy_within_advisory is True
+
+
+def test_learner_display_tables_are_compact_and_keep_system_labels() -> None:
+    result = _analyze()
+
+    display_tables = build_production_diagnostics_display_tables(result)
+
+    assert list(display_tables.diagnostics.columns) == [
+        "System",
+        "Start T / K",
+        "Mean T / K",
+        "Max |Δq| / e",
+        "Drift / meV atom⁻¹ ps⁻¹",
+        "Max excursion / meV atom⁻¹",
+    ]
+    assert display_tables.diagnostics["System"].tolist() == list(LABELS)
+    np.testing.assert_allclose(
+        display_tables.diagnostics["Start T / K"],
+        result.diagnostic_table["NVE_start_T_3N_K"],
+    )
+    np.testing.assert_allclose(
+        display_tables.diagnostics["Mean T / K"],
+        result.diagnostic_table["NVE_mean_T_3N_K"],
+    )
+
+    assert list(display_tables.integrity.columns) == [
+        "System",
+        "Max O-H / Å",
+        "Connected",
+        "H-bonds min-max",
+        "Initial-ring fraction",
+        "First ring change / ps",
+    ]
+    assert display_tables.integrity["System"].tolist() == list(LABELS[2:])
+    np.testing.assert_allclose(
+        display_tables.integrity["Max O-H / Å"],
+        result.integrity_table["max_OH_angstrom"],
+    )
+    assert display_tables.integrity["Connected"].tolist() == [True, True]
+    assert display_tables.integrity["H-bonds min-max"].tolist() == ["6-6", "6-6"]
+    np.testing.assert_allclose(
+        display_tables.integrity["Initial-ring fraction"],
+        result.integrity_table["initial_ring_fraction"],
+    )
+    np.testing.assert_allclose(
+        display_tables.integrity["First ring change / ps"],
+        result.integrity_table["first_initial_ring_loss_ps"],
+        equal_nan=True,
+    )
+
+
+def test_learner_display_tables_do_not_change_saved_raw_tables() -> None:
+    result = _analyze()
+    raw_diagnostics = result.diagnostic_table.copy(deep=True)
+    raw_integrity = result.integrity_table.copy(deep=True)
+
+    display_tables = build_production_diagnostics_display_tables(result)
+    display_tables.diagnostics.iloc[0, 1] = -1.0
+    display_tables.integrity.iloc[0, 1] = -1.0
+
+    pdt.assert_frame_equal(result.diagnostic_table, raw_diagnostics)
+    pdt.assert_frame_equal(result.integrity_table, raw_integrity)
 
 
 def test_result_arrays_are_read_only_copies_and_result_is_frozen() -> None:

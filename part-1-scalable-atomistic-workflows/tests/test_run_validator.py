@@ -1301,10 +1301,12 @@ def test_external_reference_loaders_and_bundles_are_hashed() -> None:
         "part-1-scalable-atomistic-workflows/reference/experimental_water_fundamentals/SHA256SUMS",
         "part-1-scalable-atomistic-workflows/reference/experimental_water_fundamentals/manifest.json",
         "part-1-scalable-atomistic-workflows/reference/experimental_water_fundamentals/water_gas_phase_fundamentals.csv",
+        "scripts/measure_part1_nci_stage.py",
         "scripts/part1_domain_plan.py",
         "scripts/part1_domain_run.py",
         "scripts/run_part1_domain_decomposition.sh",
         "scripts/slurm_part1_domain_decomposition.sbatch",
+        "scripts/slurm_part1_nci_stage3.sbatch",
     }
 
     assert required <= set(VALIDATOR.SOURCE_PATHS)

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Execute the real Part 1 prefix and measure its eight Stage 3 code cells."""
+"""Execute the real Part 1 prefix and measure its ten Stage 3 code cells."""
 
 from __future__ import annotations
 
@@ -20,7 +20,9 @@ from nbclient.exceptions import CellExecutionError
 
 STAGE_CELL_IDS = (
     "load-nci-atlas",
+    "prepare-nci-resources",
     "configure-nci-model",
+    "display-nci-model-settings",
     "evaluate-nci-components",
     "compose-nci-pipeline",
     "validate-nci-graph-order",
@@ -429,7 +431,7 @@ def main() -> int:
             measured_ids = tuple(str(row["cell_id"]) for row in stage_rows)
             if measured_ids != STAGE_CELL_IDS:
                 raise RuntimeError(
-                    "Stage 3 timing did not execute the required eight-cell sequence"
+                    "Stage 3 timing did not execute the required ten-cell sequence"
                 )
 
             _execute_temporary_cell(

@@ -21,9 +21,11 @@ study is now Stage 3 of the learner notebook; the broader DESS study remains a
 research prototype outside the tutorial.
 
 The current source selects Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`.
-An older six-cell Stage 3 source has a focused measurement at those pins. The
-current Stage 3 has eight cells and remains unmeasured, as does the complete
-merged seven-stage notebook.
+Complete-notebook job `3315568` checked the preceding 88-code-cell source at
+those pins. It took `798.752 s` of code time and `808.478 s` of notebook wall
+time on one H100 PCIe; its eight Stage 3 code cells took `22.988 s`. The current
+learner cleanup has 92 code cells, including ten in Stage 3, so an exact-source
+rerun is pending.
 
 ## Historical focused H100 run: older six-cell Stage 3 source
 
@@ -35,8 +37,9 @@ first calls, one shared D3 pass, the composed-model checks, the independent
 force check, reference analysis, and plotting. Checkpoint downloads, kernel
 startup, earlier cells, and result packaging were outside the measured range.
 
-The current Stage 3 has eight cells. Its timing and the complete merged-notebook
-timing with the current Toolkit versions have not been measured.
+The current Stage 3 has ten code cells. Its exact-source timing is pending; use
+the complete job `3315568` above only for pacing until the replacement run
+finishes.
 
 The complete-model maximum MAE across the three curves was
 `0.368655 kcal/mol` against DFT-D3 and `0.351350 kcal/mol` against

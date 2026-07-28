@@ -28,7 +28,7 @@ def runner():
     return module
 
 
-def test_canonical_notebook_has_exact_eight_cell_stage(runner) -> None:
+def test_canonical_notebook_has_exact_ten_cell_stage(runner) -> None:
     notebook = nbformat.read(NOTEBOOK_PATH, as_version=4)
 
     start, end = runner._validate_stage_layout(notebook)
@@ -94,6 +94,7 @@ def test_scientific_export_records_force_routes_and_each_residual(runner) -> Non
 def test_slurm_readback_uses_the_exported_force_check_names() -> None:
     source = SBATCH_PATH.read_text(encoding="utf-8")
 
+    assert 'report["stage_cell_count"] == 10' in source
     for term in (
         '"official_analytic_vs_official_total_energy_finite_difference"',
         '"toolkit_analytic_vs_official_analytic"',

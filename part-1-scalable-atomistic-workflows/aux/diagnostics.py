@@ -71,6 +71,103 @@ class ProductionDiagnostics:
     energy_within_advisory: bool
 
 
+@dataclass(frozen=True)
+class ProductionDiagnosticsDisplayTables:
+    """Compact copies of the full trajectory tables for learner display.
+
+    ``ProductionDiagnostics`` keeps the machine-oriented tables used by saved
+    outputs.  These two tables use shorter headings and retain system labels
+    as ordinary columns so notebook rendering cannot hide them.
+    """
+
+    diagnostics: pd.DataFrame
+    integrity: pd.DataFrame
+
+
+def build_production_diagnostics_display_tables(
+    result: ProductionDiagnostics,
+) -> ProductionDiagnosticsDisplayTables:
+    """Return compact learner tables without changing the full raw tables."""
+
+    import pandas as pd
+
+    if not isinstance(result, ProductionDiagnostics):
+        raise TypeError("result must be a ProductionDiagnostics instance")
+
+    diagnostic_columns = {
+        "NVE_start_T_3N_K": "Start T / K",
+        "NVE_mean_T_3N_K": "Mean T / K",
+        "max_charge_error_e": "Max |Δq| / e",
+        "energy_drift_meV_atom_ps": "Drift / meV atom⁻¹ ps⁻¹",
+        "max_energy_excursion_meV_atom": "Max excursion / meV atom⁻¹",
+    }
+    integrity_columns = {
+        "max_OH_angstrom",
+        "max_oxygen_components",
+        "H_bonds_min",
+        "H_bonds_max",
+        "initial_ring_fraction",
+        "first_initial_ring_loss_ps",
+    }
+    missing_diagnostics = set(diagnostic_columns).difference(
+        result.diagnostic_table.columns
+    )
+    missing_integrity = integrity_columns.difference(result.integrity_table.columns)
+    if missing_diagnostics:
+        raise ValueError(
+            "diagnostic_table is missing: "
+            + ", ".join(sorted(missing_diagnostics))
+        )
+    if missing_integrity:
+        raise ValueError(
+            "integrity_table is missing: " + ", ".join(sorted(missing_integrity))
+        )
+
+    diagnostics = (
+        result.diagnostic_table.loc[:, list(diagnostic_columns)]
+        .copy(deep=True)
+        .rename(columns=diagnostic_columns)
+        .reset_index(drop=True)
+    )
+    diagnostics.insert(
+        0,
+        "System",
+        [str(label) for label in result.diagnostic_table.index],
+    )
+
+    raw_integrity = result.integrity_table
+    hbond_ranges = [
+        f"{int(minimum)}-{int(maximum)}"
+        for minimum, maximum in zip(
+            raw_integrity["H_bonds_min"],
+            raw_integrity["H_bonds_max"],
+            strict=True,
+        )
+    ]
+    integrity = pd.DataFrame(
+        {
+            "System": [str(label) for label in raw_integrity.index],
+            "Max O-H / Å": raw_integrity["max_OH_angstrom"].to_numpy(copy=True),
+            "Connected": (
+                raw_integrity["max_oxygen_components"]
+                .eq(1)
+                .to_numpy(dtype=bool, copy=True)
+            ),
+            "H-bonds min-max": hbond_ranges,
+            "Initial-ring fraction": raw_integrity[
+                "initial_ring_fraction"
+            ].to_numpy(copy=True),
+            "First ring change / ps": raw_integrity[
+                "first_initial_ring_loss_ps"
+            ].to_numpy(copy=True),
+        }
+    )
+    return ProductionDiagnosticsDisplayTables(
+        diagnostics=diagnostics,
+        integrity=integrity,
+    )
+
+
 def _to_numpy(value: Any) -> np.ndarray:
     """Detach a Torch-like value if needed, then return a NumPy array."""
 

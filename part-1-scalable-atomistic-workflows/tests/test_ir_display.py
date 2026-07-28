@@ -19,6 +19,8 @@ from aux.experimental_reference import (  # noqa: E402
     load_experimental_water_fundamentals,
 )
 from aux.ir_display import (  # noqa: E402
+    harmonic_mode_comparison_display_table,
+    mass_invariance_display_table,
     monomer_mode_mapping_display_table,
     prepare_monomer_reference_display,
 )
@@ -82,6 +84,92 @@ def test_reference_table_rejects_duplicate_experimental_assignment() -> None:
 
     with pytest.raises(ValueError, match="duplicate mode rows"):
         prepare_monomer_reference_display(_monomer_references(), duplicated)
+
+
+def test_mass_invariance_table_uses_readable_labels_without_changing_input() -> None:
+    checks = {
+        "monomer_energy_eV": 1.0e-7,
+        "monomer_force_eV_A": 2.0e-7,
+        "monomer_charge_e": 3.0e-7,
+        "hexamer_energy_eV": 4.0e-7,
+        "hexamer_force_eV_A": 5.0e-7,
+        "hexamer_charge_e": 6.0e-7,
+        "D_over_H_mass": 1.999,
+    }
+    original = checks.copy()
+
+    display = mass_invariance_display_table(
+        checks,
+        dipole_origin_error_e_angstrom=7.0e-7,
+    )
+
+    assert display["Check"].tolist() == [
+        "Monomer |ΔE| / eV",
+        "Monomer max |ΔF| / eV Å⁻¹",
+        "Monomer max |Δq| / e",
+        "Hexamer |ΔE| / eV",
+        "Hexamer max |ΔF| / eV Å⁻¹",
+        "Hexamer max |Δq| / e",
+        "D/H mass ratio",
+        "Dipole origin shift / e Å",
+    ]
+    assert display["Value"].tolist() == pytest.approx(
+        [1.0e-7, 2.0e-7, 3.0e-7, 4.0e-7, 5.0e-7, 6.0e-7, 1.999, 7.0e-7]
+    )
+    assert checks == original
+
+
+def test_harmonic_comparison_table_is_compact_and_preserves_source() -> None:
+    source = pd.DataFrame(
+        {
+            "system": ["H2O", "D2O"],
+            "mode": ["ν1 symmetric stretch", "ν2 bend"],
+            "AIMNet+Coulomb+D3_harmonic_cm-1": [3700.04, 1230.06],
+            "AIMNet_point_charge_IR_km_mol": [20.0, 30.0],
+            "B97-3c_harmonic_cm-1": [3743.13, 1251.19],
+            "B97-3c_IR_intensity_km_mol": [21.0, 31.0],
+            "observed_gas_cm-1": [3657.1, 1178.4],
+            "AIMNet+Coulomb+D3_minus_B97-3c_cm-1": [-43.09, -21.13],
+            "B97-3c_minus_observed_cm-1": [86.03, 72.79],
+        }
+    )
+    original = source.copy(deep=True)
+
+    display = harmonic_mode_comparison_display_table(source)
+
+    assert list(display.columns) == [
+        "System",
+        "Mode",
+        "AIMNet + Coulomb + D3 harmonic / cm⁻¹",
+        "B97-3c harmonic / cm⁻¹",
+        "Model - DFT / cm⁻¹",
+        "Observed gas phase / cm⁻¹",
+    ]
+    assert display.iloc[0].tolist() == [
+        "H2O",
+        "ν1 symmetric stretch",
+        3700.0,
+        3743.1,
+        -43.1,
+        3657.1,
+    ]
+    pdt.assert_frame_equal(source, original)
+
+
+def test_harmonic_comparison_rejects_inconsistent_difference() -> None:
+    source = pd.DataFrame(
+        {
+            "system": ["H2O"],
+            "mode": ["ν1 symmetric stretch"],
+            "AIMNet+Coulomb+D3_harmonic_cm-1": [3700.0],
+            "B97-3c_harmonic_cm-1": [3740.0],
+            "AIMNet+Coulomb+D3_minus_B97-3c_cm-1": [-30.0],
+            "observed_gas_cm-1": [3657.1],
+        }
+    )
+
+    with pytest.raises(ValueError, match="model minus DFT"):
+        harmonic_mode_comparison_display_table(source)
 
 
 def test_monomer_mapping_table_is_concise_and_does_not_change_full_result() -> None:
