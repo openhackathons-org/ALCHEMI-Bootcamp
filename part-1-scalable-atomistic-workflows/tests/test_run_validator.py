@@ -1198,6 +1198,31 @@ def test_every_notebook_imported_aux_module_is_hashed() -> None:
     assert imported_paths <= set(VALIDATOR.SOURCE_PATHS)
 
 
+def test_nci_validator_schema_matches_notebook_comparisons() -> None:
+    notebook_path = (
+        ROOT / "part-1-scalable-atomistic-workflows" / "alchemi-water-ir.ipynb"
+    )
+    notebook = nbformat.read(notebook_path, as_version=4)
+    analyze_cell = next(
+        cell for cell in notebook.cells if cell.get("id") == "analyze-nci-curves"
+    )
+    tree = ast.parse(analyze_cell.source)
+    assignment = next(
+        node
+        for node in tree.body
+        if isinstance(node, ast.Assign)
+        and any(
+            isinstance(target, ast.Name) and target.id == "nci_comparisons"
+            for target in node.targets
+        )
+    )
+
+    notebook_comparisons = ast.literal_eval(assignment.value)
+    assert tuple(notebook_comparisons.items()) == tuple(
+        VALIDATOR.NCI_COMPARISONS.items()
+    )
+
+
 def write_nci_output_fixture(
     output_dir: Path,
 ) -> tuple[Path, Path, Path, dict[str, object]]:
