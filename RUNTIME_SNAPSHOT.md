@@ -93,8 +93,17 @@ are passed explicitly to `PMEModelWrapper`. A fixed-charge check on the
 3,200-atom validation box builds its direct Ewald reference independently with
 `estimate_ewald_parameters` at accuracy `2e-5`.
 
-No complete checked H100 Stage 7 result set is installed. Capacity, timing,
-speedup, and efficiency remain **NOT REPORTED**.
+A complete checked H100 Stage 7 result set is installed at
+`part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/`.
+Compute Lab jobs `3311164`, `3311328`, and `3311123` evaluated the same
+51,200-atom input on one, two, and four NVIDIA H100 PCIe nodes. They completed
+with exit `0:0` in `5:53`, `3:49`, and `3:54` of scheduler wall time. Median
+fixed energy/force call times were `0.268238 s`, `0.273560 s`, and
+`0.228844 s`, giving observed speedups of `1.00×`, `0.98×`, and `1.17×`.
+Every required energy, force, periodic-position, checksum, and
+PME-versus-Ewald check passed. These three-pass values demonstrate the
+tutorial API on this input and hardware; they are not a benchmark-grade
+scaling study.
 
 On 2026-07-24, the 3,200-atom input-preparation path was run locally with
 Packmol 21.2.1. Two independent runs with the declared seed produced the same
@@ -559,8 +568,8 @@ This saved run applies only to its recorded source. Current SevenNet-source job
 `3189534` supersedes it as the accepted historical execution. The present
 source does not redistribute AIMNet, SevenNet, or generated D3 cache files.
 It still needs a clean image rebuild, a full H100 run with the current Toolkit
-versions, the recorded `DomainParallel` campaign, and human review of the
-executed notebook. The
+versions, and human review of the executed notebook. The checked
+`DomainParallel` result set is installed. The
 separate `DistributedPipeline` timing remains `NOT REPORTED` until stock Core
 passes the transfer checks; that deferred timing is not a Part 1 release
 requirement.

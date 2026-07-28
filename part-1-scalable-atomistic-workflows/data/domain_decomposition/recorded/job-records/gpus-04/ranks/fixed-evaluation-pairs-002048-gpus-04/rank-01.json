@@ -1,0 +1,423 @@
+{
+  "case_id": "fixed-evaluation-pairs-002048-gpus-04",
+  "cells_per_dim": [
+    4,
+    4,
+    8
+  ],
+  "compute_capability": [
+    9,
+    0
+  ],
+  "created_utc": "2026-07-28T07:17:07.327466+00:00",
+  "cudnn_version": 92000,
+  "distribution_versions": {
+    "aimnet": "0.2.0",
+    "nvalchemi-toolkit": "0.2.0",
+    "nvalchemi-toolkit-ops": "0.4.0",
+    "nvidia-physicsnemo": "2.1.1"
+  },
+  "driver_version": "595.58.03",
+  "gpu_name": "NVIDIA H100 PCIe",
+  "gpu_total_memory_bytes": 85019590656,
+  "gpu_uuid": "76ccf90e-e813-e9da-43fa-946a5d33dbe8",
+  "halo_atom_count": null,
+  "halo_atom_count_reason": "not_exposed_by_public_api",
+  "host": "ipp1-3198",
+  "local_rank": 0,
+  "measured_pass_maximum_minimum_image_displacements_a": [
+    1.0789593218788873e-05,
+    1.6184389828183307e-05,
+    2.1579186437577746e-05
+  ],
+  "measurement_role": "fixed_evaluation",
+  "median_s_local": 0.2288306659902446,
+  "nccl_version": [
+    2,
+    29,
+    7
+  ],
+  "owned_atom_count": 12800,
+  "pass_max_allocated_bytes": [
+    5074573824,
+    5074577920,
+    5074577920
+  ],
+  "pass_max_reserved_bytes": [
+    6855589888,
+    6855589888,
+    6855589888
+  ],
+  "pass_times_s_local": [
+    0.22952383497613482,
+    0.22844210400944576,
+    0.2288306659902446
+  ],
+  "python_executable": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-conda-8ae63863c45c8f84d3a7ec12a179708a0450ff3d/bin/python3.12",
+  "python_prefix": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db",
+  "python_version": "3.12.13",
+  "rank": 1,
+  "rank_grid": [
+    1,
+    1,
+    4
+  ],
+  "run_id": "domain-fixed-3311123-gpus-4",
+  "schema": "alchemi.part1-domain-rank.v2",
+  "slurm_job_id": "3311123",
+  "slurm_node_id": "1",
+  "slurm_process_id": "1",
+  "source": {
+    "aimnet_checkpoint": "/tmp/alchemi-part1-domain-3311123/aimnet/aimnet2_wb97m_d3_0.pt",
+    "aimnet_checkpoint_file": {
+      "path": "/tmp/alchemi-part1-domain-3311123/aimnet/aimnet2_wb97m_d3_0.pt",
+      "sha256": "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28",
+      "size_bytes": 8836941
+    },
+    "aimnet_checkpoint_sha256": "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28",
+    "domain_methodology_config_file": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/part-1-scalable-atomistic-workflows/aux/domain/config.py",
+    "domain_methodology_config_sha256": "0959eb58bf7a3f7c3cf19e3e7b5dfc0802481d0bfa0d5db50fcbb4c7c5cd85fd",
+    "domain_methodology_name": "part1-packmol-domain-decomposition",
+    "domain_methodology_record": {
+      "name": "part1-packmol-domain-decomposition",
+      "schema": "alchemi.part1-domain-methodology.v5",
+      "settings": {
+        "aimnet_neighbor_cutoff_a": {
+          "name": "aimnet_neighbor_cutoff_a",
+          "rationale": "Records the fixed checkpoint cutoff used when deriving the largest model cutoff for domain decomposition.",
+          "scope": "AIMNet2 neighbor list and DomainParallel halo",
+          "source": "aimnet2-wb97m-d3_0 checkpoint metadata.",
+          "units": "\u00c5",
+          "value": 5.0
+        },
+        "atoms_per_composition_unit": {
+          "name": "atoms_per_composition_unit",
+          "rationale": "Records the atom count implied by the selected NCI Atlas templates so planners and result checks use the same value.",
+          "scope": "planned atom counts and saved-result identity",
+          "source": "Packaged Part 1 NCI Atlas subset, system 1.041.",
+          "units": "atoms per 1:1 phenol/N-methylacetamide unit",
+          "value": 25
+        },
+        "campaign_world_sizes": {
+          "name": "campaign_world_sizes",
+          "rationale": "Runs the recorded comparisons on one, two, and four GPUs. Toolkit derives a separate rank layout from each input's actual cell shape.",
+          "scope": "recorded DomainParallel comparisons",
+          "source": "Part 1 domain campaign execution plan.",
+          "units": "ranks/GPUs",
+          "value": [
+            1,
+            2,
+            4
+          ]
+        },
+        "charge_sum_tolerance_e": {
+          "name": "charge_sum_tolerance_e",
+          "rationale": "Checks the total of the one predicted-charge array used by both electrostatics solvers. Larger float32 reductions report their residual separately instead of reusing this absolute limit.",
+          "scope": "3,200-atom fixed-charge PME-versus-Ewald validation",
+          "source": "Part 1 numerical acceptance limit declared before measurement.",
+          "units": "e",
+          "value": 0.0001
+        },
+        "construction_density_g_cm3": {
+          "name": "construction_density_g_cm3",
+          "rationale": "Provides a reproducible starting volume; it is a construction density, not an equilibrated or predicted material density.",
+          "scope": "Packmol box-volume construction",
+          "source": "Part 1 Packmol starting-geometry methodology.",
+          "units": "g/cm^3",
+          "value": 1.0
+        },
+        "d3_cutoff_a": {
+          "name": "d3_cutoff_a",
+          "rationale": "Matches the smoothed finite-cutoff D3 setup used in Stage 3.",
+          "scope": "D3(BJ) dispersion",
+          "source": "Part 1 Stage 3 D3 methodology.",
+          "units": "\u00c5",
+          "value": 15.0
+        },
+        "d3_smoothing_fraction": {
+          "name": "d3_smoothing_fraction",
+          "rationale": "Matches the D3 cutoff smoothing used in Stage 3.",
+          "scope": "D3(BJ) cutoff smoothing",
+          "source": "Part 1 Stage 3 D3 methodology.",
+          "units": "fraction of cutoff",
+          "value": 0.2
+        },
+        "distributed_energy_repeatability_tolerance_ev_per_atom": {
+          "name": "distributed_energy_repeatability_tolerance_ev_per_atom",
+          "rationale": "Checks that the distributed energy reduction is stable across the three measured passes. The one-GPU float32 energy spread is reported separately as a diagnostic.",
+          "scope": "2/4-GPU repeated fixed-input energy/force passes",
+          "source": "Part 1 numerical acceptance limit declared before measurement.",
+          "units": "eV/atom",
+          "value": 0.0001
+        },
+        "domain_grid_dims": {
+          "name": "domain_grid_dims",
+          "rationale": "Uses Toolkit's geometry- and cutoff-based cell grid. This field does not directly set the rank layout.",
+          "scope": "DomainConfig.grid_dims",
+          "source": "Toolkit 0.2 DomainConfig and SpatialPartitioner API.",
+          "units": "spatial cells along x/y/z, or automatic",
+          "value": null
+        },
+        "domain_halo_skin_a": {
+          "name": "domain_halo_skin_a",
+          "rationale": "Adds communication depth for D3 coordination numbers around borrowed atoms; acceptance still requires same-input force agreement.",
+          "scope": "DomainParallel ghost-atom halo",
+          "source": "Toolkit 0.2 multi-GPU D3 test starting value.",
+          "units": "\u00c5",
+          "value": 4.0
+        },
+        "domain_parallel_multi_rank_warmup_force_prime_evaluations": {
+          "name": "domain_parallel_multi_rank_warmup_force_prime_evaluations",
+          "rationale": "Records the automatic force prime performed once before the first requested multi-rank step; it is part of untimed warmup.",
+          "scope": "first multi-rank warmup run in pinned Toolkit 0.2",
+          "source": "Toolkit Core commit 331d6b2, nvalchemi.distributed.domain_parallel.DomainParallel.run.",
+          "units": "model evaluations before requested steps",
+          "value": 1
+        },
+        "electrostatics_validation_molecules_per_species": {
+          "name": "electrostatics_validation_molecules_per_species",
+          "rationale": "Checks the electrostatics settings on the smaller live-example periodic box.",
+          "scope": "fixed-charge PME-versus-Ewald check",
+          "source": "Part 1 domain campaign plan, declared before measurement.",
+          "units": "molecules/species",
+          "value": 128
+        },
+        "evaluation_energy_dtype_multi_rank": {
+          "name": "evaluation_energy_dtype_multi_rank",
+          "rationale": "Records the float64 energy returned by the pinned multi-rank AIMNet2 composite. Toolkit's distributed regression treats this float64 result as expected.",
+          "scope": "2/4-GPU fixed-input energy output",
+          "source": "Toolkit Core commit 331d6b2, test_distributed_pipeline_multigpu.py.",
+          "units": "Torch dtype name",
+          "value": "torch.float64"
+        },
+        "evaluation_energy_dtype_single_rank": {
+          "name": "evaluation_energy_dtype_single_rank",
+          "rationale": "Records the float32 energy returned by the pinned AIMNet2 composite when no cross-rank reduction is needed.",
+          "scope": "one-GPU fixed-input energy output",
+          "source": "Observed with the pinned Part 1 AIMNet2 composite.",
+          "units": "Torch dtype name",
+          "value": "torch.float32"
+        },
+        "evaluation_energy_tolerance_ev_per_atom": {
+          "name": "evaluation_energy_tolerance_ev_per_atom",
+          "rationale": "Checks agreement between two distributed rank layouts while normalizing the extensive energy difference by atom count.",
+          "scope": "4-GPU versus 2-GPU median-energy agreement",
+          "source": "Part 1 numerical acceptance limit declared before measurement.",
+          "units": "eV/atom",
+          "value": 0.0001
+        },
+        "evaluation_force_atol_ev_a": {
+          "name": "evaluation_force_atol_ev_a",
+          "rationale": "Provides the absolute term in the declared force agreement rule.",
+          "scope": "1-GPU versus multi-GPU componentwise force agreement",
+          "source": "Toolkit 0.2 AIMNet2-PME distributed-composite regression methodology.",
+          "units": "eV/\u00c5",
+          "value": 0.002
+        },
+        "evaluation_force_rtol": {
+          "name": "evaluation_force_rtol",
+          "rationale": "Allows the declared force limit to scale by component.",
+          "scope": "1-GPU versus multi-GPU componentwise force agreement",
+          "source": "Toolkit 0.2 AIMNet2-PME distributed-composite regression methodology.",
+          "units": "fraction",
+          "value": 0.01
+        },
+        "evaluation_pass_count": {
+          "name": "evaluation_pass_count",
+          "rationale": "Shows three raw pass times and their median without turning the short tutorial example into a long benchmark.",
+          "scope": "recorded 1/2/4-GPU evaluation",
+          "source": "Part 1 fixed-input domain evaluation plan.",
+          "units": "measured fixed-structure energy/force passes/case",
+          "value": 3
+        },
+        "evaluation_position_mic_tolerance_a": {
+          "name": "evaluation_position_mic_tolerance_a",
+          "rationale": "Allows only float32 roundoff from DomainParallel's automatic periodic wrapping while rejecting physical atomic motion through a minimum-image displacement check.",
+          "scope": "1/2/4-GPU fixed-input position invariance",
+          "source": "Part 1 numerical acceptance limit declared before measurement.",
+          "units": "\u00c5",
+          "value": 0.0001
+        },
+        "evaluation_warmup_count": {
+          "name": "evaluation_warmup_count",
+          "rationale": "Runs one untimed pass after partitioning so model initialization and the multi-rank force prime are outside the three shown times.",
+          "scope": "1/2/4-GPU initialization and warmup",
+          "source": "Part 1 fixed-input domain evaluation plan.",
+          "units": "fixed-structure energy/force passes/case",
+          "value": 1
+        },
+        "ewald_reference_accuracy": {
+          "name": "ewald_reference_accuracy",
+          "rationale": "Builds a direct Ewald reference with a tighter target than the production PME while keeping its estimated real-space cutoff below half the validation-box length.",
+          "scope": "fixed-charge Ewald reference",
+          "source": "Toolkit-Ops 0.4 estimate_ewald_parameters API.",
+          "units": "dimensionless solver target",
+          "value": 2e-05
+        },
+        "fixed_molecules_per_species": {
+          "name": "fixed_molecules_per_species",
+          "rationale": "Uses one 2 x 2 x 4 repeat of the checked base box for every GPU count so the short comparison performs the same scientific work.",
+          "scope": "recorded 1/2/4-GPU fixed-input evaluation",
+          "source": "Part 1 fixed-input domain evaluation plan.",
+          "units": "molecules/species",
+          "value": 2048
+        },
+        "live_molecules_per_species": {
+          "name": "live_molecules_per_species",
+          "rationale": "Keeps the live one-GPU DomainParallel example at 3,200 atoms while using the same checked 1:1 base box as the campaign.",
+          "scope": "live notebook API check",
+          "source": "Part 1 domain lesson design, declared before the recorded campaign.",
+          "units": "molecules/species",
+          "value": 128
+        },
+        "measured_model_evaluations_per_pass": {
+          "name": "measured_model_evaluations_per_pass",
+          "rationale": "Each measured DomainParallel run requests one BaseDynamics step after the one-time warmup.",
+          "scope": "equal-work 1/2/4-GPU measured passes",
+          "source": "Part 1 fixed-input domain evaluation plan.",
+          "units": "complete composed model evaluations/measured pass",
+          "value": 1
+        },
+        "nci_scale": {
+          "name": "nci_scale",
+          "rationale": "Selects the reference-scale AB, A, and B records.",
+          "scope": "phenol/N-methylacetamide molecular templates",
+          "source": "Packaged Part 1 NCI Atlas subset.",
+          "units": "R/Re",
+          "value": 1.0
+        },
+        "nci_system_id": {
+          "name": "nci_system_id",
+          "rationale": "Selects the same hydrogen-bonded phenol/N-methylacetamide source fragments used in Stage 3.",
+          "scope": "phenol/N-methylacetamide molecular templates",
+          "source": "Packaged Part 1 NCI Atlas subset.",
+          "units": "NCI Atlas system identifier",
+          "value": "1.041"
+        },
+        "packmol_precision_a": {
+          "name": "packmol_precision_a",
+          "rationale": "Keeps optimizer precision well below the placement tolerance and defines the validation allowance.",
+          "scope": "Packmol optimizer and periodic distance validation",
+          "source": "Part 1 Packmol starting-geometry methodology.",
+          "units": "\u00c5",
+          "value": 0.001
+        },
+        "packmol_seed": {
+          "name": "packmol_seed",
+          "rationale": "Reproduces the one saved 128-pair placement from which every larger deterministic supercell is built.",
+          "scope": "checked base-box Packmol placement",
+          "source": "Part 1 Packmol starting-geometry methodology.",
+          "units": "integer seed",
+          "value": 20260723
+        },
+        "packmol_tolerance_a": {
+          "name": "packmol_tolerance_a",
+          "rationale": "Sets the requested minimum intermolecular placement distance.",
+          "scope": "Packmol intermolecular placement",
+          "source": "Part 1 Packmol starting-geometry methodology.",
+          "units": "\u00c5",
+          "value": 2.0
+        },
+        "pme_accuracy": {
+          "name": "pme_accuracy",
+          "rationale": "Derives a mutually consistent PME splitting parameter and mesh for the declared real-space cutoff.",
+          "scope": "production PME parameter estimation",
+          "source": "Toolkit-Ops 0.4 estimate_pme_parameters API.",
+          "units": "dimensionless solver target",
+          "value": 0.0001
+        },
+        "pme_ewald_energy_tolerance_ev_per_atom": {
+          "name": "pme_ewald_energy_tolerance_ev_per_atom",
+          "rationale": "Checks equivalent periodic electrostatics routes per atom.",
+          "scope": "fixed-charge PME-versus-Ewald acceptance",
+          "source": "Part 1 acceptance limit declared before measurement.",
+          "units": "eV/atom",
+          "value": 0.0001
+        },
+        "pme_ewald_force_max_tolerance_ev_a": {
+          "name": "pme_ewald_force_max_tolerance_ev_a",
+          "rationale": "Limits the largest atomic force-vector difference between the two electrostatics routes.",
+          "scope": "fixed-charge PME-versus-Ewald acceptance",
+          "source": "Part 1 acceptance limit declared before measurement.",
+          "units": "eV/\u00c5",
+          "value": 0.005
+        },
+        "pme_mesh_safety_factor": {
+          "name": "pme_mesh_safety_factor",
+          "rationale": "Uses Toolkit-Ops' standard PME mesh estimate without reducing its recommended grid.",
+          "scope": "PME reciprocal-grid estimation",
+          "source": "Toolkit-Ops 0.4 estimate_pme_parameters API.",
+          "units": "dimensionless multiplier",
+          "value": 1.0
+        },
+        "pme_realspace_cutoff_a": {
+          "name": "pme_realspace_cutoff_a",
+          "rationale": "Uses the same real-space cutoff in the live, validation, and distributed periodic calculations.",
+          "scope": "PME real-space electrostatics",
+          "source": "Part 1 periodic electrostatics methodology.",
+          "units": "\u00c5",
+          "value": 12.0
+        },
+        "pme_spline_order": {
+          "name": "pme_spline_order",
+          "rationale": "Keeps charge interpolation identical across campaign cases.",
+          "scope": "PME charge interpolation",
+          "source": "Part 1 periodic electrostatics methodology.",
+          "units": "order",
+          "value": 4
+        }
+      },
+      "version": "1.10.0"
+    },
+    "domain_methodology_version": "1.10.0",
+    "repository_branch": null,
+    "repository_commit": "1459d9f60177b66ead089ad1b2e57cb2202204ae",
+    "repository_dirty": false,
+    "repository_required_paths": [
+      "scripts/part1_domain_run.py",
+      "part-1-scalable-atomistic-workflows/aux/domain/config.py"
+    ],
+    "repository_root": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824",
+    "repository_tree": "6a17d772f718414d4afaea561970975015c2d2a6",
+    "runner": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/scripts/part1_domain_run.py",
+    "runner_file": {
+      "path": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/scripts/part1_domain_run.py",
+      "sha256": "dd18ea7445f9833c07b65992be5ec650a2bedacafdc81fb18d5b2d5c4d0d7e69",
+      "size_bytes": 87079
+    },
+    "runner_sha256": "dd18ea7445f9833c07b65992be5ec650a2bedacafdc81fb18d5b2d5c4d0d7e69",
+    "runtime_software": {
+      "distribution_versions": {
+        "aimnet": "0.2.0",
+        "nvalchemi-toolkit": "0.2.0",
+        "nvalchemi-toolkit-ops": "0.4.0",
+        "nvidia-physicsnemo": "2.1.1"
+      },
+      "python_executable": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-conda-8ae63863c45c8f84d3a7ec12a179708a0450ff3d/bin/python3.12",
+      "python_prefix": "/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db",
+      "python_version": "3.12.13",
+      "torch_cuda_version": "13.0",
+      "torch_version": "2.12.0+cu130"
+    },
+    "toolkit_core_commit": "331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409",
+    "toolkit_core_direct_url_commit": "331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409",
+    "toolkit_core_git_commit": "331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409",
+    "toolkit_core_source_file": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/__init__.py",
+    "toolkit_core_source_file_sha256": "671b2b7618c20b53a85316c6b28bd1112b173464b8ce177b5c2c9a9e78785f7d",
+    "toolkit_core_source_root": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409",
+    "toolkit_ops_commit": "e8e7a7464f6745277a156a3d6f433d06b58c60e3",
+    "toolkit_ops_direct_url_commit": "e8e7a7464f6745277a156a3d6f433d06b58c60e3",
+    "toolkit_ops_git_commit": "e8e7a7464f6745277a156a3d6f433d06b58c60e3",
+    "toolkit_ops_source_file": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-ops-e8e7a7464f6745277a156a3d6f433d06b58c60e3/nvalchemiops/__init__.py",
+    "toolkit_ops_source_file_sha256": "d6a47a6e5bf964122641359dad7e45b262e34427c1759b29c93ee801c80cce80",
+    "toolkit_ops_source_root": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-ops-e8e7a7464f6745277a156a3d6f433d06b58c60e3",
+    "toolkit_ops_version": "0.4.0",
+    "toolkit_version": "0.2.0"
+  },
+  "stage": "complete",
+  "status": "complete",
+  "success": true,
+  "torch_cuda_version": "13.0",
+  "torch_version": "2.12.0+cu130",
+  "warmup_maximum_minimum_image_displacement_a": 5.3947966093944364e-06
+}

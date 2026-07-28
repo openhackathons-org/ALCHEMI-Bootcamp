@@ -99,7 +99,7 @@ ENV LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packag
 # Bake tutorial content into the image so a `docker save | docker load`
 # → `docker run` (no bind-mount) still works. Compose uses selective
 # bind-mounts which shadow these at runtime.
-COPY .dockerignore .gitignore ./
+COPY .dockerignore .gitattributes .gitignore ./
 COPY README.md LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md RUNTIME_SNAPSHOT.md ./
 COPY TUTORIAL_DESIGN_PRINCIPLES.md ALCHEMI_TUTORIAL_PRINCIPLES.md TOOLKIT_API_CURRICULUM.md ./
 COPY build/Dockerfile build/docker-compose.yml build/environment.yml ./build/

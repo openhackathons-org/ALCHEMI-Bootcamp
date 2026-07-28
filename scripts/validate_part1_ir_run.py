@@ -519,18 +519,22 @@ def expected_reference_bundle_details(
         expected_world_sizes=DOMAIN_METHODOLOGY.campaign_world_sizes,
     )
     if domain_view.available:
-        domain_source = require_mapping(
-            require_mapping(
-                domain_view.manifest.get("identity"),
-                "domain bundle identity",
-            ).get("source"),
-            "domain bundle source identity",
+        domain_job_records = require_mapping(
+            domain_view.manifest.get("job_records"),
+            "domain bundle job records",
+        )
+        reference_world_size = str(DOMAIN_METHODOLOGY.campaign_world_sizes[0])
+        reference_job = require_mapping(
+            domain_job_records.get(reference_world_size),
+            f"domain bundle {reference_world_size}-GPU job record",
         )
         validate_domain_producer_hashes(
-            domain_source.get("producer_files_sha256"),
+            reference_job.get("producer_files"),
             source_root=source_root,
         )
-        expected["domain_decomposition_bundle"] = domain_view.bundle_record
+        expected["domain_decomposition_bundle"] = dict(
+            require_mapping(domain_view.bundle_record, "domain bundle record")
+        )
     return expected
 
 

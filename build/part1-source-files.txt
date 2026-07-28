@@ -7,6 +7,7 @@
 # Keep one repository-relative POSIX path per line. Blank lines and comments
 # are ignored. The manifest includes itself so every report records its identity.
 .dockerignore
+.gitattributes
 .gitignore
 ALCHEMI_TUTORIAL_PRINCIPLES.md
 CHANGELOG.md

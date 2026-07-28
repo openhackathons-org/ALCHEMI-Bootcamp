@@ -49,6 +49,10 @@ development failures belong beside the saved results they describe.
   single-GPU call is labeled as an API demonstration without decomposition;
   checked fixed-input 1/2/4-H100 energy/force passes are loaded separately when
   available.
+- Installed the checked 51,200-atom `DomainParallel` result set. All required
+  energy, force, periodic-position, checksum, and PME-versus-Ewald checks pass;
+  the recorded one-, two-, and four-H100 median call times are 0.268, 0.274,
+  and 0.229 seconds.
 - Shortened the live molecular-dynamics segment for workshop pacing while
   keeping its qualitative limits explicit.
 - Applied one notebook visual system for the hero, lesson summary, stage cards,
