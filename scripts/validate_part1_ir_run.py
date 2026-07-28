@@ -189,6 +189,38 @@ NCI_METRIC_COLUMNS = (
     *NCI_COMPARISONS,
     "ensemble spread",
 )
+DOMAIN_BASE_BOX_RELATIVE_DIR = (
+    "part-1-scalable-atomistic-workflows/data/domain_decomposition/"
+    "prebuilt_base_box"
+)
+DOMAIN_IDENTITY_ARRAYS = (
+    "source_atom_id",
+    "molecule_id",
+    "molecule_component",
+    "molecule_kind",
+    "template_atom_index",
+)
+DOMAIN_SOURCE_METADATA = (
+    "charge",
+    "construction_density_g_cm3",
+    "packmol_precision_a",
+    "nci_system_id",
+    "nci_scale",
+    "packmol_seed",
+    "packmol_tolerance_a",
+    "periodic_min_distance_lower_bound_a",
+    "periodic_min_distance_a",
+    "system",
+    "pair_count",
+    "molecules_per_species",
+    "count_definition",
+)
+DOMAIN_POSITION_ATOL_A = 3.0e-6
+DOMAIN_CELL_ATOL_A = 5.0e-7
+DOMAIN_MASS_ATOL_U = 1.0e-8
+DOMAIN_ENERGY_ATOL_EV = 1.0e-6
+DOMAIN_FORCE_ATOL_EV_A = 1.0e-6
+DOMAIN_CHARGE_SUM_ATOL_E = 2.0e-5
 
 REQUIRED_FILES = (
     RUN_MANIFEST_NAME,
@@ -244,10 +276,13 @@ DERIVED_TOPOLOGY_MODE_ATOL = 1.0e-10
 
 REQUIRED_DIRECTORIES = ("water_ir_relaxed.zarr",)
 REQUIRED_OUTPUTS = REQUIRED_FILES + REQUIRED_DIRECTORIES
-BUNDLE_SOURCE_FILES = (
-    "alchemi-water-ir-source.ipynb",
-    "run_notebook_no_timeout.py",
-)
+BUNDLE_SOURCE_REPOSITORY_PATHS = {
+    "alchemi-water-ir-source.ipynb": (
+        "part-1-scalable-atomistic-workflows/alchemi-water-ir.ipynb"
+    ),
+    "run_notebook_no_timeout.py": "scripts/run_notebook_no_timeout.py",
+}
+BUNDLE_SOURCE_FILES = tuple(BUNDLE_SOURCE_REPOSITORY_PATHS)
 RUNTIME_CHECK_NAME = "part1-runtime.json"
 D3_CACHE_REPORT_NAME = "part1-d3-cache.json"
 TIMING_REPORT_NAME = "notebook-timings.json"
@@ -365,6 +400,238 @@ def validate_manifest_inventory(
     return {
         "file_count": len(actual),
         "total_bytes": sum(int(record["bytes"]) for record in actual.values()),
+    }
+
+
+def validate_domain_box_output(
+    path: Path,
+    *,
+    source_root: Path,
+    run_manifest: Mapping[str, object],
+) -> dict[str, object]:
+    """Validate the evaluated periodic box against its checked input and report."""
+
+    from ase.io import read as ase_read
+
+    frames = ase_read(path, index=":")
+    if not isinstance(frames, list) or len(frames) != 1:
+        raise ValueError("evaluated domain box must contain exactly one frame")
+    evaluated = frames[0]
+
+    base_dir = source_root / DOMAIN_BASE_BOX_RELATIVE_DIR
+    base_manifest = require_mapping(
+        json.loads((base_dir / "manifest.json").read_text(encoding="utf-8")),
+        "prebuilt domain-box manifest",
+    )
+    structure_record = require_mapping(
+        base_manifest.get("structure"),
+        "prebuilt domain-box manifest structure",
+    )
+    expected_atoms = (
+        DOMAIN_METHODOLOGY.live_molecules_per_species
+        * DOMAIN_METHODOLOGY.atoms_per_composition_unit
+    )
+    if structure_record.get("atom_count") != expected_atoms:
+        raise RuntimeError("prebuilt domain-box atom count differs from methodology")
+    source = ase_read(base_dir / "structure.extxyz")
+    if len(source) != expected_atoms or len(evaluated) != expected_atoms:
+        raise RuntimeError("evaluated domain box has the wrong atom count")
+    if not np.array_equal(evaluated.numbers, source.numbers):
+        raise RuntimeError("evaluated domain box changed the atomic numbers")
+
+    source_cell = np.asarray(source.cell, dtype=float)
+    evaluated_cell = np.asarray(evaluated.cell, dtype=float)
+    if (
+        evaluated_cell.shape != (3, 3)
+        or not np.isfinite(evaluated_cell).all()
+        or abs(float(np.linalg.det(evaluated_cell))) <= 0.0
+        or not np.array_equal(evaluated.pbc, np.array([True, True, True]))
+    ):
+        raise RuntimeError("evaluated domain box has invalid periodic geometry")
+    cell_max_abs_difference = float(np.max(np.abs(evaluated_cell - source_cell)))
+    if cell_max_abs_difference > DOMAIN_CELL_ATOL_A:
+        raise RuntimeError("evaluated domain box changed the periodic cell")
+
+    source_positions = np.asarray(source.positions, dtype=float)
+    evaluated_positions = np.asarray(evaluated.positions, dtype=float)
+    if not np.isfinite(evaluated_positions).all():
+        raise RuntimeError("evaluated domain box contains non-finite positions")
+    position_max_abs_difference = float(
+        np.max(np.abs(evaluated_positions - source_positions))
+    )
+    if position_max_abs_difference > DOMAIN_POSITION_ATOL_A:
+        raise RuntimeError("evaluated domain box changed the input coordinates")
+
+    for name in DOMAIN_IDENTITY_ARRAYS:
+        observed = evaluated.arrays.get(name)
+        expected = source.arrays.get(name)
+        if (
+            observed is None
+            or expected is None
+            or observed.shape != (expected_atoms,)
+            or not np.issubdtype(observed.dtype, np.integer)
+            or not np.array_equal(observed, expected)
+        ):
+            raise RuntimeError(
+                f"evaluated domain box changed identity array {name!r}"
+            )
+    if "masses" not in evaluated.arrays:
+        raise RuntimeError("evaluated domain box is missing saved masses")
+    evaluated_masses = np.asarray(evaluated.get_masses(), dtype=float)
+    source_masses = np.asarray(source.get_masses(), dtype=float)
+    expected_saved_masses = source_masses.astype(np.float32).astype(np.float64)
+    mass_max_abs_difference = float(
+        np.max(np.abs(evaluated_masses - expected_saved_masses))
+    )
+    if (
+        evaluated_masses.shape != (expected_atoms,)
+        or not np.isfinite(evaluated_masses).all()
+        or np.any(evaluated_masses <= 0.0)
+        or mass_max_abs_difference > DOMAIN_MASS_ATOL_U
+    ):
+        raise RuntimeError("evaluated domain box has invalid masses")
+
+    for name in DOMAIN_SOURCE_METADATA:
+        observed = evaluated.info.get(name)
+        expected = source.info.get(name)
+        if isinstance(expected, (int, float)) and not isinstance(expected, bool):
+            if (
+                isinstance(observed, bool)
+                or not isinstance(observed, (int, float))
+                or not np.isclose(
+                    float(observed),
+                    float(expected),
+                    rtol=0.0,
+                    atol=1.0e-12,
+                )
+            ):
+                raise RuntimeError(
+                    f"evaluated domain box changed source metadata {name!r}"
+                )
+        elif observed != expected:
+            raise RuntimeError(
+                f"evaluated domain box changed source metadata {name!r}"
+            )
+    if evaluated.info.get("label") != "domain-box":
+        raise RuntimeError("evaluated domain box has the wrong result label")
+
+    results = require_mapping(
+        getattr(evaluated.calc, "results", None),
+        "evaluated domain-box calculator results",
+    )
+    missing_results = sorted({"energy", "forces", "charges"}.difference(results))
+    if missing_results:
+        raise ValueError(
+            f"evaluated domain box is missing results: {missing_results}"
+        )
+    energy_values = np.asarray(results["energy"], dtype=float)
+    forces = np.asarray(results["forces"], dtype=float)
+    charges = np.asarray(results["charges"], dtype=float)
+    if energy_values.size != 1 or not np.isfinite(energy_values).all():
+        raise ValueError("evaluated domain-box energy must be one finite scalar")
+    if forces.shape != (expected_atoms, 3) or not np.isfinite(forces).all():
+        raise ValueError("evaluated domain-box forces have invalid values or shape")
+    if charges.shape != (expected_atoms,) or not np.isfinite(charges).all():
+        raise ValueError("evaluated domain-box charges have invalid values or shape")
+
+    energy_ev = float(energy_values.reshape(-1)[0])
+    force_max_ev_a = float(np.linalg.norm(forces, axis=1).max())
+    charge_sum_e = float(charges.sum(dtype=np.float64))
+    charge_target_e = float(evaluated.info["charge"])
+    checks = require_mapping(run_manifest.get("checks"), "run manifest checks")
+    if checks.get("domain_world_size") != 1:
+        raise RuntimeError("run manifest domain world size is not one")
+    if checks.get("domain_spatially_decomposed") is not False:
+        raise RuntimeError("live domain output was marked spatially decomposed")
+    if checks.get("domain_atom_count") != expected_atoms:
+        raise RuntimeError("run manifest domain atom count is incorrect")
+    if checks.get("domain_charge_dtype") != "float32":
+        raise RuntimeError("run manifest domain charge dtype is incorrect")
+    if checks.get("domain_charge_finite") is not True:
+        raise RuntimeError("run manifest reports non-finite domain charges")
+
+    def finite_check(name: str) -> float:
+        value = checks.get(name)
+        if (
+            isinstance(value, bool)
+            or not isinstance(value, (int, float))
+            or not np.isfinite(value)
+        ):
+            raise ValueError(f"run manifest check {name!r} must be finite")
+        return float(value)
+
+    recorded_energy = finite_check("domain_energy_eV")
+    recorded_force_max = finite_check("domain_force_max_eV_A")
+    recorded_charge_target = finite_check("domain_charge_target_e")
+    recorded_charge_sum = finite_check("domain_charge_sum_e")
+    recorded_charge_residual = finite_check("domain_charge_residual_e")
+    recorded_charge_residual_per_atom = finite_check(
+        "domain_charge_abs_residual_per_atom"
+    )
+    if not np.isclose(
+        energy_ev,
+        recorded_energy,
+        rtol=0.0,
+        atol=DOMAIN_ENERGY_ATOL_EV,
+    ):
+        raise RuntimeError("evaluated domain-box energy differs from the run manifest")
+    if not np.isclose(
+        force_max_ev_a,
+        recorded_force_max,
+        rtol=0.0,
+        atol=DOMAIN_FORCE_ATOL_EV_A,
+    ):
+        raise RuntimeError(
+            "evaluated domain-box maximum force differs from the run manifest"
+        )
+    if not np.isclose(
+        charge_target_e,
+        recorded_charge_target,
+        rtol=0.0,
+        atol=1.0e-12,
+    ):
+        raise RuntimeError(
+            "evaluated domain-box charge target differs from the run manifest"
+        )
+    if not np.isclose(
+        charge_sum_e,
+        recorded_charge_sum,
+        rtol=0.0,
+        atol=DOMAIN_CHARGE_SUM_ATOL_E,
+    ):
+        raise RuntimeError(
+            "evaluated domain-box charge sum differs from the run manifest"
+        )
+    charge_residual_e = charge_sum_e - charge_target_e
+    if not np.isclose(
+        charge_residual_e,
+        recorded_charge_residual,
+        rtol=0.0,
+        atol=DOMAIN_CHARGE_SUM_ATOL_E,
+    ):
+        raise RuntimeError(
+            "evaluated domain-box charge residual differs from the run manifest"
+        )
+    if not np.isclose(
+        abs(charge_residual_e) / expected_atoms,
+        recorded_charge_residual_per_atom,
+        rtol=0.0,
+        atol=DOMAIN_CHARGE_SUM_ATOL_E / expected_atoms,
+    ):
+        raise RuntimeError(
+            "evaluated domain-box per-atom charge residual differs from the run manifest"
+        )
+
+    return {
+        "atoms": expected_atoms,
+        "energy_eV": energy_ev,
+        "force_max_eV_A": force_max_ev_a,
+        "charge_sum_e": charge_sum_e,
+        "charge_target_e": charge_target_e,
+        "position_max_abs_difference_A": position_max_abs_difference,
+        "cell_max_abs_difference_A": cell_max_abs_difference,
+        "mass_max_abs_difference_u": mass_max_abs_difference,
+        "identity_arrays": list(DOMAIN_IDENTITY_ARRAYS),
     }
 
 
@@ -1459,6 +1726,25 @@ def validate_packaged_runtime_check(
         "packmol_check": dict(packmol_check),
         "toolkit_ops_cuda_check": dict(ops_check),
     }
+
+
+def validate_packaged_source_copies(
+    bundle_root: Path,
+    source_files_sha256: Mapping[str, object],
+) -> dict[str, str]:
+    """Match packaged source copies to the files checked before execution."""
+
+    checked: dict[str, str] = {}
+    for packaged_name, repository_path in BUNDLE_SOURCE_REPOSITORY_PATHS.items():
+        observed = sha256_file(bundle_root / packaged_name)
+        expected = source_files_sha256.get(repository_path)
+        if observed != expected:
+            raise RuntimeError(
+                "packaged source SHA-256 does not match runtime source: "
+                f"{packaged_name} != {repository_path}"
+            )
+        checked[packaged_name] = observed
+    return checked
 
 
 def validate_d3_cache_report(path: Path) -> dict[str, object]:
@@ -3818,6 +4104,19 @@ def main() -> int:
         bundle_root / RUNTIME_CHECK_NAME,
         source_root=source_root,
     )
+    source_hashes = dict(
+        require_mapping(
+            require_mapping(
+                packaged_runtime_check.get("source"),
+                "packaged runtime source",
+            ).get("files_sha256"),
+            "packaged runtime source file SHA-256 values",
+        )
+    )
+    packaged_source_hashes = validate_packaged_source_copies(
+        bundle_root,
+        source_hashes,
+    )
     d3_cache_report = validate_d3_cache_report(bundle_root / D3_CACHE_REPORT_NAME)
     missing_files = [
         name for name in REQUIRED_FILES if not (output_dir / name).is_file()
@@ -3856,16 +4155,6 @@ def main() -> int:
         run_manifest,
         warmup_steps=warmup_steps,
         production_steps=production_steps,
-    )
-
-    source_hashes = dict(
-        require_mapping(
-            require_mapping(
-                packaged_runtime_check.get("source"),
-                "packaged runtime source",
-            ).get("files_sha256"),
-            "packaged runtime source file SHA-256 values",
-        )
     )
 
     reference_artifacts = {}
@@ -3965,6 +4254,11 @@ def main() -> int:
             expected_frames=production_steps,
             expected_dt_fs=dt_fs,
         ),
+        "domain_box_output": validate_domain_box_output(
+            output_dir / "domain_box_evaluated.extxyz",
+            source_root=source_root,
+            run_manifest=run_manifest,
+        ),
         "nci_outputs": validate_nci_outputs(
             output_dir / "nci_interaction_curves.csv",
             output_dir / "nci_interaction_metrics.csv",
@@ -4001,6 +4295,7 @@ def main() -> int:
         "reference_artifacts": reference_artifacts,
         "runtime": calculation_runtime,
         "packaged_runtime_check": packaged_runtime_check,
+        "packaged_source_sha256": packaged_source_hashes,
         "d3_cache_report": d3_cache_report,
         "notebook_timing": notebook_timing,
         "review_validation_runtime": (

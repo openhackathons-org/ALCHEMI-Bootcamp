@@ -15,7 +15,8 @@ import numpy as np
 import pandas as pd
 import pytest
 from ase import Atoms
-from ase.io import write
+from ase.calculators.singlepoint import SinglePointCalculator
+from ase.io import read, write
 
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -726,13 +727,56 @@ def test_execution_runner_is_hashed_and_required_in_bundle() -> None:
     assert VALIDATOR.SOURCE_PATHS == VALIDATOR.load_source_paths(ROOT)
     assert VALIDATOR.SOURCE_MANIFEST_RELATIVE_PATH in VALIDATOR.SOURCE_PATHS
     assert "scripts/run_notebook_no_timeout.py" in VALIDATOR.SOURCE_PATHS
-    assert "run_notebook_no_timeout.py" in VALIDATOR.BUNDLE_SOURCE_FILES
+    assert VALIDATOR.BUNDLE_SOURCE_REPOSITORY_PATHS == {
+        "alchemi-water-ir-source.ipynb": (
+            "part-1-scalable-atomistic-workflows/alchemi-water-ir.ipynb"
+        ),
+        "run_notebook_no_timeout.py": "scripts/run_notebook_no_timeout.py",
+    }
+    assert VALIDATOR.BUNDLE_SOURCE_FILES == tuple(
+        VALIDATOR.BUNDLE_SOURCE_REPOSITORY_PATHS
+    )
     assert VALIDATOR.RUNTIME_CHECK_NAME == "part1-runtime.json"
     assert VALIDATOR.RUNTIME_CHECK_NAME in VALIDATOR.BUNDLE_REQUIRED_FILES
     assert VALIDATOR.D3_CACHE_REPORT_NAME == "part1-d3-cache.json"
     assert VALIDATOR.D3_CACHE_REPORT_NAME in VALIDATOR.BUNDLE_REQUIRED_FILES
     assert VALIDATOR.TIMING_REPORT_NAME == "notebook-timings.json"
     assert VALIDATOR.TIMING_REPORT_NAME in VALIDATOR.BUNDLE_REQUIRED_FILES
+
+
+@pytest.mark.parametrize(
+    "tampered_name",
+    tuple(VALIDATOR.BUNDLE_SOURCE_REPOSITORY_PATHS),
+)
+def test_packaged_source_copies_must_match_runtime_hashes(
+    tmp_path: Path,
+    tampered_name: str,
+) -> None:
+    source_hashes: dict[str, str] = {}
+    for packaged_name, repository_path in (
+        VALIDATOR.BUNDLE_SOURCE_REPOSITORY_PATHS.items()
+    ):
+        source = ROOT / repository_path
+        shutil.copy2(source, tmp_path / packaged_name)
+        source_hashes[repository_path] = VALIDATOR.sha256_file(source)
+
+    assert VALIDATOR.validate_packaged_source_copies(
+        tmp_path,
+        source_hashes,
+    ) == {
+        packaged_name: source_hashes[repository_path]
+        for packaged_name, repository_path in (
+            VALIDATOR.BUNDLE_SOURCE_REPOSITORY_PATHS.items()
+        )
+    }
+
+    with (tmp_path / tampered_name).open("ab") as stream:
+        stream.write(b"\nchanged after packaging\n")
+    with pytest.raises(RuntimeError, match="packaged source SHA-256"):
+        VALIDATOR.validate_packaged_source_copies(
+            tmp_path,
+            source_hashes,
+        )
 
 
 def write_timing_fixture(
@@ -931,6 +975,114 @@ def test_stage_7_saved_tables_are_required_outputs() -> None:
         "part1_results_summary.csv",
     } <= set(VALIDATOR.REQUIRED_FILES)
     assert VALIDATOR.REQUIRED_DIRECTORIES == ("water_ir_relaxed.zarr",)
+
+
+def write_domain_box_fixture(
+    tmp_path: Path,
+) -> tuple[Path, Atoms, dict[str, object]]:
+    source_path = (
+        ROOT
+        / VALIDATOR.DOMAIN_BASE_BOX_RELATIVE_DIR
+        / "structure.extxyz"
+    )
+    atoms = read(source_path)
+    atoms.set_positions(np.asarray(atoms.positions, dtype=np.float32))
+    atoms.set_cell(np.asarray(atoms.cell.array, dtype=np.float32))
+    atoms.set_masses(np.asarray(atoms.get_masses(), dtype=np.float32))
+    atoms.info["label"] = "domain-box"
+    forces = np.zeros((len(atoms), 3), dtype=np.float32)
+    forces[0] = np.array([1.0, 2.0, 2.0], dtype=np.float32)
+    charges = np.linspace(-0.25, 0.25, len(atoms), dtype=np.float32)
+    energy_ev = -1_937_733.375
+    atoms.calc = SinglePointCalculator(
+        atoms,
+        energy=energy_ev,
+        forces=forces,
+        charges=charges,
+    )
+    path = tmp_path / "domain_box_evaluated.extxyz"
+    write(path, atoms, format="extxyz")
+
+    charge_target_e = float(atoms.info["charge"])
+    charge_sum_e = float(charges.sum(dtype=np.float64))
+    charge_residual_e = charge_sum_e - charge_target_e
+    run_manifest: dict[str, object] = {
+        "checks": {
+            "domain_world_size": 1,
+            "domain_spatially_decomposed": False,
+            "domain_atom_count": len(atoms),
+            "domain_charge_dtype": "float32",
+            "domain_charge_finite": True,
+            "domain_energy_eV": energy_ev,
+            "domain_force_max_eV_A": 3.0,
+            "domain_charge_target_e": charge_target_e,
+            "domain_charge_sum_e": charge_sum_e,
+            "domain_charge_residual_e": charge_residual_e,
+            "domain_charge_abs_residual_per_atom": (
+                abs(charge_residual_e) / len(atoms)
+            ),
+        }
+    }
+    return path, atoms, run_manifest
+
+
+def test_domain_box_output_round_trip_is_validated(tmp_path: Path) -> None:
+    path, _, run_manifest = write_domain_box_fixture(tmp_path)
+
+    result = VALIDATOR.validate_domain_box_output(
+        path,
+        source_root=ROOT,
+        run_manifest=run_manifest,
+    )
+
+    assert result["atoms"] == 3_200
+    assert result["force_max_eV_A"] == pytest.approx(3.0)
+    assert result["identity_arrays"] == list(VALIDATOR.DOMAIN_IDENTITY_ARRAYS)
+
+
+@pytest.mark.parametrize(
+    ("tamper", "message"),
+    [
+        ("second_frame", "exactly one frame"),
+        ("missing_charges", "missing results"),
+        ("identity", "identity array"),
+        ("position", "changed the input coordinates"),
+        ("manifest_energy", "energy differs"),
+    ],
+)
+def test_domain_box_output_rejects_incomplete_or_changed_results(
+    tmp_path: Path,
+    tamper: str,
+    message: str,
+) -> None:
+    path, atoms, run_manifest = write_domain_box_fixture(tmp_path)
+    if tamper == "second_frame":
+        write(path, [atoms, atoms], format="extxyz")
+    elif tamper == "missing_charges":
+        results = dict(atoms.calc.results)
+        results.pop("charges")
+        atoms.calc = SinglePointCalculator(atoms, **results)
+        write(path, atoms, format="extxyz")
+    elif tamper == "identity":
+        atoms.arrays["source_atom_id"][0] = len(atoms)
+        atoms.calc = SinglePointCalculator(atoms, **atoms.calc.results)
+        write(path, atoms, format="extxyz")
+    elif tamper == "position":
+        results = dict(atoms.calc.results)
+        atoms.positions[0, 0] += 1.0e-3
+        atoms.calc = SinglePointCalculator(atoms, **results)
+        write(path, atoms, format="extxyz")
+    elif tamper == "manifest_energy":
+        run_manifest["checks"]["domain_energy_eV"] += 1.0
+    else:
+        raise AssertionError(f"unknown tamper case: {tamper}")
+
+    with pytest.raises((ValueError, RuntimeError), match=message):
+        VALIDATOR.validate_domain_box_output(
+            path,
+            source_root=ROOT,
+            run_manifest=run_manifest,
+        )
 
 
 def packaged_runtime_check() -> dict[str, object]:
