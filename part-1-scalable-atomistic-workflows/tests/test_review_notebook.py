@@ -7,7 +7,6 @@ from pathlib import Path
 import nbformat
 import pytest
 
-
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts" / "review_part1_ir_executed_notebook.py"
 SPEC = importlib.util.spec_from_file_location("review_part1_notebook", SCRIPT)
@@ -248,15 +247,11 @@ def test_local_markdown_references_are_rebased_for_release_copy(
             / "assets/images/banner_candidates"
             / "water-ir-v2-04-trajectory-to-spectrum.png"
         ),
-        "COMPUTE_LAB_RUNBOOK.md": (
-            source_dir / "COMPUTE_LAB_RUNBOOK.md"
-        ),
+        "COMPUTE_LAB_RUNBOOK.md": (source_dir / "COMPUTE_LAB_RUNBOOK.md"),
         "../part-2-batched-adsorption-toolkit/README.md": (
             tmp_path / "part-2-batched-adsorption-toolkit/README.md"
         ),
-        "../THIRD_PARTY_NOTICES.md": (
-            tmp_path / "THIRD_PARTY_NOTICES.md"
-        ),
+        "../THIRD_PARTY_NOTICES.md": (tmp_path / "THIRD_PARTY_NOTICES.md"),
     }
     for target in local_targets.values():
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -285,12 +280,10 @@ def test_local_markdown_references_are_rebased_for_release_copy(
 
     assert replacements == {
         "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png": (
-            "../../assets/images/banner_candidates/"
-            "water-ir-v2-04-trajectory-to-spectrum.png"
+            "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png"
         ),
         "COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set": (
-            "../../COMPUTE_LAB_RUNBOOK.md"
-            "#5-build-and-check-the-recorded-result-set"
+            "../../COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set"
         ),
         "../part-2-batched-adsorption-toolkit/README.md": (
             "../../../part-2-batched-adsorption-toolkit/README.md"
@@ -298,12 +291,31 @@ def test_local_markdown_references_are_rebased_for_release_copy(
         "../THIRD_PARTY_NOTICES.md": "../../../THIRD_PARTY_NOTICES.md",
     }
     source = reviewed.cells[0].source
-    assert "../../assets/images/banner_candidates/" in source
+    assert "assets/images/banner_candidates/" in source
     assert "../../COMPUTE_LAB_RUNBOOK.md#5-" in source
     assert "../../../part-2-batched-adsorption-toolkit/README.md" in source
     assert "../../../THIRD_PARTY_NOTICES.md" in source
     assert "attachment:preview.png" in source
     assert "https://example.com" in source
+
+
+def test_local_notebook_assets_are_copied_into_release_directory(
+    tmp_path: Path,
+) -> None:
+    source_dir = tmp_path / "part-1"
+    output_dir = tmp_path / "release"
+    relative = Path(MODULE.PACKAGED_NOTEBOOK_ASSETS[0])
+    source = source_dir / relative
+    source.parent.mkdir(parents=True)
+    source.write_bytes(b"banner bytes")
+
+    staged = MODULE.stage_local_notebook_assets(
+        source_dir=source_dir,
+        output_dir=output_dir,
+    )
+
+    assert staged == {relative.as_posix(): relative.as_posix()}
+    assert (output_dir / relative).read_bytes() == b"banner bytes"
 
 
 def test_package_review_html_support_copies_and_checksums_official_files(
@@ -321,6 +333,9 @@ def test_package_review_html_support_copies_and_checksums_official_files(
         "</script>\n",
         encoding="utf-8",
     )
+    banner = release / MODULE.PACKAGED_NOTEBOOK_ASSETS[0]
+    banner.parent.mkdir(parents=True)
+    banner.write_bytes(b"review banner")
     existing = release / "notebook-review-validation.json"
     existing.write_text("{}\n", encoding="utf-8")
     checksums = release / "SHA256SUMS-reviewed"
@@ -343,6 +358,7 @@ def test_package_review_html_support_copies_and_checksums_official_files(
         html.name: MODULE.sha256_file(html),
         copied_script.name: MODULE.sha256_file(copied_script),
         copied_license.name: MODULE.sha256_file(copied_license),
+        MODULE.PACKAGED_NOTEBOOK_ASSETS[0]: MODULE.sha256_file(banner),
     }
     entries = MODULE._read_checksum_index(checksums)
     assert entries == {
@@ -350,6 +366,7 @@ def test_package_review_html_support_copies_and_checksums_official_files(
         copied_license.name: MODULE.sha256_file(copied_license),
         copied_script.name: MODULE.sha256_file(copied_script),
         existing.name: MODULE.sha256_file(existing),
+        MODULE.PACKAGED_NOTEBOOK_ASSETS[0]: MODULE.sha256_file(banner),
     }
     MODULE.validate_review_html_bundle(html, checksums)
 
@@ -359,9 +376,10 @@ def test_package_review_html_support_copies_and_checksums_official_files(
     [
         MODULE.OVITO_WIDGET_SCRIPT_NAME,
         MODULE.OVITO_WIDGET_LICENSE_NAME,
+        MODULE.PACKAGED_NOTEBOOK_ASSETS[0],
     ],
 )
-def test_review_html_validation_catches_missing_ovito_support(
+def test_review_html_validation_catches_missing_release_support(
     tmp_path: Path,
     missing_name: str,
 ) -> None:
@@ -373,6 +391,9 @@ def test_review_html_validation_catches_missing_ovito_support(
         '{"model_module":"jupyter-ovito"}\n',
         encoding="utf-8",
     )
+    banner = release / MODULE.PACKAGED_NOTEBOOK_ASSETS[0]
+    banner.parent.mkdir(parents=True)
+    banner.write_bytes(b"review banner")
     checksums = release / "SHA256SUMS-reviewed"
     MODULE.package_review_html_support(
         html,

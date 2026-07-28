@@ -6,13 +6,17 @@ import os
 from pathlib import Path
 from urllib.parse import SplitResult, urlsplit, urlunsplit
 
-
-LOCAL_NOTEBOOK_REFERENCES = (
+PACKAGED_NOTEBOOK_ASSETS = (
     "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png",
+)
+
+LOCAL_NOTEBOOK_LINKS = (
     "COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set",
     "../part-2-batched-adsorption-toolkit/README.md",
     "../THIRD_PARTY_NOTICES.md",
 )
+
+LOCAL_NOTEBOOK_REFERENCES = (*PACKAGED_NOTEBOOK_ASSETS, *LOCAL_NOTEBOOK_LINKS)
 
 
 def _local_parts(reference: str) -> SplitResult:
@@ -41,11 +45,19 @@ def local_reference_replacements(
             raise FileNotFoundError(
                 f"local notebook reference does not exist: {reference!r}"
             )
-        relative_path = Path(os.path.relpath(target, output_dir)).as_posix()
+        if reference in PACKAGED_NOTEBOOK_ASSETS:
+            relative_path = parts.path
+        else:
+            relative_path = Path(os.path.relpath(target, output_dir)).as_posix()
         replacements[reference] = urlunsplit(
             ("", "", relative_path, parts.query, parts.fragment)
         )
     return replacements
 
 
-__all__ = ["LOCAL_NOTEBOOK_REFERENCES", "local_reference_replacements"]
+__all__ = [
+    "LOCAL_NOTEBOOK_LINKS",
+    "LOCAL_NOTEBOOK_REFERENCES",
+    "PACKAGED_NOTEBOOK_ASSETS",
+    "local_reference_replacements",
+]

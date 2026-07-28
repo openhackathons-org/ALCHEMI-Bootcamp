@@ -5,28 +5,27 @@ from __future__ import annotations
 
 import argparse
 import copy
-from datetime import datetime, timezone
 import hashlib
-from importlib.util import find_spec
-from pathlib import Path
 import re
 import shutil
 import sys
 import sysconfig
+from datetime import datetime, timezone
+from importlib.util import find_spec
+from pathlib import Path
 
 import nbformat
-
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 PART_ROOT = REPO_ROOT / "part-1-scalable-atomistic-workflows"
 if str(PART_ROOT) not in sys.path:
     sys.path.insert(0, str(PART_ROOT))
 
-from aux.release_links import (  # noqa: E402
+from aux.release_links import (
     LOCAL_NOTEBOOK_REFERENCES,
+    PACKAGED_NOTEBOOK_ASSETS,
     local_reference_replacements,
 )
-
 
 WIDGET_VIEW_MIME = "application/vnd.jupyter.widget-view+json"
 WIDGET_STATE_MIME = "application/vnd.jupyter.widget-state+json"
@@ -35,11 +34,7 @@ OVITO_WIDGET_MODULE = "jupyter-ovito"
 OVITO_WIDGET_SCRIPT_NAME = f"{OVITO_WIDGET_MODULE}.js"
 OVITO_WIDGET_LICENSE_NAME = "index.js.LICENSE.txt"
 OVITO_NBEXTENSION_RELATIVE_PATH = (
-    Path("share")
-    / "jupyter"
-    / "nbextensions"
-    / OVITO_WIDGET_MODULE
-    / "index.js"
+    Path("share") / "jupyter" / "nbextensions" / OVITO_WIDGET_MODULE / "index.js"
 )
 KNOWN_UPSTREAM_WARNING_PATTERNS = tuple(
     re.compile(pattern, re.DOTALL)
@@ -187,6 +182,31 @@ def rebase_local_markdown_references(
     return replacements
 
 
+def stage_local_notebook_assets(
+    *,
+    source_dir: Path,
+    output_dir: Path,
+) -> dict[str, str]:
+    """Copy notebook images into the portable learner-review directory."""
+
+    staged: dict[str, str] = {}
+    for reference in PACKAGED_NOTEBOOK_ASSETS:
+        source = (source_dir.resolve() / reference).resolve()
+        destination = (output_dir.resolve() / reference).resolve()
+        try:
+            destination.relative_to(output_dir.resolve())
+        except ValueError as error:
+            raise RuntimeError(
+                f"release asset escapes the output directory: {reference!r}"
+            ) from error
+        if not source.is_file():
+            raise FileNotFoundError(f"missing notebook release asset: {source}")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        _copy_without_overwriting_different_file(source, destination)
+        staged[reference] = reference
+    return staged
+
+
 def sha256_file(path: Path) -> str:
     digest = hashlib.sha256()
     with path.open("rb") as stream:
@@ -226,9 +246,7 @@ def validate_ovito_nbextension_source(
 ) -> None:
     """Check that the installed files are the OVITO AMD widget and its notices."""
 
-    missing = [
-        path.name for path in (script_path, license_path) if not path.is_file()
-    ]
+    missing = [path.name for path in (script_path, license_path) if not path.is_file()]
     if missing:
         raise FileNotFoundError(f"missing installed OVITO widget files: {missing}")
 
@@ -344,15 +362,14 @@ def update_release_checksums(checksums_path: Path, paths: tuple[Path, ...]) -> N
     checksums_path.parent.mkdir(parents=True, exist_ok=True)
     checksums_path.write_text(
         "".join(
-            f"{digest}  {relative}\n"
-            for relative, digest in sorted(entries.items())
+            f"{digest}  {relative}\n" for relative, digest in sorted(entries.items())
         ),
         encoding="utf-8",
     )
 
 
 def validate_review_html_bundle(html_path: Path, checksums_path: Path) -> None:
-    """Check the reviewed HTML and the local OVITO files it loads."""
+    """Check the reviewed HTML and all local files in its release bundle."""
 
     html_path = html_path.resolve()
     if not html_path.is_file():
@@ -365,8 +382,13 @@ def validate_review_html_bundle(html_path: Path, checksums_path: Path) -> None:
 
     script_path = html_path.with_name(OVITO_WIDGET_SCRIPT_NAME)
     license_path = html_path.with_name(OVITO_WIDGET_LICENSE_NAME)
+    asset_paths = tuple(
+        html_path.parent / reference for reference in PACKAGED_NOTEBOOK_ASSETS
+    )
     missing = [
-        path.name for path in (script_path, license_path) if not path.is_file()
+        path.relative_to(html_path.parent).as_posix()
+        for path in (script_path, license_path, *asset_paths)
+        if not path.is_file()
     ]
     if missing:
         raise FileNotFoundError(
@@ -376,7 +398,7 @@ def validate_review_html_bundle(html_path: Path, checksums_path: Path) -> None:
 
     entries = _read_checksum_index(checksums_path)
     base = checksums_path.resolve().parent
-    for path in (html_path, script_path, license_path):
+    for path in (html_path, script_path, license_path, *asset_paths):
         relative = path.resolve().relative_to(base).as_posix()
         expected = entries.get(relative)
         if expected is None:
@@ -392,7 +414,7 @@ def package_review_html_support(
     *,
     nbextension_dir: Path | None = None,
 ) -> dict[str, str]:
-    """Copy OVITO's official AMD widget beside HTML and checksum the bundle."""
+    """Copy OVITO's official AMD widget and checksum the portable HTML bundle."""
 
     html_path = html_path.resolve()
     if not html_path.is_file():
@@ -407,12 +429,29 @@ def package_review_html_support(
     destination_license = html_path.with_name(OVITO_WIDGET_LICENSE_NAME)
     _copy_without_overwriting_different_file(source_script, destination_script)
     _copy_without_overwriting_different_file(source_license, destination_license)
-    release_files = (html_path, destination_script, destination_license)
+    asset_paths = tuple(
+        html_path.parent / reference for reference in PACKAGED_NOTEBOOK_ASSETS
+    )
+    missing_assets = [
+        path.relative_to(html_path.parent).as_posix()
+        for path in asset_paths
+        if not path.is_file()
+    ]
+    if missing_assets:
+        raise FileNotFoundError(
+            f"reviewed notebook bundle is missing local assets: {missing_assets}"
+        )
+    release_files = (
+        html_path,
+        destination_script,
+        destination_license,
+        *asset_paths,
+    )
     update_release_checksums(checksums_path, release_files)
     validate_review_html_bundle(html_path, checksums_path)
+    base = html_path.parent
     return {
-        path.name: sha256_file(path)
-        for path in release_files
+        path.relative_to(base).as_posix(): sha256_file(path) for path in release_files
     }
 
 
@@ -450,7 +489,9 @@ def main() -> int:
             args.calculation_job_id,
         )
         if any(value is not None for value in review_args):
-            parser.error("--package-html cannot be combined with notebook review options")
+            parser.error(
+                "--package-html cannot be combined with notebook review options"
+            )
         if args.checksums is None:
             parser.error("--package-html requires --checksums")
         packaged = package_review_html_support(
@@ -472,9 +513,7 @@ def main() -> int:
     if missing:
         parser.error(f"notebook review requires: {', '.join(missing)}")
     if args.checksums is not None or args.ovito_nbextension_dir is not None:
-        parser.error(
-            "--checksums and --ovito-nbextension-dir require --package-html"
-        )
+        parser.error("--checksums and --ovito-nbextension-dir require --package-html")
 
     assert args.source is not None
     assert args.executed is not None
@@ -508,6 +547,10 @@ def main() -> int:
     saved_widget_models_preserved = preserve_saved_widget_state(reviewed, executed)
     progress_outputs_flattened = flatten_saved_progress_cards(reviewed, executed)
     upstream_warning_streams_removed = remove_known_upstream_warnings(reviewed)
+    packaged_assets = stage_local_notebook_assets(
+        source_dir=args.source.resolve().parent,
+        output_dir=args.output.resolve().parent,
+    )
     rebased_references = rebase_local_markdown_references(
         reviewed,
         source_dir=args.source.resolve().parent,
@@ -523,6 +566,7 @@ def main() -> int:
         "progress_outputs_flattened": progress_outputs_flattened,
         "saved_widget_models_preserved": saved_widget_models_preserved,
         "upstream_warning_streams_removed": upstream_warning_streams_removed,
+        "packaged_local_assets": packaged_assets,
         "rebased_local_markdown_references": rebased_references,
         "reason": (
             "Refreshed learner-facing Markdown, removed only exact one-time "
