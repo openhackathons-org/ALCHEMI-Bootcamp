@@ -12,7 +12,9 @@ from dataclasses import dataclass
 import gc
 import os
 from pathlib import Path
-from typing import Any
+import re
+from typing import Any, Callable
+import warnings
 
 from ase import Atoms
 import numpy as np
@@ -24,6 +26,13 @@ from .sevennet_checks import (
     build_sevennet_mapping_table,
     build_sevennet_repeat_table,
     split_model_outputs,
+)
+from .sevennet_checkpoint import _run_without_backend_conversion_line
+
+_SEVENNET_NO_ACCELERATOR_WARNING = (
+    "No tensor product accelerator is enabled for SevenNetCalculator. "
+    "SevenNet may run much slower without a TP accelerator. Please refer to "
+    "the accelerator section of the documentation."
 )
 
 
@@ -96,6 +105,7 @@ def _official_calculator_comparison(
     device: torch.device,
     adapter_energy_eV: float,
     adapter_forces_eV_A: np.ndarray,
+    calculator_factory: Callable[..., Any] | None = None,
 ) -> tuple[pd.DataFrame, pd.DataFrame]:
     enabled = [
         name
@@ -112,18 +122,30 @@ def _official_calculator_comparison(
             + ", ".join(enabled)
         )
 
-    from sevenn.calculator import SevenNetCalculator
+    if calculator_factory is None:
+        from sevenn.calculator import SevenNetCalculator
 
-    calculator = SevenNetCalculator(
-        model=checkpoint_path,
-        file_type="checkpoint",
-        device=str(device),
-        modal=modality,
-        enable_cueq=False,
-        enable_flash=False,
-        enable_oeq=False,
-        compute_atomic_virial=False,
-    )
+        calculator_factory = SevenNetCalculator
+
+    with warnings.catch_warnings():
+        warnings.filterwarnings(
+            "ignore",
+            message=rf"{re.escape(_SEVENNET_NO_ACCELERATOR_WARNING)}\Z",
+            category=UserWarning,
+            module=r"sevenn[.]calculator",
+        )
+        calculator = _run_without_backend_conversion_line(
+            lambda: calculator_factory(
+                model=checkpoint_path,
+                file_type="checkpoint",
+                device=str(device),
+                modal=modality,
+                enable_cueq=False,
+                enable_flash=False,
+                enable_oeq=False,
+                compute_atomic_virial=False,
+            )
+        )
     checked_atoms = atoms.copy()
     try:
         checked_atoms.calc = calculator

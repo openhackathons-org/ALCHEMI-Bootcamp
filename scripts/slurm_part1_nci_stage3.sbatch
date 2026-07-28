@@ -205,7 +205,7 @@ result_dir = Path(os.environ["ALCHEMI_NCI_RESULT_DIR"])
 report = json.loads((result_dir / "nci-stage3-timing.json").read_text())
 science = report["scientific_results"]
 assert report["success"] is True
-assert report["stage_cell_count"] == 6
+assert report["stage_cell_count"] == 10
 assert science["graph_count"] == 90
 assert science["ensemble_member_count"] == 4
 assert science["max_complete_mae_vs_dft_d3_kcal_mol"] < 0.5

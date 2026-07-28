@@ -577,13 +577,29 @@ cp "$NOTEBOOK_DIR/SHA256SUMS" \
   --output-dir "$NOTEBOOK_DIR" \
   "$REVIEWED_NOTEBOOK"
 
+"$ALCHEMI_PYTHON_OVERLAY/bin/python" \
+  "$ALCHEMI_SHARED_REPO/scripts/review_part1_ir_executed_notebook.py" \
+  --package-html "$NOTEBOOK_DIR/alchemi-water-ir-reviewed.html" \
+  --checksums "$NOTEBOOK_DIR/SHA256SUMS-reviewed"
+
 (
   cd "$NOTEBOOK_DIR"
-  sha256sum alchemi-water-ir-reviewed.html >> SHA256SUMS-reviewed
-  sort -u -o SHA256SUMS-reviewed SHA256SUMS-reviewed
   sha256sum -c SHA256SUMS-reviewed
 )
 ```
+
+The static widget loader asks for `jupyter-ovito.js` beside the HTML file. The
+packaging command finds OVITO's installed classic-notebook `index.js` and
+copies it to that name without changing its contents. It also copies
+`index.js.LICENSE.txt`, which carries the bundled Three.js and Lodash notices,
+and adds the HTML and both support files to `SHA256SUMS-reviewed`. It fails if
+the exported HTML has no saved OVITO state, either support file is missing, or
+an existing release file has different contents.
+
+These generated JavaScript bytes are not committed to this repository. They
+come from the checked OVITO 3.15.4 Conda installation when the release is
+prepared. That package identifies OVITO as MIT-licensed; the installed bundle
+also retains OVITO's source notices and its generated third-party notice file.
 
 Open the reviewed notebook and HTML. Check every table, figure, progress card,
 callout, and the OVITO state before copying the release files back.
@@ -593,6 +609,8 @@ callout, and the OVITO state before copying the release files back.
 The final notebook directory must contain at least:
 
 - the source, executed, original, and reviewed notebooks;
+- `alchemi-water-ir-reviewed.html`, `jupyter-ovito.js`, and
+  `index.js.LICENSE.txt`;
 - `part1-runtime.json`;
 - `part1-d3-cache.json`;
 - `notebook-timings.json`;

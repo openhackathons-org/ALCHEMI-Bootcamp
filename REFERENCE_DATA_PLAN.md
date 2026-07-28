@@ -9,10 +9,11 @@ The later IR stages use a separate B97-3c harmonic reference and selected
 observed gas-phase band positions. Those answer a different question and do
 not share an accuracy metric with the NCI interaction curves.
 
-The focused NCI stage also passed on one H100 with the current Toolkit source
-pins. Its six code cells took `22.643220 s`, measured with CUDA synchronization.
-That focused measurement is not a timing for the complete notebook, which still
-needs a current-source end-to-end H100 run.
+The historical focused NCI run passed on one H100 with the current Toolkit
+source pins. Its six code cells took `22.643220 s`, measured with CUDA
+synchronization. Complete-notebook job `3315568` later measured its eight-cell
+Stage 3 at `22.988 s` and all notebook code at `798.752 s`. The current learner
+cleanup has ten Stage 3 code cells, so its exact-source rerun remains pending.
 
 ## Selected data and model
 

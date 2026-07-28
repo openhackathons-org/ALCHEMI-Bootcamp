@@ -140,6 +140,9 @@ def test_compute_lab_html_export_is_learner_ready() -> None:
     assert "--HTMLExporter.embed_images=True" in runbook
     assert "--TagRemovePreprocessor.enabled=True" in runbook
     assert """--TagRemovePreprocessor.remove_input_tags='{"remove-input"}'""" in runbook
+    assert '--package-html "$NOTEBOOK_DIR/alchemi-water-ir-reviewed.html"' in runbook
+    assert 'jupyter-ovito.js' in runbook
+    assert 'index.js.LICENSE.txt' in runbook
 
 
 def test_notebook_has_seven_stylized_sequential_stage_cards() -> None:
@@ -208,16 +211,13 @@ def test_notebook_has_seven_stylized_sequential_stage_cards() -> None:
         assert f"## Stage {stage}" not in source
 
     stage_3 = _source(by_id["stage-3"])
-    assert "earlier six-cell form using the current Toolkit versions" in stage_3
-    assert "current eight-cell stage not timed" in stage_3
+    assert "23 s on one H100 PCIe in the checked run" in stage_3
     roadmap = _source(by_id["roadmap"])
     roadmap_text = " ".join(roadmap.split())
-    assert "22.643 s" in roadmap_text
-    assert "earlier six-cell form" in roadmap_text
-    assert "current eight-cell Stage 3 have not been timed" in roadmap_text
-    assert "Stage 7: scaling paths" in roadmap_text
-    assert "**Not measured**" in roadmap_text
-    assert "**Choose a scaling path:**" in roadmap_text
+    assert "Checked H100 pacing" in roadmap_text
+    assert "Stage 3: NCI calculation | 23 s" in roadmap_text
+    assert "Stage 7: scaling paths | 29 s" in roadmap_text
+    assert "Complete notebook code** | **13 min 19 s" in roadmap_text
     assert "exercise `DomainParallel` on one GPU without decomposition" in roadmap_text
     assert "`DomainParallel`" in roadmap
     for depth in (
@@ -340,10 +340,8 @@ def test_notebook_hero_and_presentation_blocks_share_one_visual_system() -> None
     assert "periodic PME" in title
     assert "DomainParallel" in title
     assert "DistributedPipeline" in title
-    assert (
-        "The merged notebook and Stage 7 have not been measured "
-        "with the current Toolkit versions."
-    ) in title
+    assert "checked run took 13 min 28 s of notebook wall time" in title
+    assert "Stage 6 accounted for 9 min 29 s" in title
     assert banner_relative in title
     assert banner.is_file()
     png = banner.read_bytes()[:24]
@@ -427,7 +425,9 @@ def test_important_compute_cells_have_visible_progress_cards() -> None:
         "build-batch-layouts": "Build one mixed batch and three size buckets",
         "batch-layouts": "Compare mixed and bucketed batches",
         "load-nci-atlas": "Build the 90-graph NCI Atlas batch",
+        "prepare-nci-resources": "Verify the NCI model files",
         "configure-nci-model": "Configure AIMNet, Coulomb, and D3",
+        "display-nci-model-settings": "Check and show the NCI components",
         "evaluate-nci-components": "Evaluate the NCI set in nine batched calls",
         "compose-nci-pipeline": "Compose the complete model",
         "validate-nci-graph-order": "Check NCI graph ordering",
@@ -440,6 +440,7 @@ def test_important_compute_cells_have_visible_progress_cards() -> None:
         "define-sevennet-wrapper": "Define the SevenNet-Omni Toolkit adapter",
         "load-sevennet-wrapper": "Load the SevenNet-Omni adapter",
         "compose-sevennet-surface-model": "Compose SevenNet-Omni with pairwise PBE-D3(BJ)",
+        "display-sevennet-surface-model": "Show the surface model settings",
         "build-adsorption-panel": "Load the adsorption starting structures",
         "pack-adsorption-batches": "Pack periodic and finite adsorption batches",
         "compare-sevennet-tasks": "Inspect and switch SevenNet tasks",
@@ -458,7 +459,8 @@ def test_important_compute_cells_have_visible_progress_cards() -> None:
         "run-dynamics": "Run the full NVT → NVE trajectory",
         "inflight-example": "Build the inflight queue",
         "configure-inflight-stage": "Configure the inflight fused stage",
-        "run-inflight-example": "Run and inspect the inflight queue",
+        "run-inflight-example": "Run the inflight queue",
+        "validate-inflight-example": "Check inflight scheduling and results",
         "build-domain-box": "Load the checked periodic base box",
         "compose-domain-model": "Compose AIMNet2, PME, and D3",
         "run-domain-single-gpu": "Walk through DomainParallel on one GPU",
@@ -493,14 +495,15 @@ def test_key_results_remain_visible_and_the_final_inventory_is_complete() -> Non
         assert jupyter.get("outputs_hidden") is not True
 
     adsorption = _source(by_id["analyze-adsorption-panel"])
-    assert 'label="Toolkit-to-SevenNet graph mapping"' in adsorption
-    assert 'label="Adapter and pipeline numerical checks"' in adsorption
+    assert "sevennet_repeat_max_energy_difference_eV_per_atom" in adsorption
+    assert "sevennet_repeat_max_force_difference_eV_A" in adsorption
+    assert '"tables are saved with the run."' in adsorption
 
     save = _source(by_id["save"])
     assert "saved_run.relative_files" in save
-    assert 'label="Files written by the final report"' in save
+    assert 'label="Key files written by the final report"' in save
     assert "path.name.startswith" not in save
-    assert "run manifest also inventories the" in save
+    assert "water_run_manifest.json lists every" in save
 
 
 def test_every_executable_cell_has_a_stylized_progress_card() -> None:
@@ -595,8 +598,7 @@ def test_stage_2_timings_use_repeated_blocks_and_report_median_iqr() -> None:
 
     for rendered_table in (sweep_display, layouts):
         assert "median_structures_per_s" in rendered_table
-        assert "median_atoms_per_s" in rendered_table
-        assert "relative_iqr" in rendered_table
+    assert "relative_iqr" in layouts
     assert "plot_device_sweep(crossover)" in sweep_display
     assert "interquartile range" in sweep_display
     assert "max_abs_energy_difference" in sweep_display + layouts
@@ -663,7 +665,12 @@ def test_notebook_wires_raw_sevennet_into_toolkit_for_surface_single_points() ->
             _source(by_id["validate-sevennet-wrapper"]),
         )
     )
-    analyze = _source(by_id["analyze-adsorption-panel"])
+    analyze = "\n".join(
+        (
+            _source(by_id["validate-sevennet-wrapper"]),
+            _source(by_id["analyze-adsorption-panel"]),
+        )
+    )
     save = _source(by_id["save"])
     save_plumbing = "\n".join((_source(by_id["results-summary"]), save))
 
@@ -842,7 +849,9 @@ def test_notebook_wires_raw_sevennet_into_toolkit_for_surface_single_points() ->
     for term in (
         "build_sevennet_mapping_table(wrapper, periodic_batch)",
         "build_sevennet_repeat_table(",
-        "SevenNetCalculator(",
+        "from sevenn.calculator import SevenNetCalculator",
+        "calculator_factory = SevenNetCalculator",
+        "lambda: calculator_factory(",
         '"custom adapter vs official SevenNetCalculator"',
         '"pipeline output vs explicit component sum"',
         "split_model_outputs(",
@@ -962,7 +971,8 @@ def test_notebook_discovers_and_switches_sevennet_tasks() -> None:
         '"mpa": "PBE(+U)-level MPtrj/sAlex + cross-domain data"',
         '"oc20": "RPBE OC20 metal-catalyst adsorption data"',
         "available_sevennet_tasks",
-        "Tasks reported by the loaded checkpoint",
+        "The checkpoint reports",
+        "full task list remains in available_sevennet_tasks",
     ):
         assert term in run
 
@@ -998,7 +1008,7 @@ def test_notebook_discovers_and_switches_sevennet_tasks() -> None:
 def test_notebook_builds_and_displays_a_live_sevennet_model_card() -> None:
     by_id = {cell.get("id"): cell for cell in _notebook()["cells"]}
     helper_imports = _source(by_id["helper-imports"])
-    compose = _source(by_id["compose-sevennet-surface-model"])
+    compose = _source(by_id["display-sevennet-surface-model"])
 
     assert "build_sevennet_model_card" in helper_imports
     card_call = _single_call(compose, "build_sevennet_model_card")
@@ -1090,8 +1100,9 @@ def test_notebook_orients_new_alchemi_users_before_the_first_model_call() -> Non
         '"charge (e)"',
         '"Fx (eV/Å)"',
         '"|F| (eV/Å)"',
-        'print("energy :"',
-        'print("total predicted charge:"',
+        'label="First system-level outputs"',
+        '("Energy / eV", hello["energy"].item())',
+        '("Total predicted charge / e", hello_charges.sum().item())',
     ):
         assert term in hello
 
@@ -1257,24 +1268,24 @@ def test_stage_7_keeps_each_scaling_api_with_the_right_workload_shape() -> None:
     stage_7 = _source(by_id["stage-7"])
 
     for workload, api in (
-        ("independent systems that fit together", "Batch"),
-        ("one active batch at different workflow stages", "FusedStage"),
-        ("a queue larger than the active batch", "FusedStage"),
-        ("one large periodic system", "DomainParallel"),
-        ("independent batches moving through different stages", "DistributedPipeline"),
+        ("independent systems fit in one model call", "Batch"),
+        ("systems in one active batch follow different workflow stages", "FusedStage"),
+        ("the queue is larger than the active GPU batch", "FusedStage"),
+        ("one periodic system must be divided across GPUs", "DomainParallel"),
+        ("independent batches move through stages on different GPUs", "DistributedPipeline"),
     ):
         assert workload in stage_7
         assert api in stage_7
-    assert "live one-GPU walkthrough" in stage_7
-    assert "three saved fixed-structure passes" in stage_7
-    assert "same 51,200-atom input on 1, 2, and 4 H100s" in stage_7
-    assert "otherwise `NOT REPORTED`" in stage_7
-    assert "API sketch only" in stage_7
+    assert "runs batching, fused stages, inflight execution" in stage_7
+    assert "one-GPU" in stage_7
+    assert "loads bundled 1-, 2-, and 4-H100" in stage_7
+    assert "`DistributedPipeline` remains an API preview" in stage_7
 
     milestones = (
         "stage-7",
         "inflight-intro",
         "run-inflight-example",
+        "validate-inflight-example",
         "domain-decomposition-intro",
         "run-domain-single-gpu",
         "inspect-domain-molecule-charges",
@@ -1319,7 +1330,12 @@ def test_inflight_lesson_registers_and_validates_an_actual_refill_trace() -> Non
             _source(by_id["configure-inflight-stage"]),
         )
     )
-    run = _source(by_id["run-inflight-example"])
+    run = "\n".join(
+        (
+            _source(by_id["run-inflight-example"]),
+            _source(by_id["validate-inflight-example"]),
+        )
+    )
 
     for public_api in (
         "InMemoryDataset(",
@@ -1369,7 +1385,7 @@ def test_inflight_lesson_registers_and_validates_an_actual_refill_trace() -> Non
         'inflight_trace_rows.iloc[-1]["Failures"]',
         "inflight_failure_count = 0",
         "== INFLIGHT_SYSTEMS",
-        "readable_table(\n    inflight_trace_rows",
+        'inflight_trace_rows.drop(columns="Failures")',
     ):
         assert validation in run
     assert (
@@ -1620,11 +1636,11 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
         assert split_check in display_results
     for lesson_result in (
         "domain_view.run_settings_table",
-        "domain_view.layout_table",
-        "domain_view.timing_table.round(3)",
-        "domain_view.output_agreement_table.round(6)",
-        "domain_view.charge_diagnostics_table.round(9)",
-        "domain_view.electrostatics_table.round(6)",
+        "domain_layout_display",
+        "domain_timing_display.round(3)",
+        "domain_agreement_display.round(6)",
+        "domain_charge_display.round(9)",
+        "domain_electrostatics_display.round(6)",
         "plot_domain_decomposition(domain_view.plot_data)",
         "three raw energy/force passes",
         "they do not measure a ",
@@ -1642,9 +1658,7 @@ def test_distributed_pipeline_stays_an_unlaunched_preview_with_safe_reporting() 
     for api_token in (
         "DistributedPipeline",
         "BufferConfig(",
-        "fixed_optimization = FIRE2(",
-        "n_steps=optimization_steps",
-        "sub_stages=[(0, fixed_optimization)]",
+        "sub_stages=[(0, fire)]",
         "stages={0: optimization, 1: dynamics}",
         "synchronized=False",
         'backend="nccl"',
@@ -1652,13 +1666,15 @@ def test_distributed_pipeline_stays_an_unlaunched_preview_with_safe_reporting() 
         "pipeline.run()",
     ):
         assert api_token in preview
-    assert "API preview, not a performance result" in preview
-    assert "Toolkit 0.2 does not yet preserve every field" in preview
+    assert "Optional API preview: put stages on different GPUs" in preview
+    assert "Toolkit 0.2 does not yet preserve a complete atomistic `Batch`" in preview
     assert "A **rank** is one worker process" in preview
     assert '`comm_mode="async_recv"`' in preview
-    assert "A plain `FIRE2(n_steps=...)` pipeline stage" in preview
-    assert "pipeline correctness, overlap, and speed" in preview
-    assert "NOT REPORTED" in preview
+    assert "`(t1 + t2) / max(t1, t2)`" in preview
+    assert "8,192 systems" in preview
+    assert "512 active per pair" in preview
+    assert "does not report" in preview
+    assert "pipeline correctness, overlap, or speed" in preview
 
     executable_source = _code_source()
     for forbidden_launcher in (
@@ -1777,7 +1793,13 @@ def test_stage_3_runs_the_90_graph_nci_composition_and_reference_check() -> None
     by_id = {cell.get("id"): cell for cell in _notebook()["cells"]}
     stage = _source(by_id["stage-3"])
     load = _source(by_id["load-nci-atlas"])
-    configure = _source(by_id["configure-nci-model"])
+    configure = "\n".join(
+        (
+            _source(by_id["prepare-nci-resources"]),
+            _source(by_id["configure-nci-model"]),
+            _source(by_id["display-nci-model-settings"]),
+        )
+    )
     evaluate = _source(by_id["evaluate-nci-components"])
     composition_context = _source(by_id["nci-composition-context"])
     compose = _source(by_id["compose-nci-pipeline"])

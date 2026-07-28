@@ -162,10 +162,9 @@ def main(output_path: Path = NOTEBOOK) -> None:
                     "DistributedPipeline."
                 ),
                 need=(
-                    "One CUDA GPU and the tutorial environment. Historical H100 "
-                    "runs put the dynamics section near ten minutes. The merged "
-                    "notebook and Stage 7 have not been measured with the current "
-                    "package versions."
+                    "One CUDA GPU and the tutorial environment. The checked run "
+                    "took 13 min 28 s of notebook wall time on one H100 PCIe; "
+                    "Stage 6 accounted for 9 min 29 s."
                 ),
             )
             + "\n\n"
@@ -192,30 +191,29 @@ def main(output_path: Path = NOTEBOOK) -> None:
 6. **Run and inspect the trajectory:** save raw state first, then check temperature, topology, and predicted-charge IR.
 7. **Choose a scaling path:** refill one GPU, load a checked periodic box, exercise the `DomainParallel` API, then compare three fixed-structure passes on 1, 2, and 4 H100s.
 
-### Historical reference compute time
+### Checked H100 pacing
 
-| Section | Historical code time on one H100 |
+| Section | Code time on one H100 PCIe |
 |---|---:|
-| Setup | 22 s, earlier source |
-| Stage 1 | 18 s, earlier source |
-| Stage 2 | 11 s, earlier source |
-| Stage 3: NCI calculation | 22.6 s for an earlier six-cell form using the current Toolkit versions; current eight-cell stage not measured |
-| Stage 4: adapter and single points | 17 s, earlier source |
-| Stage 5: preparation and harmonic check | 1 min 42 s, earlier source |
-| Stage 6: trajectory and analysis | 10 min 3 s, earlier source |
-| Stage 7: scaling paths | **Not measured** |
-| Complete merged notebook | **Not measured** |
+| Setup | 49 s |
+| Stage 1: one structure | 20 s |
+| Stage 2: batching | 14 s |
+| Stage 3: NCI calculation | 23 s |
+| Stage 4: adapter and single points | 20 s |
+| Stage 5: preparation and harmonic check | 1 min 14 s |
+| Stage 6: trajectory and analysis | 9 min 29 s |
+| Stage 7: scaling paths | 29 s |
+| **Complete notebook code** | **13 min 19 s** |
+| **Notebook runner wall time** | **13 min 28 s** |
 
-Numeric rows are earlier H100 references. The **22.643 s** Stage 3 measurement
-used the current Toolkit versions but an earlier six-cell form. The merged
-notebook and current eight-cell Stage 3 have not been timed in the release
-environment.
+These are pacing measurements from one complete checked run, not benchmark
+results. Checkpoint caches were warm. Hardware, software, and cache state can
+change the elapsed time.
 """
             + "\n\n"
             + callout_html(
-                "In historical runs, dynamics was the longest pause. Stage 7 "
-                "and the complete merged notebook are not timed yet. The saved "
-                "trajectory lets you change plots without rerunning dynamics.",
+                "Dynamics is the longest pause. The saved trajectory lets you "
+                "change plots without rerunning it.",
                 kind="note",
             ),
         ),
@@ -332,6 +330,7 @@ from torch import nn
 # JAX and PyTorch share this teaching kernel. Disable JAX's bulk GPU-memory
 # reservation before JAX is imported; this does not cap either workload.
 os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["JAX_PLATFORMS"] = "cuda"
 
 # Compiler failures still raise; the external job transcript retains stderr.
 torch._logging.set_logs(dynamo=logging.ERROR, inductor=logging.CRITICAL)
@@ -341,8 +340,27 @@ warnings.filterwarnings(
     "ignore",
     message=r"TensorFloat32 tensor cores.*not enabled.*",
     category=UserWarning,
-    module=r"torch[.]_inductor[.]compile_fx",
 )
+# These two messages come from known upstream inspection paths. The model
+# checkpoint is verified below, and every parameter is frozen before use.
+warnings.filterwarnings(
+    "ignore",
+    message=r"Converting a tensor with requires_grad=True to a scalar.*",
+    category=UserWarning,
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"invalid escape sequence.*",
+    category=SyntaxWarning,
+    module=r"physicsnemo[.]utils[.]logging[.]launch",
+)
+warnings.filterwarnings(
+    "ignore",
+    message=r"Sets are not currently considered sequences.*",
+)
+logging.getLogger(
+    "nvalchemi.distributed._core.shard_wrappers"
+).setLevel(logging.WARNING)
 setup_progress.advance(message="Scientific Python and PyTorch imported")
 
 from aux.harmonic_config import (
@@ -460,14 +478,20 @@ EXPECTED_D3_PARAMETER_SHA256 = (
 )
 setup_progress.complete("Package versions and CUDA device verified")
 
-print("GPU       :", torch.cuda.get_device_name(DEVICE))
-print("Core/Ops  :", installed_pins["Core"][:12], installed_pins["Ops"][:12])
-print("Core API  :", nvalchemi.version, "from Toolkit commit", CORE_COMMIT[:12])
-print("AIMNet    :", metadata.version("aimnet"))
-print("SevenNet  :", metadata.version("sevenn"))
-print("Torch     :", torch.__version__)
-print("JAX       :", metadata.version("jax"))
-print("Warp      :", metadata.version("warp-lang"))
+display(readable_table(
+    pd.DataFrame([
+        ("GPU", torch.cuda.get_device_name(DEVICE)),
+        ("Toolkit Core", f"{nvalchemi.version} · {CORE_COMMIT[:12]}"),
+        ("Toolkit-Ops", installed_pins["Ops"][:12]),
+        ("AIMNet", metadata.version("aimnet")),
+        ("SevenNet", metadata.version("sevenn")),
+        ("PyTorch", torch.__version__),
+        ("JAX", metadata.version("jax")),
+        ("Warp", metadata.version("warp-lang")),
+    ], columns=["Runtime", "Checked version"]),
+    label="Tutorial environment",
+    show_index=False,
+))
 """,
             source_hidden=True,
         ),
@@ -627,7 +651,11 @@ from aux.composition_checks import (
     compare_composition_outputs,
     compare_two_particle_coulomb,
 )
-from aux.diagnostics import analyze_production_trajectory, mass_only_invariance
+from aux.diagnostics import (
+    analyze_production_trajectory,
+    build_production_diagnostics_display_tables,
+    mass_only_invariance,
+)
 from aux.electrostatics import DirectCoulombWrapper
 from aux.experimental_reference import load_experimental_water_fundamentals
 from aux.harmonic_ir import (
@@ -647,9 +675,15 @@ from aux.inflight import (
     register_inflight_trace,
 )
 from aux.domain import load_prebuilt_domain_box
+from aux.domain.display import (
+    compact_box_summary_table,
+    molecule_charge_display_tables,
+)
 from aux.domain.packing import box_summary_table, molecule_charge_tables
 from aux.domain.results import load_domain_lesson_view
 from aux.ir_display import (
+    harmonic_mode_comparison_display_table,
+    mass_invariance_display_table,
     monomer_mode_mapping_display_table,
     prepare_monomer_reference_display,
 )
@@ -852,7 +886,7 @@ display(callout(
             outcome="Turn one ASE water molecule into AtomicData, a Batch, and one energy, force, and charge result.",
             before="Before running: isotope substitution changes nuclear mass, not this potential-energy prediction.",
             compute_time=(
-                "18 s in an earlier run using one H100 and earlier Toolkit versions"
+                "20 s on one H100 PCIe in the checked run"
             ),
             body=r"""
 - Start with one molecule and inspect the data path before calculating an interaction energy.
@@ -935,9 +969,9 @@ if not checkpoint_is_override:
     assert model_card["checkpoint_sha256"] == EXPECTED_DEFAULT_CHECKPOINT_SHA256
 checkpoint_progress.complete("Checkpoint loaded and SHA-256 verified")
 
-display(readable_table(pd.Series({
+aimnet_model_card_display = pd.Series({
     "checkpoint": model_card["checkpoint_source"],
-    "checkpoint_sha256": model_card["checkpoint_sha256"],
+    "checkpoint_sha256": model_card["checkpoint_sha256"][:16] + "…",
     "package": f"aimnet {metadata.version('aimnet')} through Toolkit AIMNet2Wrapper",
     "code_license": "AIMNet software: MIT",
     "target": "B97-3c checkpoint base; declared Coulomb and D3 terms added later",
@@ -954,14 +988,19 @@ display(readable_table(pd.Series({
     "neighbor_convention": str(aimnet.model_config.neighbor_config),
     "device": str(DEVICE),
     "coordinate_precision": "AIMNet2Wrapper evaluates positions in float32",
-}, name="Value").rename_axis("Setting").reset_index(),
+}, name="Value").rename_axis("Setting").reset_index()
+display(readable_table(
+    aimnet_model_card_display,
     label="AIMNet2 model card",
     show_index=False,
 ))
-print("outputs        :", sorted(aimnet.model_config.outputs))
-print("active outputs :", sorted(aimnet.model_config.active_outputs))
-print("required inputs:", sorted(aimnet.model_config.required_inputs))
-print("neighbors      :", aimnet.model_config.neighbor_config)
+display(callout(
+    "Toolkit exposes energy, forces, and charges for this wrapper; all three "
+    "are active. The model card above records the required inputs and neighbor "
+    "convention used by later calls.",
+    kind="result",
+    result_state="pass",
+))
 if checkpoint_is_override:
     display(callout(
         "A different checkpoint was selected through ALCHEMI_AIMNET_CHECKPOINT. The tutorial reference values were generated with ensemble member 0, so use the checks below before interpreting results from the replacement model.",
@@ -1010,9 +1049,15 @@ hello_atom_results = pd.DataFrame({
     ).numpy(),
 }).round(6)
 
-print("graphs :", hello_batch.num_graphs)
-print("energy :", hello["energy"].item(), "eV")
-print("total predicted charge:", hello_charges.sum().item(), "e")
+display(readable_table(
+    pd.DataFrame([
+        ("Graphs", hello_batch.num_graphs),
+        ("Energy / eV", hello["energy"].item()),
+        ("Total predicted charge / e", hello_charges.sum().item()),
+    ], columns=["System result", "Value"]),
+    label="First system-level outputs",
+    show_index=False,
+))
 display(readable_table(
     hello_atom_results,
     label="First model outputs by atom",
@@ -1202,7 +1247,7 @@ display(callout(
             outcome="Check serial and batched agreement, then measure CPU/GPU and homogeneous/heterogeneous batch behavior.",
             before="Predict the shape of batch_idx and batch_ptr for eight AB/A/B triplets before inspecting them.",
             compute_time=(
-                "11 s in an earlier run using one H100 and earlier Toolkit versions"
+                "14 s on one H100 PCIe in the checked run"
             ),
             body=(
                 r"""
@@ -1255,7 +1300,7 @@ scan_build_progress.advance(
 )
 
 scan_data = [
-    AtomicData.from_atoms(atoms, device=DEVICE, dtype=torch.float64)
+    AtomicData.from_atoms(atoms, device=DEVICE, dtype=torch.float32)
     for atoms in scan_atoms
 ]
 scan_build_progress.complete("all structures converted to AtomicData")
@@ -1635,7 +1680,7 @@ display(callout(
             title="Complete and check the potential",
             outcome="Evaluate 90 NCI Atlas graphs in a few passes, add the checkpoint's Coulomb and D3 terms, and compare the complete interaction curves with DFT-D3 and CCSD(T)/CBS.",
             before="Before running: predict which interaction class will respond most strongly when explicit Coulomb is restored.",
-            compute_time="not yet measured for this version",
+            compute_time="23 s on one H100 PCIe in the checked run",
             body=(
                 r"""
 **NCI** means noncovalent interaction. NCI Atlas is a benchmark collection of molecular complexes and reference interaction energies. Intermolecular interactions influence solvation, molecular recognition, crystal packing, self-assembly, and the stability of molecular materials. The calculation below spans neutral hydrogen bonding, dispersion-dominated binding, and an ionic hydrogen bond.
@@ -2121,14 +2166,18 @@ component_build_progress.complete("pairwise D3(BJ) ready; all three components c
 
 display(readable_table(
     pd.DataFrame([
-        {"component": "AIMNet checkpoint base", "depends_on": "positions, elements, total charge", "cutoff_A": aimnet.model_config.neighbor_config.cutoff},
-        {"component": "finite all-pairs Coulomb", "depends_on": "AIMNet predicted charges", "cutoff_A": None},
-        {"component": "pairwise D3(BJ)", "depends_on": "positions, elements", "cutoff_A": D3_CUTOFF_A},
+        {"Component": "AIMNet checkpoint base", "Depends on": "positions, elements, total charge", "Cutoff / Å": aimnet.model_config.neighbor_config.cutoff},
+        {"Component": "finite all-pairs Coulomb", "Depends on": "AIMNet predicted charges", "Cutoff / Å": None},
+        {"Component": "pairwise D3(BJ)", "Depends on": "positions, elements", "Cutoff / Å": D3_CUTOFF_A},
     ]),
     label="Composed water-potential components",
     show_index=False,
 ))
-print("D3 parameter SHA-256:", D3_PARAMETER_SHA256)
+display(callout(
+    f"The checked D3 parameter file has SHA-256 {D3_PARAMETER_SHA256[:16]}….",
+    kind="result",
+    result_state="pass",
+))
 """,
         ),
         code(
@@ -2184,19 +2233,13 @@ assert torch.isfinite(full_outputs["forces"]).all()
 assert float(torch.linalg.vector_norm(full_outputs["forces"], dim=1).max().cpu()) > 0.0
 component_progress.complete("Pipeline equals the independently evaluated component sum")
 
-print("pipeline groups:", [
-    {
-        "steps": [
-            {"model": type(step.model).__name__, "wire": step.wire}
-            for step in group.steps
-        ],
-        "use_autograd": group.use_autograd,
-    }
-    for group in model.groups
-])
-print("active outputs:", sorted(model.model_config.active_outputs))
-print("neighbors     :", model.model_config.neighbor_config)
-print("energy component closure / eV:", f"{component_closure_error:.3e}")
+display(callout(
+    "Two PipelineGroup objects now return energy, forces, and charges. "
+    f"The complete pipeline matched the independently evaluated component sum "
+    f"within {component_closure_error:.2e} eV.",
+    kind="result",
+    result_state="pass",
+))
 """,
         ),
         code(
@@ -2235,12 +2278,6 @@ composition_agreement = compare_composition_outputs(
     interaction_triplets=len(DIMER_DISTANCES_A),
 )
 agreement_errors = composition_agreement.as_dict()
-print("Toolkit/official max absolute differences:", agreement_errors)
-print(
-    "energy dtypes:",
-    full_outputs["energy"].dtype,
-    official_outputs["energy"].dtype,
-)
 # Both routes use float32 model kernels and include large atomic energy
 # baselines. One millielectronvolt is a few float32 spacings at this energy
 # scale; interaction energies are checked separately after AB - A - B.
@@ -2367,15 +2404,33 @@ composition_check_table = build_composition_check_table(
     limits=composition_check_limits,
 )
 display(readable_table(
-    composition_check_table,
+    composition_check_table.rename_axis("Check").reset_index().rename(columns={
+        "max_abs_difference": "Maximum absolute difference",
+        "limit": "Limit",
+        "units": "Units",
+        "passed": "Passed",
+    }),
     label="Composition checks",
     show_index=False,
 ))
+finite_difference_context = composition_check_table.attrs["finite_difference"]
 display(readable_table(
-    pd.Series(
-        composition_check_table.attrs["finite_difference"],
-        name="Value",
-    ).rename_axis("Field").reset_index(),
+    pd.DataFrame([
+        ("Energy route", finite_difference_context["finite_difference_energy_route"]),
+        ("Displacement / Å", finite_difference_context["finite_difference_step_A"]),
+        (
+            "Finite-difference force / eV Å⁻¹",
+            finite_difference_context["finite_difference_force_eV_A"],
+        ),
+        (
+            "Official analytic force / eV Å⁻¹",
+            finite_difference_context["official_analytic_force_eV_A"],
+        ),
+        (
+            "Toolkit force / eV Å⁻¹",
+            finite_difference_context["toolkit_force_eV_A"],
+        ),
+    ], columns=["Setting", "Value"]),
     label="Finite-difference setup and forces",
     show_index=False,
 ))
@@ -2499,12 +2554,9 @@ else:
     )
 dimer_plot_progress.complete("all four MAEs evaluated against the same reference")
 display(readable_table(
-    dimer_table.round(3),
-    label="Water-dimer interaction scan",
-    show_index=False,
-))
-display(readable_table(
-    ablation_mae.round(3).rename_axis("model").reset_index(),
+    ablation_mae.round(3).rename_axis("Model").reset_index().rename(
+        columns={"MAE_vs_full_B97_3c_kJ_mol": "MAE vs full B97-3c / kJ mol⁻¹"}
+    ),
     label="MAE against the full B97-3c reference",
     show_index=False,
 ))
@@ -2539,8 +2591,7 @@ display(callout(
             ),
             before="Before running: identify which model inputs, neighbor fields, and outputs must be translated at the wrapper.",
             compute_time=(
-                "17 s for an earlier form without the task comparison; "
-                "current stage not measured"
+                "20 s on one H100 PCIe in the checked run"
             ),
             body="",
         ),
@@ -3135,7 +3186,7 @@ assert all(np.isfinite(value).all() for value in surface_combined_forces.values(
             "analyze-adsorption-panel",
             """
 adsorption_analysis_progress = NotebookProgress(
-    title="Show energies and forces", total=5, unit="tables"
+    title="Show energies and forces", total=4, unit="result views"
 )
 
 surface_energy_table = pd.DataFrame([
@@ -3233,7 +3284,14 @@ display(readable_table(
     show_index=False,
 ))
 display(readable_table(
-    adslab_force_regions.round(5),
+    adslab_force_regions[[
+        "structure", "region", "fmax_eV_A", "force_rms_eV_A",
+    ]].rename(columns={
+        "structure": "Structure",
+        "region": "Region",
+        "fmax_eV_A": "Maximum force / eV Å⁻¹",
+        "force_rms_eV_A": "RMS force / eV Å⁻¹",
+    }).round(5),
     label="Combined-model forces on adsorbates and Cu atoms",
     show_index=False,
 ))
@@ -3244,17 +3302,17 @@ adsorption_analysis_progress.advance(
     )
 )
 
-display(readable_table(
-    sevennet_graph_mapping,
-    label="Toolkit-to-SevenNet graph mapping",
-    show_index=False,
+display(callout(
+    "The Toolkit graph mapping matched SevenNet exactly. Across the direct "
+    "model, official calculator, and composed pipeline checks, the largest "
+    f"energy difference was {sevennet_repeat_max_energy_difference_eV_per_atom:.2e} "
+    "eV per atom and the largest force-component difference was "
+    f"{sevennet_repeat_max_force_difference_eV_A:.2e} eV/Å. The full check "
+    "tables are saved with the run.",
+    kind="result",
+    result_state="pass",
 ))
-display(readable_table(
-    sevennet_numerical_agreement,
-    label="Adapter and pipeline numerical checks",
-    show_index=False,
-))
-adsorption_analysis_progress.complete("six compact result views shown")
+adsorption_analysis_progress.complete("adapter and composed outputs checked")
 
 sevennet_max_edge_vector_mapping_difference_A = float(
     sevennet_graph_mapping.loc[
@@ -3293,8 +3351,7 @@ display(callout(
             outcome="Return to the charge-predicting molecular model, build the isotope × cluster batch, relax it, check harmonic frequencies, and wire one shared call to an IR recorder.",
             before="Predict which fields change between H₂O and D₂O: atomic number, coordinates, energy, force, charge, or mass.",
             compute_time=(
-                "1 min 42 s in an earlier run using earlier Toolkit versions, "
-                "including molecular composition"
+                "1 min 14 s on one H100 PCIe in the checked run"
             ),
             body=(
                 r"""
@@ -3357,11 +3414,17 @@ assert all(
     for tensor in (batch.positions, batch.velocities, batch.forces)
 )
 ir_batch_progress.complete("four systems packed into one ragged Batch")
-print("labels   :", labels)
-print("graphs   :", batch.num_graphs)
-print("atoms    :", batch.num_nodes)
-print("batch_idx:", tuple(batch.batch_idx.shape))
-print("batch_ptr:", batch.batch_ptr.cpu().tolist())
+display(readable_table(
+    pd.DataFrame([
+        ("Systems", ", ".join(labels)),
+        ("Graphs", batch.num_graphs),
+        ("Atoms", batch.num_nodes),
+        ("batch_idx shape", tuple(batch.batch_idx.shape)),
+        ("Graph boundaries", batch.batch_ptr.cpu().tolist()),
+    ], columns=["Batch field", "Value"]),
+    label="Isotope and cluster Batch",
+    show_index=False,
+))
 display(view(ir_atoms[2], viewer="x3d"))
 display(callout(
     "Structure view: six water molecules arranged as a nonperiodic cyclic hydrogen-bonded ring.",
@@ -3627,7 +3690,7 @@ batch.positions[ptr[3] : ptr[4]].copy_(batch.positions[ptr[2] : ptr[3]])
 # the same final state.
 compute_neighbors(batch, config=model.model_config.neighbor_config)
 relaxed_outputs = model(batch)
-batch.energy = relaxed_outputs["energy"]
+batch.energy = relaxed_outputs["energy"].to(batch.positions.dtype)
 batch.forces = relaxed_outputs["forces"]
 batch.charges = relaxed_outputs["charges"]
 relaxed_mass_checks = mass_only_invariance(
@@ -3972,7 +4035,7 @@ if harmonic_comparison_reported:
         message="frequencies and km/mol sticks tabulated"
     )
     display(readable_table(
-        harmonic_comparison_table.round(2),
+        harmonic_mode_comparison_display_table(harmonic_comparison_table),
         label="AIMNet and B97-3c harmonic modes",
         show_index=False,
     ))
@@ -4078,8 +4141,7 @@ data path stay visible below.
                 "trajectory-length convergence study."
             ),
             compute_time=(
-                "10 min 3 s in an earlier run using one H100 and earlier "
-                "Toolkit versions"
+                "9 min 29 s on one H100 PCIe in the checked run"
             ),
             body=r"""
 - 5,000 steps Langevin NVT at 75 K; damped dynamics are not sampled.
@@ -4527,9 +4589,23 @@ stage_counts = ir_hook.stage_counts
 run_progress.complete(
     f"{TOTAL_DYNAMICS_STEPS:,} updates complete in {elapsed_s / 60:.2f} min"
 )
-print("captured dipoles:", trajectory.dipoles_e_angstrom.shape)
-print("captured positions:", trajectory.positions_angstrom.shape)
-print("stage route:", stage_counts)
+display(readable_table(
+    pd.DataFrame([
+        ("Wall time / min", elapsed_s / 60.0),
+        ("Dipole array", tuple(trajectory.dipoles_e_angstrom.shape)),
+        ("Position array", tuple(trajectory.positions_angstrom.shape)),
+        (
+            "NVT updates recorded",
+            stage_counts[f"status_{IR_WARMUP_STATUS}_warmup_steps"],
+        ),
+        (
+            "NVE updates recorded",
+            stage_counts[f"status_{IR_PRODUCTION_STATUS}_production_steps"],
+        ),
+    ], columns=["Trajectory result", "Value"]),
+    label="Completed dynamics run",
+    show_index=False,
+))
 """,
         ),
         code(
@@ -4573,9 +4649,14 @@ structure_manifest = write_structure_artifacts(
 )
 persist_progress.complete("seed, relaxed, and sampled structures saved")
 display(readable_table(
-    pd.Series(trajectory_manifest, name="Value")
-    .rename_axis("Field")
-    .reset_index(),
+    pd.DataFrame([
+        ("File", trajectory_manifest["file"]),
+        ("Frames", trajectory_manifest["frames"]),
+        ("Systems", trajectory_manifest["graphs"]),
+        ("Atoms", trajectory_manifest["atoms"]),
+        ("Time step / fs", trajectory_manifest["dt_fs"]),
+        ("SHA-256", trajectory_manifest["sha256"][:16] + "…"),
+    ], columns=["Field", "Value"]),
     label="Saved raw trajectory",
     show_index=False,
 ))
@@ -4615,7 +4696,7 @@ display(callout(
             outcome="Refill one GPU from a larger dataset, then inspect how the same stages would be arranged in a two-rank DistributedPipeline.",
             before="Predict which limit applies to the live batch and which applies to the full dataset: max_atoms, max_batch_size, or dataset length.",
             compute_time=(
-                "23 s in an earlier run using one H100 and earlier Toolkit versions"
+                "29 s on one H100 PCIe in the checked run"
             ),
             body=r"""
 - `FusedStage` shares one model call across stages on one GPU.
@@ -4652,6 +4733,9 @@ cluster_topology_by_graph = {
 
 diagnostic_table = production_diagnostics.diagnostic_table
 integrity_table = production_diagnostics.integrity_table
+diagnostic_display = build_production_diagnostics_display_tables(
+    production_diagnostics
+)
 nve_temperature = production_diagnostics.nve_temperature_3n_K
 energy_drift = production_diagnostics.energy_drift_meV_atom_ps
 energy_excursion = production_diagnostics.max_energy_excursion_meV_atom
@@ -4666,12 +4750,12 @@ diagnostics_progress.advance(
 )
 
 display(readable_table(
-    diagnostic_table.round(5),
+    diagnostic_display.diagnostics.round(5),
     label="Production trajectory diagnostics",
     show_index=False,
 ))
 display(readable_table(
-    integrity_table,
+    diagnostic_display.integrity.round(5),
     label="Production trajectory integrity checks",
     show_index=False,
 ))
@@ -4685,17 +4769,6 @@ display(callout(
     kind="note",
 ))
 
-print("hexamer intact  :", "PASS" if cluster_intact else "FAIL")
-print(
-    "initial ring   :",
-    "PASS"
-    if cluster_dft_comparison_valid
-    else "INITIAL RING CHANGED: cyclic DFT overlay not shown",
-)
-print(
-    "energy advisory:",
-    "within reporting line" if energy_within_advisory else "review trajectory",
-)
 if not cluster_intact:
     raise RuntimeError("Hexamer fragmented or an assigned O–H bond broke")
 diagnostics_progress.complete("charge, temperature, energy, and topology checks complete")
@@ -4706,6 +4779,11 @@ topology_message = (
         "The initial cyclic topology also persisted in every frame."
         if cluster_dft_comparison_valid
         else "The initial ring changed, so cyclic-DFT comparisons will not be shown."
+    )
+    + (
+        " The energy excursion stayed within the 1 meV/atom reporting line."
+        if energy_within_advisory
+        else " The energy excursion needs review."
     )
 )
 display(callout(
@@ -4858,8 +4936,6 @@ display(readable_table(
     reference_metrics.round(1),
     label="MD and B97-3c frequency summaries",
 ))
-print("reference engine:", references["H2O"].engine_version)
-print("reference method:", references["H2O"].manifest["model_chemistry"])
 md_isotope_message = (
     "The paired MD H/D shift met its temperature check."
     if bool(comparisons.loc["H2O_over_D2O_centroid", "reported"])
@@ -5927,9 +6003,13 @@ storage = neighbor_storage_table({
 layout_progress.complete("five repeated blocks measured for both layouts")
 display(readable_table(
     pd.DataFrame(layout_result["timings"])[[
-        "route", "calls_per_pass", "graphs", "atoms",
-        "median_structures_per_s", "median_atoms_per_s", "relative_iqr",
-    ]].round(2),
+        "route", "calls_per_pass", "median_structures_per_s", "relative_iqr",
+    ]].rename(columns={
+        "route": "Layout",
+        "calls_per_pass": "Calls per workload",
+        "median_structures_per_s": "Structures / s",
+        "relative_iqr": "Relative IQR",
+    }).round(2),
     label="Homogeneous and heterogeneous layouts · repeated timings",
     show_index=False,
 ))
@@ -6048,10 +6128,16 @@ nci_official_fd_error_eV_A = nci_force_check.official_finite_difference_error_eV
 nci_toolkit_analytic_force_eV_A = nci_force_check.toolkit_force_eV_A
 nci_toolkit_official_error_eV_A = nci_force_check.toolkit_official_error_eV_A
 nci_force_progress.complete("energy derivative and Toolkit force agree")
-print("checked atom and Cartesian axis:", nci_fd_atom_index, nci_fd_axis)
-print("official analytic / finite difference:",
-      nci_official_analytic_force_eV_A, nci_official_fd_force_eV_A, "eV Å⁻¹")
-print("Toolkit pipeline force:", nci_toolkit_analytic_force_eV_A, "eV Å⁻¹")
+display(readable_table(
+    pd.DataFrame([
+        ("Atom and axis", f"{nci_fd_atom_index}, {nci_fd_axis}"),
+        ("Official analytic force / eV Å⁻¹", nci_official_analytic_force_eV_A),
+        ("Energy finite-difference force / eV Å⁻¹", nci_official_fd_force_eV_A),
+        ("Toolkit pipeline force / eV Å⁻¹", nci_toolkit_analytic_force_eV_A),
+    ], columns=["Check", "Value"]),
+    label="Independent force check",
+    show_index=False,
+))
 del nci_official
 """,
     )
@@ -6174,7 +6260,17 @@ surface_model = PipelineModelWrapper(
 ).to(DEVICE).eval()
 surface_model.set_config("active_outputs", {"energy", "forces"})
 surface_model_progress.complete("custom adapter accepted by Toolkit composition")
-
+""",
+        ),
+    )
+    insert_after(
+        "compose-sevennet-surface-model",
+        code(
+            "display-sevennet-surface-model",
+            """
+surface_model_display_progress = NotebookProgress(
+    title="Show the surface model settings", total=1, unit="model card"
+)
 surface_model_table = build_sevennet_settings_table(
     model_name=SEVENNET_MODEL_NAME, modality=SEVENNET_MODALITY,
     reference_method=SEVENNET_REFERENCE_METHOD,
@@ -6192,14 +6288,23 @@ sevennet_model_card = build_sevennet_model_card(
     model=raw_sevennet,
     wrapper=sevennet_model,
 )
-print("SevenNet-Omni checkpoint SHA-256:", sevennet_checkpoint_sha256)
-display(readable_table(surface_model_table, label="Surface model settings", show_index=False))
+surface_model_display = surface_model_table.copy()
+surface_model_display.loc[
+    surface_model_display["Setting"].eq("Checkpoint SHA-256"), "Value"
+] = sevennet_checkpoint_sha256[:16] + "…"
+display(readable_table(
+    surface_model_display,
+    label="Surface model settings",
+    show_index=False,
+))
 display(readable_table(
     sevennet_model_card,
     label="SevenNet-Omni domain and input behavior",
     show_index=False,
 ))
+surface_model_display_progress.complete("model domain and composition shown")
 """,
+            source_hidden=True,
         ),
     )
 
@@ -6297,12 +6402,11 @@ selected_task_targets = {
     "oc20": "RPBE OC20 metal-catalyst adsorption data",
 }
 assert set(selected_task_targets).issubset(available_sevennet_tasks)
-task_catalog = pd.DataFrame({
-    "task": available_sevennet_tasks,
-    "run below": [task in selected_task_targets for task in available_sevennet_tasks],
-})
-display(readable_table(
-    task_catalog, label="Tasks reported by the loaded checkpoint", show_index=False,
+display(callout(
+    f"The checkpoint reports {len(available_sevennet_tasks)} tasks. "
+    "This short comparison evaluates mpa and oc20 on the same two graphs; "
+    "the full task list remains in available_sevennet_tasks.",
+    kind="note",
 ))
 sevennet_task_progress.advance(message="available checkpoint tasks inspected")
 task_probe_keys = ("clean_cu111", ADSLAB_KEYS["CO"])
@@ -6485,8 +6589,10 @@ origin_error = float((mu - mu_shifted).abs().max().detach().cpu())
 assert float(q_sum.abs().max().detach().cpu()) < IR_CHARGE_NEUTRALITY_TOLERANCE_E
 assert origin_error < IR_DIPOLE_ORIGIN_TOLERANCE_E_ANGSTROM
 display(readable_table(
-    pd.Series({**mass_checks, "origin_error_eA": origin_error}, name="Value")
-    .rename_axis("Check").reset_index(),
+    mass_invariance_display_table(
+        mass_checks,
+        dipole_origin_error_e_angstrom=origin_error,
+    ),
     label="Isotope and dipole checks", show_index=False,
 ))
 dipole_check_progress.complete("neutral-system dipoles are origin independent")
@@ -6545,7 +6651,7 @@ batch.positions[ptr[1]:ptr[2]].copy_(batch.positions[ptr[0]:ptr[1]])
 batch.positions[ptr[3]:ptr[4]].copy_(batch.positions[ptr[2]:ptr[3]])
 compute_neighbors(batch, config=model.model_config.neighbor_config)
 relaxed_outputs = model(batch)
-batch.energy = relaxed_outputs["energy"]
+batch.energy = relaxed_outputs["energy"].to(batch.positions.dtype)
 batch.forces = relaxed_outputs["forces"]
 batch.charges = relaxed_outputs["charges"]
 relax_check_progress.advance(message="final state re-evaluated after isotope pairing")
@@ -6572,7 +6678,7 @@ display(readable_table(
     label="Relaxed-structure force maxima", show_index=False,
 ))
 display(readable_table(
-    pd.Series(relaxed_mass_checks, name="Value").rename_axis("Check").reset_index(),
+    mass_invariance_display_table(relaxed_mass_checks),
     label="Relaxed isotope checks", show_index=False,
 ))
 relax_check_progress.complete("all four structures meet the force criterion")
@@ -6772,16 +6878,28 @@ inflight_stage_progress.complete("counters, trace, neighbors, and safety hooks a
             "run-inflight-example",
             """
 inflight_run_progress = NotebookProgress(
-    title="Run and inspect the inflight queue", total=2, unit="checks"
+    title="Run the inflight queue", total=2, unit="steps"
 )
 run_result = inflight.run(batch=None)
 assert run_result is None and inflight_sampler.exhausted and inflight.done
 inflight_run_progress.advance(message="every queued system reached HostMemory")
 
 completed = inflight_sink.drain()
+assert completed.num_graphs == INFLIGHT_SYSTEMS
+inflight_run_progress.complete(f"{completed.num_graphs:,} systems returned to CPU")
+""",
+        ),
+    )
+    insert_after(
+        "run-inflight-example",
+        code(
+            "validate-inflight-example",
+            """
+inflight_validation_progress = NotebookProgress(
+    title="Check inflight scheduling and results", total=2, unit="checks"
+)
 system_ids = completed.system_id.reshape(-1).to(torch.long)
 unique_ids, counts = torch.unique(system_ids, sorted=True, return_counts=True)
-assert completed.num_graphs == INFLIGHT_SYSTEMS
 assert torch.equal(unique_ids, torch.arange(INFLIGHT_SYSTEMS, dtype=torch.long))
 assert torch.equal(counts, torch.ones_like(counts))
 inflight_nvt_counts_correct = bool(
@@ -6792,6 +6910,7 @@ inflight_nve_counts_correct = bool(
 )
 assert inflight_nvt_counts_correct
 assert inflight_nve_counts_correct
+inflight_validation_progress.advance(message="stable IDs and update counts checked")
 inflight_failure_count = 0
 inflight_trace.finalize(
     completed_system_ids=system_ids,
@@ -6801,7 +6920,7 @@ inflight_trace_rows = inflight_trace_table(inflight_trace)
 assert int(inflight_trace_rows.iloc[-1]["Active"]) == 0
 assert int(inflight_trace_rows.iloc[-1]["Completed"]) == INFLIGHT_SYSTEMS
 assert int(inflight_trace_rows.iloc[-1]["Failures"]) == inflight_failure_count
-inflight_run_progress.complete("each stable system ID returned exactly once")
+inflight_validation_progress.complete("each stable system ID returned exactly once")
 
 inflight_summary = pd.DataFrame([
     ("queued systems", INFLIGHT_SYSTEMS),
@@ -6817,7 +6936,7 @@ inflight_summary = pd.DataFrame([
 display(readable_table(inflight_summary,
     label="Inflight batching result", show_index=False))
 display(readable_table(
-    inflight_trace_rows,
+    inflight_trace_rows.drop(columns="Failures"),
     label="Observed active-batch refills",
     show_index=False,
 ))
@@ -6829,6 +6948,7 @@ display(callout(
 inflight_dataset.close()
 del inflight_source, inflight_dataset, completed
 """,
+            source_hidden=True,
         ),
     )
 
@@ -6843,7 +6963,7 @@ del inflight_source, inflight_dataset, completed
                 "periodic box for the domain-parallel path."
             ),
             state="ready",
-            compute_time="not yet measured for this version",
+            compute_time="29 s on one H100 PCIe in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -6852,13 +6972,17 @@ del inflight_source, inflight_dataset, completed
         )
         + "\n\n"
         + r"""
-| Toolkit path | Workload shape | What changes | What runs here |
-|---|---|---|---|
-| `Batch` | independent systems that fit together | one model call evaluates all graphs | used throughout |
-| `FusedStage` | one active batch at different workflow stages | systems share model calls while keeping their own status | live, one GPU |
-| inflight `FusedStage` | a queue larger than the active batch | finished systems are replaced | live, one GPU |
-| `DomainParallel` | one large periodic system | multiple GPUs own spatial regions plus nearby halo atoms | live one-GPU walkthrough; three saved fixed-structure passes for the same 51,200-atom input on 1, 2, and 4 H100s when installed, otherwise `NOT REPORTED` |
-| `DistributedPipeline` | independent batches moving through different stages | workflow stages run on different GPUs | API sketch only |
+| Toolkit path | Use it when |
+|---|---|
+| `Batch` | independent systems fit in one model call |
+| `FusedStage` | systems in one active batch follow different workflow stages |
+| inflight `FusedStage` | the queue is larger than the active GPU batch |
+| `DomainParallel` | one periodic system must be divided across GPUs |
+| `DistributedPipeline` | independent batches move through stages on different GPUs |
+
+This notebook runs batching, fused stages, inflight execution, and a one-GPU
+`DomainParallel` walkthrough. It then loads bundled 1-, 2-, and 4-H100
+`DomainParallel` results. `DistributedPipeline` remains an API preview.
 """,
     )
     replace_markdown_source(
@@ -7155,11 +7279,21 @@ md_log_hook = LoggingHook(
 dynamics.register_hook(md_log_hook)
 dynamics_hooks_progress.complete("CSV logging hook attached")
 
-print("stages:", type(nvt).__name__, "+", type(nve).__name__)
-print("fused as:", type(dynamics).__name__)
-print("exact updates:", WARMUP_STEPS, "+", PRODUCTION_STEPS, "=", TOTAL_DYNAMICS_STEPS)
-print("recorder stage/frequency:", ir_hook.stage, ir_hook.frequency)
-print("NaN/Inf safety check: every 100 steps; workload is never shortened")
+display(readable_table(
+    pd.DataFrame([
+        ("Fused stages", f"{type(nvt).__name__} → {type(nve).__name__}"),
+        (
+            "Updates",
+            f"{WARMUP_STEPS:,} NVT + {PRODUCTION_STEPS:,} NVE = "
+            f"{TOTAL_DYNAMICS_STEPS:,}",
+        ),
+        ("IR recorder", "dipole, energy, and positions after every NVE step"),
+        ("Neighbor hooks", "update lists when atoms move far enough"),
+        ("Safety hook", "stop on NaN or Inf; checked every 100 steps"),
+    ], columns=["Hook or stage", "What it does"]),
+    label="Fused dynamics and hooks",
+    show_index=False,
+))
 """,
         ),
     )
@@ -7199,10 +7333,9 @@ print("NaN/Inf safety check: every 100 steps; workload is never shortened")
                 "DistributedPipeline layout."
             ),
             need=(
-                "One CUDA GPU and the tutorial environment. Historical H100 runs "
-                "put the dynamics section near ten minutes. The merged notebook "
-                "and Stage 7 have not been measured with the current Toolkit "
-                "versions."
+                "One CUDA GPU and the tutorial environment. The checked run took "
+                "13 min 28 s of notebook wall time on one H100 PCIe; Stage 6 "
+                "accounted for 9 min 29 s."
             ),
         )
         + "\n\n"
@@ -7236,28 +7369,28 @@ walked through live on one GPU without decomposition. Saved H100 results cover
 multi-GPU `DomainParallel`; `DistributedPipeline` is an API preview with no
 reported correctness or timing result.
 
-### Historical reference compute time
+### Checked H100 pacing
 
-| Section | Historical code time on one H100 |
+| Section | Code time on one H100 PCIe |
 |---|---:|
-| Setup | 22 s, earlier run |
-| Stage 1 | 18 s, earlier run |
-| Stage 2 | 11 s, earlier run |
-| Stage 3: NCI calculation | 22.6 s for an earlier six-cell form using the current Toolkit versions; current eight-cell stage not measured |
-| Stage 4: adapter, tasks, and single points | 17 s for an earlier form without the task comparison; current stage not measured |
-| Stage 5: preparation and harmonic check | 1 min 42 s, earlier run |
-| Stage 6: trajectory and analysis | 10 min 3 s, earlier run |
-| Stage 7: scaling paths | **Not measured** |
-| Complete merged notebook | **Not measured** |
+| Setup | 49 s |
+| Stage 1: one structure | 20 s |
+| Stage 2: batching | 14 s |
+| Stage 3: NCI calculation | 23 s |
+| Stage 4: adapter and single points | 20 s |
+| Stage 5: preparation and harmonic check | 1 min 14 s |
+| Stage 6: trajectory and analysis | 9 min 29 s |
+| Stage 7: scaling paths | 29 s |
+| **Complete notebook code** | **13 min 19 s** |
+| **Notebook runner wall time** | **13 min 28 s** |
 
-The **22.643 s** Stage 3 measurement used the current Toolkit versions and an
-earlier six-cell form. The merged notebook and current eight-cell Stage 3 have
-not been timed in the release environment.
+These are pacing measurements from one complete checked run, not benchmark
+results. Checkpoint caches were warm. Hardware, software, and cache state can
+change the elapsed time.
 """
         + "\n\n"
         + callout_html(
-            "Dynamics was the longest historical pause. Stage 7 and the merged "
-            "notebook are not timed. Reuse the saved trajectory for plotting.",
+            "Dynamics is the longest pause. Reuse the saved trajectory for plotting.",
             kind="note",
         ),
     )
@@ -7344,11 +7477,7 @@ and raw Warp cells are a short comparison, not three competing workflow paths.
                 "interaction curves with two references."
             ),
             state="ready",
-            compute_time=(
-                "22.6 s for an earlier six-cell form using the current Toolkit "
-                "versions; "
-                "current eight-cell stage not timed"
-            ),
+            compute_time="23 s on one H100 PCIe in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -7496,10 +7625,7 @@ The D3 component needs a different cutoff and neighbor layout. `PipelineModelWra
                 "one batched dynamics workflow."
             ),
             state="ready",
-            compute_time=(
-                "1 min 42 s in an earlier run using earlier Toolkit versions, "
-                "including molecular composition"
-            ),
+            compute_time="1 min 14 s on one H100 PCIe in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -7654,10 +7780,7 @@ Status belongs to each structure, so different structures can occupy different s
                 "calculating spectra."
             ),
             state="ready",
-            compute_time=(
-                "10 min 3 s in an earlier run using one H100 and earlier "
-                "Toolkit versions"
-            ),
+            compute_time="9 min 29 s on one H100 PCIe in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -7745,35 +7868,24 @@ every expected ID has returned exactly once.
     replace_markdown_source(
         "distributed-pipeline-intro",
         r"""
-### Separate stages are a different problem
+### Optional API preview: put stages on different GPUs
 
-Unlike `DomainParallel`, `DistributedPipeline` moves independent batches
-between workflow stages.
-
-A **rank** is one worker process, normally attached to one GPU. `prior_rank`
-and `next_rank` name the neighboring workers. `comm_mode="async_recv"` selects
-the pipeline's nonblocking receive protocol.
-
-Toolkit 0.2 does not yet preserve every field in a complete atomistic `Batch`
-on this transfer path. The following block therefore shows the intended
-two-worker layout; this lesson does not execute it.
+`DomainParallel` divides one periodic system. `DistributedPipeline` instead
+moves batches of independent systems from one workflow stage to the next.
+A **rank** is one worker process, usually attached to one GPU.
 
 ```python
-from nvalchemi.dynamics import DistributedPipeline, FIRE2, FusedStage
+from nvalchemi.dynamics import DistributedPipeline, FusedStage
 from nvalchemi.dynamics.base import BufferConfig
 
+# Both ranks reserve the same maximum transfer shape.
 transfer = BufferConfig(
     num_systems=max_batch_size,
     num_nodes=max_atoms_in_transfer,
-    num_edges=0,  # neighbor arrays are rebuilt after the transfer
-)
-fixed_optimization = FIRE2(
-    model=model,
-    dt=0.02,
-    n_steps=optimization_steps,
+    num_edges=0,
 )
 optimization = FusedStage(
-    sub_stages=[(0, fixed_optimization)],
+    sub_stages=[(0, fire)],
     sampler=relaxation_sampler,
     prior_rank=None,
     next_rank=1,
@@ -7799,19 +7911,20 @@ with pipeline:
     pipeline.run()
 ```
 
-The first worker wraps `FIRE2` in a one-substage `FusedStage` so each system
-leaves after its step budget. A plain `FIRE2(n_steps=...)` pipeline stage would
-step the batch without graduating its systems.
+`prior_rank` and `next_rank` connect adjacent workers. `BufferConfig` sets the
+largest batch shape they may exchange. The receiving stage rebuilds neighbor
+arrays, so this example does not transfer edges. `comm_mode="async_recv"`
+allows the receiver to wait without blocking its other work.
 
-`BufferConfig` sets a shared maximum transfer shape. `synchronized=False`
-removes an optional barrier, but each iteration still ends with a global
-completion check. This sketch does not claim stage overlap.
+For stage times `t1` and `t2`, ideal two-GPU throughput speedup is
+`(t1 + t2) / max(t1, t2)`, at most 2×. Two independent stage pairs can at most
+double that throughput again. Real speedup is lower when stages are unbalanced
+or communication is significant. The prerecorded H100 plan uses 8,192 systems
+with at most 512 active per pair so startup does not dominate the comparison.
 
-This is an API preview, not a performance result. The exact transfer failure
-and the maintained check are documented in the
-[compute-lab runbook](COMPUTE_LAB_RUNBOOK.md#6-check-the-separate-distributedpipeline-campaign).
-The notebook therefore leaves pipeline correctness, overlap, and speed as
-`NOT REPORTED`.
+Toolkit 0.2 does not yet preserve a complete atomistic `Batch` on this transfer
+path. This notebook therefore shows the intended public API but does not report
+pipeline correctness, overlap, or speed.
 """,
     )
     replace_markdown_source(
@@ -7825,7 +7938,7 @@ The notebook therefore leaves pipeline correctness, overlap, and speed as
 - Connect an external energy-and-force model through the Toolkit model interface.
 - Relax and propagate several systems together, then record results through hooks.
 - Keep a larger queue moving with inflight batching.
-- Use `DomainParallel` for one large periodic system. This notebook walks through the public API with one domain on one GPU, then shows three checked energy/force passes for the same 51,200-atom input on 1, 2, and 4 H100s when installed.
+- Use `DomainParallel` for one large periodic system. This notebook walks through the public API with one domain on one GPU, then shows bundled results from three checked energy/force passes for the same 51,200-atom input on 1, 2, and 4 H100s.
 - `DistributedPipeline` is the intended API when many independent systems pass
   through different stages. The Toolkit 0.2 API shape is introduced here, but its
   correctness, overlap, and speed remain `NOT REPORTED`.
@@ -7909,9 +8022,15 @@ batch_access_progress.complete("dimer graphs selected as a new Batch")
 assert first_graph.num_nodes == 6
 assert len(roundtrip_graphs) == scan_batch.num_graphs
 assert dimer_only_batch.num_graphs == len(DIMER_DISTANCES_A)
-print("get_data(0)       :", first_graph.num_nodes, "atoms")
-print("to_data_list()    :", len(roundtrip_graphs), "graphs")
-print("index_select(...) :", dimer_only_batch.num_graphs, "dimers")
+display(readable_table(
+    pd.DataFrame([
+        ("get_data(0)", f"{first_graph.num_nodes} atoms"),
+        ("to_data_list()", f"{len(roundtrip_graphs)} graphs"),
+        ("index_select(...)", f"{dimer_only_batch.num_graphs} dimers"),
+    ], columns=["Batch API", "Returned"]),
+    label="Three ways to recover graphs",
+    show_index=False,
+))
 """,
         ),
     )
@@ -8003,10 +8122,15 @@ cpu_gpu_display_progress = NotebookProgress(
 )
 display(readable_table(
     crossover[[
-        "batch_size", "route", "wall_ms_per_pass",
-        "median_structures_per_s", "median_atoms_per_s", "relative_iqr",
+        "batch_size", "route", "wall_ms_per_pass", "median_structures_per_s",
         "max_abs_energy_difference",
-    ]].round(2),
+    ]].rename(columns={
+        "batch_size": "Batch size",
+        "route": "Device",
+        "wall_ms_per_pass": "Time / ms",
+        "median_structures_per_s": "Structures / s",
+        "max_abs_energy_difference": "CPU-GPU max |ΔE| / eV",
+    }).round(2),
     label="CPU/GPU crossover · five repeated warm-call blocks",
     show_index=False,
 ))
@@ -8057,20 +8181,38 @@ display(readable_table(
     .drop_duplicates(ignore_index=True),
     label="NCI Atlas tutorial subset", show_index=False,
 ))
-print("graphs:", nci_batch.num_graphs, "= 3 systems × 10 separations × AB/A/B")
+display(callout(
+    f"One Batch holds {nci_batch.num_graphs} graphs: "
+    "3 systems × 10 separations × AB/A/B.",
+    kind="result",
+    result_state="pass",
+))
 """,
     )
-    replace_code_source(
+    insert_before(
         "configure-nci-model",
-        """
-nci_model_progress = NotebookProgress(
-    title="Configure AIMNet, Coulomb, and D3", total=4, unit="components"
+        code(
+            "prepare-nci-resources",
+            """
+nci_resource_progress = NotebookProgress(
+    title="Verify the NCI model files", total=1, unit="set"
 )
 NCI_CHECKPOINTS = [f"aimnet2-wb97m-d3_{index}" for index in range(4)]
 aimnet_checkpoint_identities = verify_checkpoint_identities(
     CHECKPOINT_IDENTITIES
 )
 NCI_D3_SMOOTHING_FRACTION = DOMAIN_METHODOLOGY.d3_smoothing_fraction
+nci_resource_progress.complete("five AIMNet files and shared settings checked")
+""",
+            source_hidden=True,
+        ),
+    )
+    replace_code_source(
+        "configure-nci-model",
+        """
+nci_model_progress = NotebookProgress(
+    title="Configure AIMNet, Coulomb, and D3", total=3, unit="components"
+)
 nci_aimnet = AIMNet2Wrapper.from_checkpoint(
     NCI_CHECKPOINTS[0], device=DEVICE, compile_model=False
 ).eval()
@@ -8080,7 +8222,7 @@ assert nci_metadata["needs_dispersion"] is True
 assert nci_metadata["coulomb_mode"] == "sr_embedded"
 nci_aimnet.set_config("active_outputs", {"energy", "charges"})
 nci_model_progress.advance(
-    message="five checkpoint files verified; ensemble member 0 loaded"
+    message="ensemble member 0 loaded with charge output"
 )
 
 nci_d3_params = nci_metadata["d3_params"]
@@ -8093,17 +8235,27 @@ nci_d3 = DFTD3ModelWrapper(
     # Toolkit creates it from its official source when it is absent.
     auto_download=True,
 ).to(DEVICE).eval()
-D3_PARAMETER_SHA256 = sha256_file(D3_PARAMETER_FILE)
-assert D3_PARAMETER_SHA256 == EXPECTED_D3_PARAMETER_SHA256
 nci_d3.set_config("active_outputs", {"energy"})
 nci_model_progress.advance(
-    message="D3 data checked and checkpoint settings applied"
+    message="checkpoint D3 settings applied"
 )
 nci_coulomb = DirectCoulombWrapper().to(DEVICE).eval()
 nci_coulomb.set_config("active_outputs", {"energy"})
-nci_model_progress.advance(message="finite all-pairs Coulomb configured")
-nci_validation_settings = nci_validation_settings_table(NCI_VALIDATION)
 nci_model_progress.complete("three components and named checks are ready")
+""",
+    )
+    insert_after(
+        "configure-nci-model",
+        code(
+            "display-nci-model-settings",
+            """
+nci_model_display_progress = NotebookProgress(
+    title="Check and show the NCI components", total=2, unit="checks"
+)
+D3_PARAMETER_SHA256 = sha256_file(D3_PARAMETER_FILE)
+assert D3_PARAMETER_SHA256 == EXPECTED_D3_PARAMETER_SHA256
+nci_model_display_progress.advance(message="D3 parameter file verified")
+nci_validation_settings = nci_validation_settings_table(NCI_VALIDATION)
 display(readable_table(pd.DataFrame([
     {
         "component": "AIMNet checkpoint base",
@@ -8120,9 +8272,21 @@ display(readable_table(pd.DataFrame([
         "implementation": "Toolkit DFTD3ModelWrapper",
         "depends on": "positions, elements",
     },
-]), label="Model components", show_index=False))
-print("numerical check set:", NCI_VALIDATION.method_id)
+]).rename(columns={
+    "component": "Component",
+    "implementation": "Implementation",
+    "depends on": "Depends on",
+}), label="Model components", show_index=False))
+display(callout(
+    "The checks require graph-charge conservation, component-sum agreement, "
+    "graph-order agreement, and one independent force derivative. Exact "
+    "tolerances remain available in nci_validation_settings.",
+    kind="note",
+))
+nci_model_display_progress.complete("components and check set shown")
 """,
+            source_hidden=True,
+        ),
     )
     replace_code_source(
         "evaluate-nci-components",
@@ -8180,7 +8344,12 @@ nci_charge_conservation_max_abs_e = max(nci_charge_residuals_e)
 nci_evaluation_progress.complete(
     "four AIMNet, four Coulomb, and one D3 call complete"
 )
-print("largest graph-charge residual / e:", nci_charge_conservation_max_abs_e)
+display(callout(
+    "All predicted graph charges matched their requested totals; the largest "
+    f"absolute residual was {nci_charge_conservation_max_abs_e:.2e} e.",
+    kind="result",
+    result_state="pass",
+))
 """,
     )
     insert_before(
@@ -8251,8 +8420,10 @@ nci_component_sum_max_abs_eV = float(
     ).abs().max()
 )
 torch.testing.assert_close(
-    torch.as_tensor(nci_component_interactions["pipeline"].to_numpy()),
-    torch.as_tensor(nci_component_interactions["component_sum"].to_numpy()),
+    torch.as_tensor(nci_component_interactions["pipeline"].to_numpy(copy=True)),
+    torch.as_tensor(
+        nci_component_interactions["component_sum"].to_numpy(copy=True)
+    ),
     atol=NCI_VALIDATION.interaction_energy_atol_eV,
     rtol=0.0,
 )
@@ -8291,8 +8462,12 @@ nci_graph_order_max_abs_eV = float(
     ).abs().max()
 )
 torch.testing.assert_close(
-    torch.as_tensor(nci_order_interactions["reversed_order"].to_numpy()),
-    torch.as_tensor(nci_order_interactions["original_order"].to_numpy()),
+    torch.as_tensor(
+        nci_order_interactions["reversed_order"].to_numpy(copy=True)
+    ),
+    torch.as_tensor(
+        nci_order_interactions["original_order"].to_numpy(copy=True)
+    ),
     atol=NCI_VALIDATION.interaction_energy_atol_eV,
     rtol=0.0,
 )
@@ -8476,8 +8651,17 @@ observed_by_mode = reference_display.observed_by_mode
 harmonic_mode_indices = reference_display.harmonic_mode_indices
 reference_progress.complete("observed H2O and D2O positions matched to DFT modes")
 
-print("B97-3c engine:", references["H2O"].engine_version)
-print("B97-3c method:", references["H2O"].manifest["model_chemistry"])
+display(readable_table(
+    pd.DataFrame([
+        ("DFT engine", references["H2O"].engine_version),
+        ("DFT method", references["H2O"].manifest["model_chemistry"]),
+        ("DFT systems", ", ".join(reference_dirs)),
+        ("Observed gas-phase markers", len(experimental_fundamentals)),
+        ("Experimental data ID", experimental_artifact_id),
+    ], columns=["Reference", "Value"]),
+    label="IR reference data",
+    show_index=False,
+))
 display(readable_table(
     reference_display.table,
     label="B97-3c harmonic modes and observed positions", show_index=False,
@@ -8989,8 +9173,9 @@ domain_plan = domain_box.plan
 domain_atoms = domain_box.atoms
 domain_box_progress.advance(message="coordinates, metadata, and checksums verified")
 
+domain_box_details = box_summary_table(domain_plan, domain_atoms)
 display(readable_table(
-    box_summary_table(domain_plan, domain_atoms).round(4),
+    compact_box_summary_table(domain_box_details),
     label="Checked periodic starting box", show_index=False,
 ))
 preview_figure, preview_axis = plt.subplots(figsize=(8.0, 4.5))
@@ -9032,9 +9217,13 @@ domain_batch = Batch.from_data_list([domain_data], device=DEVICE)
 assert domain_batch.num_graphs == 1
 assert float(domain_batch.charge.item()) == 0.0
 domain_batch_progress.complete(f"one Batch graph with {domain_batch.num_nodes:,} atoms")
-print("graphs:", domain_batch.num_graphs)
-print("atoms :", domain_batch.num_nodes)
-print("total system charge:", float(domain_batch.charge.item()))
+display(callout(
+    f"Batch contains {domain_batch.num_graphs} graph, "
+    f"{domain_batch.num_nodes:,} atoms, and a "
+    f"{float(domain_batch.charge.item()):g} e total-charge target.",
+    kind="result",
+    result_state="pass",
+))
 """,
         ),
     )
@@ -9219,18 +9408,18 @@ domain_molecule_charge_values = segmented_sum(
 domain_molecule_charges, domain_molecule_charge_summary = molecule_charge_tables(
     domain_plan, domain_atoms, domain_molecule_charge_values
 )
+domain_charge_display = molecule_charge_display_tables(
+    domain_molecule_charges,
+    domain_molecule_charge_summary,
+)
 display(readable_table(
-    domain_molecule_charge_summary.round(6),
+    domain_charge_display.summary.round(6),
     label="Predicted molecular charge sums", show_index=False,
 ))
 domain_charge_progress.advance(message="all molecule sums summarized")
 
-charge_extremes = pd.concat([
-    domain_molecule_charges.nsmallest(3, "predicted_charge_e"),
-    domain_molecule_charges.nlargest(3, "predicted_charge_e"),
-]).sort_values("predicted_charge_e")
 display(readable_table(
-    charge_extremes.round(6),
+    domain_charge_display.extremes.round(6),
     label="Most negative and positive molecular charge sums",
     show_index=False,
 ))
@@ -9486,9 +9675,10 @@ domain_view = load_domain_lesson_view(
     expected_world_sizes=DOMAIN_REQUIRED_WORLD_SIZES,
 )
 if not domain_view.available:
-    domain_results_progress.complete("no complete H100 result set installed")
+    domain_results_progress.complete("saved H100 result files are missing")
     display(callout(
-        "NOT REPORTED: no complete saved H100 run is installed. "
+        "NOT REPORTED: this notebook copy does not include a complete checked "
+        "H100 run. "
         + domain_view.reason,
         kind="result", result_state="not_reported",
     ))
@@ -9609,32 +9799,101 @@ domain_display_progress = NotebookProgress(
 )
 if domain_view.available:
     display(readable_table(
-        domain_view.run_settings_table,
+        domain_view.run_settings_table.rename(
+            columns={"setting": "Setting", "value": "Value"}
+        ),
         label="Recorded H100 run settings",
         show_index=False,
     ))
+    domain_layout_display = domain_view.layout_table.rename(columns={
+        "world_size": "GPUs",
+        "nodes": "Nodes",
+        "ranks": "Ranks",
+        "spatial_grid": "Rank grid",
+        "owned_atoms_min": "Fewest owned atoms",
+        "owned_atoms_max": "Most owned atoms",
+    })
     display(readable_table(
-        domain_view.layout_table,
+        domain_layout_display,
         label=f"Spatial layout · same {DOMAIN_FIXED_ATOM_COUNT:,}-atom input",
         show_index=False,
     ))
+    domain_timing_display = domain_view.timing_table[[
+        "world_size",
+        "pass_1_s",
+        "pass_2_s",
+        "pass_3_s",
+        "median_time_s",
+        "speedup_vs_1gpu",
+    ]].rename(columns={
+        "world_size": "GPUs",
+        "pass_1_s": "Pass 1 / s",
+        "pass_2_s": "Pass 2 / s",
+        "pass_3_s": "Pass 3 / s",
+        "median_time_s": "Median / s",
+        "speedup_vs_1gpu": "Speedup vs 1 GPU",
+    })
     display(readable_table(
-        domain_view.timing_table.round(3),
+        domain_timing_display.round(3),
         label="Three fixed-structure energy/force passes",
         show_index=False,
     ))
+    domain_agreement_display = domain_view.output_agreement_table[[
+        "world_size",
+        "energy_repeatability_span_meV_atom",
+        "energy_difference_meV_atom",
+        "force_rms_error_eV_A",
+        "force_max_error_eV_A",
+        "passed",
+    ]].rename(columns={
+        "world_size": "GPUs",
+        "energy_repeatability_span_meV_atom": "Energy span / meV atom⁻¹",
+        "energy_difference_meV_atom": "Energy difference / meV atom⁻¹",
+        "force_rms_error_eV_A": "Force RMS difference / eV Å⁻¹",
+        "force_max_error_eV_A": "Force max difference / eV Å⁻¹",
+        "passed": "Checks passed",
+    })
     display(readable_table(
-        domain_view.output_agreement_table.round(6),
+        domain_agreement_display.round(6),
         label="Energy and force agreement",
         show_index=False,
     ))
+    domain_charge_row = domain_view.charge_diagnostics_table.iloc[0]
+    domain_charge_display = pd.DataFrame([
+        ("Atoms", domain_charge_row["atom_count"]),
+        ("Charge dtype", domain_charge_row["dtype"]),
+        ("Target / e", domain_charge_row["target_sum_e"]),
+        ("Predicted sum / e", domain_charge_row["charge_sum_e"]),
+        ("Residual / e", domain_charge_row["residual_e"]),
+        ("|Residual| per atom / e", domain_charge_row["abs_residual_per_atom_e"]),
+        ("Finite", domain_charge_row["finite"]),
+    ], columns=["Check", "Value"])
     display(readable_table(
-        domain_view.charge_diagnostics_table.round(9),
+        domain_charge_display.round(9),
         label="One-H100 predicted charges passed to PME",
         show_index=False,
     ))
+    domain_electrostatics_row = domain_view.electrostatics_table.iloc[0]
+    domain_electrostatics_display = pd.DataFrame([
+        ("Atoms", domain_electrostatics_row["atom_count"]),
+        ("Predicted sum / e", domain_electrostatics_row["charge_sum_e"]),
+        ("Charge residual / e", domain_electrostatics_row["charge_residual_e"]),
+        (
+            "Energy difference / meV atom⁻¹",
+            domain_electrostatics_row["energy_abs_error_meV_per_atom"],
+        ),
+        (
+            "Force RMS difference / eV Å⁻¹",
+            domain_electrostatics_row["force_rms_error_eV_A"],
+        ),
+        (
+            "Force max difference / eV Å⁻¹",
+            domain_electrostatics_row["force_max_error_eV_A"],
+        ),
+        ("Checks passed", domain_electrostatics_row["passed"]),
+    ], columns=["Check", "Value"])
     display(readable_table(
-        domain_view.electrostatics_table.round(6),
+        domain_electrostatics_display.round(6),
         label="Fixed-charge PME versus Ewald check",
         show_index=False,
     ))
@@ -9679,8 +9938,8 @@ else:
     display(callout(
         "The live one-GPU cell exercised the public DomainParallel call "
         "sequence with one domain and no spatial splitting. The fixed "
-        "51,200-atom comparison on 1, 2, and 4 H100s is NOT REPORTED until a "
-        "complete checked result set is installed.",
+        "51,200-atom comparison on 1, 2, and 4 H100s is NOT REPORTED because "
+        "the saved checked result files are missing.",
         kind="result", result_state="not_reported",
     ))
     domain_display_progress.complete("no recorded result set to display")
@@ -9702,15 +9961,27 @@ spectrum_table = saved_run.spectrum_table
 save_progress.complete("tables, spectra, and run summary saved")
 
 saved_inventory = pd.DataFrame({"saved_file": saved_run.relative_files})
+key_output_names = (
+    "part1_results_summary.csv",
+    "nci_interaction_curves.csv",
+    "surface_adsorption_energies.csv",
+    "water_ir_spectra.csv",
+    "water_monomer_harmonic_comparison.csv",
+    "water_run_manifest.json",
+)
+key_outputs = saved_inventory.loc[
+    saved_inventory["saved_file"].isin(key_output_names)
+].rename(columns={"saved_file": "Key output"})
+assert len(key_outputs) == len(key_output_names)
 display(readable_table(
-    saved_inventory,
-    label="Files written by the final report",
+    key_outputs,
+    label="Key files written by the final report",
     show_index=False,
 ))
 display(callout(
     f"Saved {len(saved_run.relative_files)} report files to "
-    f"{OUTPUT_DIR.relative_to(ROOT)}. The run manifest also inventories the "
-    "trajectory and raw Toolkit data written earlier.",
+    f"{OUTPUT_DIR.relative_to(ROOT)}. water_run_manifest.json lists every "
+    "report file, trajectory array, and raw Toolkit data file written earlier.",
     kind="result", result_state="pass",
 ))
 """,
@@ -9775,6 +10046,10 @@ summary_progress.complete("summary and saved-report records assembled")
             "domain-parallel-results",
             "display-domain-parallel-results",
             "pipeline-campaign-results",
+            "prepare-nci-resources",
+            "display-nci-model-settings",
+            "display-sevennet-surface-model",
+            "validate-inflight-example",
         )
     )
     set_background(
@@ -9849,6 +10124,7 @@ summary_progress.complete("summary and saved-report records assembled")
             "inflight-example",
             "configure-inflight-stage",
             "run-inflight-example",
+            "validate-inflight-example",
             "domain-decomposition-intro",
             "build-domain-box",
             "convert-domain-box",

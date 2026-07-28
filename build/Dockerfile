@@ -117,6 +117,7 @@ COPY part-3-batched-melting-toolkit/README.md ./part-3-batched-melting-toolkit/R
 # API, validation, and recorded-result paths must remain inspectable.
 COPY scripts/assemble_part1_pipeline_campaign.py \
      scripts/benchmark_part1_distributed_campaign.py \
+     scripts/measure_part1_nci_stage.py \
      scripts/part1_distributed_campaign_contract.py \
      scripts/part1_domain_plan.py \
      scripts/part1_domain_run.py \
@@ -131,6 +132,7 @@ COPY scripts/assemble_part1_pipeline_campaign.py \
      scripts/slurm_part1_dimer_reference.sbatch \
      scripts/slurm_part1_distributed_campaign.sbatch \
      scripts/slurm_part1_domain_decomposition.sbatch \
+     scripts/slurm_part1_nci_stage3.sbatch \
      scripts/slurm_part1_remaster_h100.sbatch \
      scripts/slurm_part1_sevennet_setup.sbatch \
      scripts/validate_part1_ir_run.py \

@@ -2,10 +2,13 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stdout
 from hashlib import sha256
+from io import StringIO
 from pathlib import Path
 from collections.abc import Callable
-from typing import Any
+import sys
+from typing import Any, TypeVar
 
 import torch
 
@@ -15,6 +18,30 @@ from .sevennet_config import (
     SEVENNET_MODALITY,
     SEVENNET_MODEL_NAME,
 )
+
+_T = TypeVar("_T")
+_SEVENNET_BACKEND_CONVERSION_LINE = "Converting model backend..."
+
+
+def _run_without_backend_conversion_line(call: Callable[[], _T]) -> _T:
+    """Run one SevenNet conversion without its expected status line.
+
+    SevenNet prints this line while converting a checkpoint to the requested
+    backend. Any other stdout from the same call is written back unchanged.
+    """
+
+    captured = StringIO()
+    try:
+        with redirect_stdout(captured):
+            return call()
+    finally:
+        unexpected = "".join(
+            line
+            for line in captured.getvalue().splitlines(keepends=True)
+            if line.rstrip("\r\n") != _SEVENNET_BACKEND_CONVERSION_LINE
+        )
+        if unexpected:
+            sys.stdout.write(unexpected)
 
 
 def sha256_file(path: str | Path) -> str:
@@ -76,10 +103,12 @@ def load_raw_sevennet_omni(
         checkpoint_loader = load_checkpoint
 
     checkpoint = checkpoint_loader(Path(checkpoint_path))
-    raw_model = checkpoint.build_model(
-        enable_cueq=False,
-        enable_flash=False,
-        enable_oeq=False,
+    raw_model = _run_without_backend_conversion_line(
+        lambda: checkpoint.build_model(
+            enable_cueq=False,
+            enable_flash=False,
+            enable_oeq=False,
+        )
     )
     if required_modality not in getattr(raw_model, "modal_map", {}):
         raise RuntimeError(

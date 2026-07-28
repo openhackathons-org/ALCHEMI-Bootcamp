@@ -29,6 +29,15 @@ _MODE_DISPLAY = {
     "bend": "ν2 bend",
     "antisymmetric_stretch": "ν3 antisymmetric stretch",
 }
+_MASS_CHECK_LABELS = (
+    ("monomer_energy_eV", "Monomer |ΔE| / eV"),
+    ("monomer_force_eV_A", "Monomer max |ΔF| / eV Å⁻¹"),
+    ("monomer_charge_e", "Monomer max |Δq| / e"),
+    ("hexamer_energy_eV", "Hexamer |ΔE| / eV"),
+    ("hexamer_force_eV_A", "Hexamer max |ΔF| / eV Å⁻¹"),
+    ("hexamer_charge_e", "Hexamer max |Δq| / e"),
+    ("D_over_H_mass", "D/H mass ratio"),
+)
 
 
 @dataclass(frozen=True)
@@ -38,6 +47,82 @@ class MonomerReferenceDisplay:
     table: pd.DataFrame
     observed_by_mode: pd.DataFrame
     harmonic_mode_indices: dict[str, tuple[int, ...]]
+
+
+def mass_invariance_display_table(
+    checks: Mapping[str, Any],
+    *,
+    dipole_origin_error_e_angstrom: float | None = None,
+) -> pd.DataFrame:
+    """Return readable H/D invariance checks without changing the raw mapping."""
+
+    missing = [name for name, _label in _MASS_CHECK_LABELS if name not in checks]
+    if missing:
+        raise ValueError("mass invariance checks are missing: " + ", ".join(missing))
+
+    rows = []
+    for name, label in _MASS_CHECK_LABELS:
+        value = float(checks[name])
+        if not np.isfinite(value) or value < 0.0:
+            raise ValueError(f"{name} must be finite and non-negative")
+        rows.append((label, value))
+    if dipole_origin_error_e_angstrom is not None:
+        origin_error = float(dipole_origin_error_e_angstrom)
+        if not np.isfinite(origin_error) or origin_error < 0.0:
+            raise ValueError(
+                "dipole_origin_error_e_angstrom must be finite and non-negative"
+            )
+        rows.append(("Dipole origin shift / e Å", origin_error))
+    return pd.DataFrame(rows, columns=("Check", "Value"))
+
+
+def harmonic_mode_comparison_display_table(table: pd.DataFrame) -> pd.DataFrame:
+    """Reduce the full harmonic result to the six columns learners compare."""
+
+    if not isinstance(table, pd.DataFrame):
+        raise TypeError("harmonic comparison must be a pandas DataFrame")
+    required = {
+        "system",
+        "mode",
+        "AIMNet+Coulomb+D3_harmonic_cm-1",
+        "B97-3c_harmonic_cm-1",
+        "AIMNet+Coulomb+D3_minus_B97-3c_cm-1",
+        "observed_gas_cm-1",
+    }
+    _required_columns(table, required, name="harmonic comparison")
+    result = table.loc[
+        :,
+        [
+            "system",
+            "mode",
+            "AIMNet+Coulomb+D3_harmonic_cm-1",
+            "B97-3c_harmonic_cm-1",
+            "AIMNet+Coulomb+D3_minus_B97-3c_cm-1",
+            "observed_gas_cm-1",
+        ],
+    ].copy()
+    numeric_columns = result.columns[2:]
+    numeric = result.loc[:, numeric_columns].to_numpy(dtype=np.float64)
+    if not np.isfinite(numeric).all():
+        raise ValueError("harmonic comparison contains non-finite values")
+    if np.any(numeric[:, [0, 1, 3]] <= 0.0):
+        raise ValueError("harmonic and observed frequencies must be positive")
+    expected_difference = numeric[:, 0] - numeric[:, 1]
+    if not np.allclose(expected_difference, numeric[:, 2], rtol=0.0, atol=1.0e-9):
+        raise ValueError("model minus DFT values do not match the frequencies")
+    result = result.rename(
+        columns={
+            "system": "System",
+            "mode": "Mode",
+            "AIMNet+Coulomb+D3_harmonic_cm-1": (
+                "AIMNet + Coulomb + D3 harmonic / cm⁻¹"
+            ),
+            "B97-3c_harmonic_cm-1": "B97-3c harmonic / cm⁻¹",
+            "AIMNet+Coulomb+D3_minus_B97-3c_cm-1": "Model - DFT / cm⁻¹",
+            "observed_gas_cm-1": "Observed gas phase / cm⁻¹",
+        }
+    )
+    return result.round(1).reset_index(drop=True)
 
 
 def _required_columns(table: pd.DataFrame, required: set[str], *, name: str) -> None:
@@ -216,6 +301,8 @@ def monomer_mode_mapping_display_table(mode_mapping: Any) -> pd.DataFrame:
 
 __all__ = [
     "MonomerReferenceDisplay",
+    "harmonic_mode_comparison_display_table",
+    "mass_invariance_display_table",
     "monomer_mode_mapping_display_table",
     "prepare_monomer_reference_display",
 ]

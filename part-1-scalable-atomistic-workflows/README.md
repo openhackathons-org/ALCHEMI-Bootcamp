@@ -53,20 +53,15 @@ and run it from top to bottom.
 The notebook labels short calculations as demonstrations when they are not
 long enough to support a convergence or accuracy claim.
 
-### Historical focused Stage 3 timing
+### Checked H100 pacing
 
-An older six-cell Stage 3 source took **22.6 s** in one fresh-kernel run on an
-NVIDIA H100 NVL. This is the CUDA-synchronized sum of those six notebook cells.
-It includes loading the NCI data, four cold AIMNet model loads and first calls,
-one shared D3 pass, model checks, reference analysis, and plotting. Checkpoint
-downloads, kernel startup, earlier notebook cells, and result packaging are
-excluded.
+Complete-notebook job `3315568` ran 88 code cells on one NVIDIA H100 PCIe with
+Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`. Stage 3 took **23.0 s**, all
+notebook code took **798.8 s**, and notebook wall time was **808.5 s**.
 
-The run evaluated 90 graphs containing 1,140 atoms. It used Toolkit Core
-`331d6b2` and Toolkit-Ops `e8e7a74`. The current Stage 3 has eight cells and has
-not been timed as a unit. The complete notebook using the current Toolkit versions also remains
-unmeasured. The older result is a source-specific pacing measurement, not an
-inference benchmark or a time for the complete seven-stage notebook.
+The current learner cleanup has 92 code cells, including ten in Stage 3. Its
+exact-source H100 rerun is pending. Until that finishes, use job `3315568` only
+for classroom pacing. It is not an inference benchmark.
 
 ### Historical H100 timing from earlier Toolkit versions
 

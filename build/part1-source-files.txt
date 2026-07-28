@@ -29,6 +29,7 @@ build/verify_part1_runtime.py
 scripts/rebuild_part1_ir_notebook.py
 scripts/assemble_part1_pipeline_campaign.py
 scripts/benchmark_part1_distributed_campaign.py
+scripts/measure_part1_nci_stage.py
 scripts/part1_distributed_campaign_contract.py
 scripts/part1_domain_plan.py
 scripts/part1_domain_run.py
@@ -42,6 +43,7 @@ scripts/review_part1_ir_executed_notebook.py
 scripts/slurm_part1_distributed_campaign.sbatch
 scripts/slurm_part1_domain_decomposition.sbatch
 scripts/slurm_part1_dimer_reference.sbatch
+scripts/slurm_part1_nci_stage3.sbatch
 scripts/slurm_part1_remaster_h100.sbatch
 scripts/slurm_part1_sevennet_setup.sbatch
 scripts/validate_part1_ir_run.py
@@ -65,6 +67,7 @@ part-1-scalable-atomistic-workflows/aux/composition_config.py
 part-1-scalable-atomistic-workflows/aux/diagnostics.py
 part-1-scalable-atomistic-workflows/aux/domain/__init__.py
 part-1-scalable-atomistic-workflows/aux/domain/config.py
+part-1-scalable-atomistic-workflows/aux/domain/display.py
 part-1-scalable-atomistic-workflows/aux/domain/packing.py
 part-1-scalable-atomistic-workflows/aux/domain/prebuilt.py
 part-1-scalable-atomistic-workflows/aux/domain/results.py

@@ -187,6 +187,24 @@ def test_callout_escapes_body_and_rejects_ambiguous_state() -> None:
         ui.callout_html("No", kind="unknown")
 
 
+def test_callout_renders_balanced_backticks_as_safe_inline_code() -> None:
+    html = ui.callout_html(
+        "Use `DomainParallel` with `<unsafe>` text.",
+        kind="note",
+    )
+
+    assert "<code>DomainParallel</code>" in html
+    assert "<code>&lt;unsafe&gt;</code>" in html
+    assert "<unsafe>" not in html
+
+
+def test_callout_preserves_an_unmatched_backtick_as_text() -> None:
+    html = ui.callout_html("Keep this ` literal.", kind="note")
+
+    assert "Keep this ` literal." in html
+    assert "<code>" not in html
+
+
 def test_progress_card_exposes_text_count_and_aria_values() -> None:
     html = ui.notebook_progress_html_string(
         title='H<sub>2</sub>O "run"',

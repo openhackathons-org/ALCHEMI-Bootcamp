@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Apply a Markdown-only source refresh to an executed Part 1 notebook."""
+"""Build the reviewed Part 1 notebook and package its local HTML support."""
 
 from __future__ import annotations
 
@@ -7,8 +7,11 @@ import argparse
 import copy
 from datetime import datetime, timezone
 import hashlib
+from importlib.util import find_spec
 from pathlib import Path
+import shutil
 import sys
+import sysconfig
 
 import nbformat
 
@@ -27,6 +30,16 @@ from aux.release_links import (  # noqa: E402
 WIDGET_VIEW_MIME = "application/vnd.jupyter.widget-view+json"
 WIDGET_STATE_MIME = "application/vnd.jupyter.widget-state+json"
 LOCAL_MARKDOWN_REFERENCES = LOCAL_NOTEBOOK_REFERENCES
+OVITO_WIDGET_MODULE = "jupyter-ovito"
+OVITO_WIDGET_SCRIPT_NAME = f"{OVITO_WIDGET_MODULE}.js"
+OVITO_WIDGET_LICENSE_NAME = "index.js.LICENSE.txt"
+OVITO_NBEXTENSION_RELATIVE_PATH = (
+    Path("share")
+    / "jupyter"
+    / "nbextensions"
+    / OVITO_WIDGET_MODULE
+    / "index.js"
+)
 
 
 def _saved_progress_html(executed: nbformat.NotebookNode) -> dict[str, str]:
@@ -130,17 +143,291 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
+def installed_ovito_nbextension_candidates() -> tuple[Path, ...]:
+    """Return official OVITO widget paths in the active Python environment."""
+
+    candidates = [
+        Path(sys.prefix) / OVITO_NBEXTENSION_RELATIVE_PATH,
+        Path(sysconfig.get_path("data")) / OVITO_NBEXTENSION_RELATIVE_PATH,
+    ]
+    spec = find_spec("ovito")
+    if spec is not None and spec.submodule_search_locations is not None:
+        candidates.extend(
+            Path(location) / "nbextension" / "index.js"
+            for location in spec.submodule_search_locations
+        )
+
+    unique: list[Path] = []
+    seen: set[Path] = set()
+    for candidate in candidates:
+        resolved = candidate.resolve()
+        if resolved in seen:
+            continue
+        seen.add(resolved)
+        unique.append(resolved)
+    return tuple(unique)
+
+
+def validate_ovito_nbextension_source(
+    script_path: Path,
+    license_path: Path,
+) -> None:
+    """Check that the installed files are the OVITO AMD widget and its notices."""
+
+    missing = [
+        path.name for path in (script_path, license_path) if not path.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(f"missing installed OVITO widget files: {missing}")
+
+    script = script_path.read_text(encoding="utf-8")
+    required_script_markers = (
+        "define(",
+        "@jupyter-widgets/base",
+        "OvitoViewportModel",
+        "OvitoViewportView",
+    )
+    missing_markers = [
+        marker for marker in required_script_markers if marker not in script
+    ]
+    if missing_markers:
+        raise RuntimeError(
+            "installed OVITO widget does not contain the expected AMD module "
+            f"markers: {missing_markers}"
+        )
+
+    license_text = license_path.read_text(encoding="utf-8")
+    if "@license" not in license_text:
+        raise RuntimeError(
+            "installed OVITO widget license companion has no license notice"
+        )
+
+
+def find_ovito_nbextension(
+    nbextension_dir: Path | None = None,
+) -> tuple[Path, Path]:
+    """Find and check OVITO's installed classic-notebook widget files."""
+
+    if nbextension_dir is not None:
+        candidates = (nbextension_dir.resolve() / "index.js",)
+    else:
+        candidates = installed_ovito_nbextension_candidates()
+
+    for script_path in candidates:
+        license_path = script_path.with_name(OVITO_WIDGET_LICENSE_NAME)
+        if not script_path.is_file() or not license_path.is_file():
+            continue
+        validate_ovito_nbextension_source(script_path, license_path)
+        return script_path, license_path
+
+    checked = ", ".join(str(path) for path in candidates)
+    raise FileNotFoundError(
+        "could not find OVITO's installed Jupyter widget and license companion; "
+        f"checked: {checked}"
+    )
+
+
+def _copy_without_overwriting_different_file(source: Path, destination: Path) -> None:
+    """Copy one release support file, preserving an identical earlier copy."""
+
+    if destination.exists():
+        if not destination.is_file():
+            raise FileExistsError(f"release path is not a file: {destination}")
+        if sha256_file(destination) != sha256_file(source):
+            raise FileExistsError(
+                f"refusing to replace a different release file: {destination}"
+            )
+        return
+    shutil.copy2(source, destination)
+
+
+def _read_checksum_index(path: Path) -> dict[str, str]:
+    """Read a sha256sum-compatible index and reject ambiguous entries."""
+
+    if not path.is_file():
+        return {}
+
+    entries: dict[str, str] = {}
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if not raw_line:
+            continue
+        fields = raw_line.split(maxsplit=1)
+        if len(fields) != 2:
+            raise RuntimeError(f"malformed checksum line {path}:{line_number}")
+        digest, relative = fields
+        relative = relative.removeprefix("*").strip()
+        if len(digest) != 64 or any(
+            character not in "0123456789abcdef" for character in digest
+        ):
+            raise RuntimeError(f"invalid SHA-256 at {path}:{line_number}")
+        relative_path = Path(relative)
+        if relative_path.is_absolute() or ".." in relative_path.parts:
+            raise RuntimeError(f"unsafe checksum path at {path}:{line_number}")
+        if relative in entries:
+            raise RuntimeError(f"duplicate checksum path at {path}:{line_number}")
+        entries[relative] = digest
+    return entries
+
+
+def update_release_checksums(checksums_path: Path, paths: tuple[Path, ...]) -> None:
+    """Add or refresh release-file checksums relative to the index directory."""
+
+    base = checksums_path.resolve().parent
+    entries = _read_checksum_index(checksums_path)
+    for path in paths:
+        resolved = path.resolve()
+        if not resolved.is_file():
+            raise FileNotFoundError(f"cannot checksum missing release file: {resolved}")
+        try:
+            relative = resolved.relative_to(base).as_posix()
+        except ValueError as error:
+            raise RuntimeError(
+                f"release file is outside checksum directory {base}: {resolved}"
+            ) from error
+        entries[relative] = sha256_file(resolved)
+
+    checksums_path.parent.mkdir(parents=True, exist_ok=True)
+    checksums_path.write_text(
+        "".join(
+            f"{digest}  {relative}\n"
+            for relative, digest in sorted(entries.items())
+        ),
+        encoding="utf-8",
+    )
+
+
+def validate_review_html_bundle(html_path: Path, checksums_path: Path) -> None:
+    """Check the reviewed HTML and the local OVITO files it loads."""
+
+    html_path = html_path.resolve()
+    if not html_path.is_file():
+        raise FileNotFoundError(f"missing reviewed HTML: {html_path}")
+    html = html_path.read_text(encoding="utf-8")
+    if OVITO_WIDGET_MODULE not in html:
+        raise RuntimeError(
+            f"reviewed HTML has no saved {OVITO_WIDGET_MODULE} widget state"
+        )
+
+    script_path = html_path.with_name(OVITO_WIDGET_SCRIPT_NAME)
+    license_path = html_path.with_name(OVITO_WIDGET_LICENSE_NAME)
+    missing = [
+        path.name for path in (script_path, license_path) if not path.is_file()
+    ]
+    if missing:
+        raise FileNotFoundError(
+            f"reviewed HTML bundle is missing OVITO support files: {missing}"
+        )
+    validate_ovito_nbextension_source(script_path, license_path)
+
+    entries = _read_checksum_index(checksums_path)
+    base = checksums_path.resolve().parent
+    for path in (html_path, script_path, license_path):
+        relative = path.resolve().relative_to(base).as_posix()
+        expected = entries.get(relative)
+        if expected is None:
+            raise RuntimeError(f"checksum index is missing {relative}")
+        observed = sha256_file(path)
+        if observed != expected:
+            raise RuntimeError(f"checksum does not match for {relative}")
+
+
+def package_review_html_support(
+    html_path: Path,
+    checksums_path: Path,
+    *,
+    nbextension_dir: Path | None = None,
+) -> dict[str, str]:
+    """Copy OVITO's official AMD widget beside HTML and checksum the bundle."""
+
+    html_path = html_path.resolve()
+    if not html_path.is_file():
+        raise FileNotFoundError(f"missing reviewed HTML: {html_path}")
+    if OVITO_WIDGET_MODULE not in html_path.read_text(encoding="utf-8"):
+        raise RuntimeError(
+            f"reviewed HTML has no saved {OVITO_WIDGET_MODULE} widget state"
+        )
+
+    source_script, source_license = find_ovito_nbextension(nbextension_dir)
+    destination_script = html_path.with_name(OVITO_WIDGET_SCRIPT_NAME)
+    destination_license = html_path.with_name(OVITO_WIDGET_LICENSE_NAME)
+    _copy_without_overwriting_different_file(source_script, destination_script)
+    _copy_without_overwriting_different_file(source_license, destination_license)
+    release_files = (html_path, destination_script, destination_license)
+    update_release_checksums(checksums_path, release_files)
+    validate_review_html_bundle(html_path, checksums_path)
+    return {
+        path.name: sha256_file(path)
+        for path in release_files
+    }
+
+
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--source", type=Path, required=True)
-    parser.add_argument("--executed", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--calculation-job-id", required=True)
+    parser.add_argument("--source", type=Path)
+    parser.add_argument("--executed", type=Path)
+    parser.add_argument("--output", type=Path)
+    parser.add_argument("--calculation-job-id")
+    parser.add_argument(
+        "--package-html",
+        type=Path,
+        help=(
+            "copy OVITO's installed widget beside an exported reviewed HTML file "
+            "and add all three release files to --checksums"
+        ),
+    )
+    parser.add_argument("--checksums", type=Path)
+    parser.add_argument(
+        "--ovito-nbextension-dir",
+        type=Path,
+        help=argparse.SUPPRESS,
+    )
     return parser
 
 
 def main() -> int:
-    args = build_parser().parse_args()
+    parser = build_parser()
+    args = parser.parse_args()
+    if args.package_html is not None:
+        review_args = (
+            args.source,
+            args.executed,
+            args.output,
+            args.calculation_job_id,
+        )
+        if any(value is not None for value in review_args):
+            parser.error("--package-html cannot be combined with notebook review options")
+        if args.checksums is None:
+            parser.error("--package-html requires --checksums")
+        packaged = package_review_html_support(
+            args.package_html,
+            args.checksums,
+            nbextension_dir=args.ovito_nbextension_dir,
+        )
+        for name, digest in packaged.items():
+            print(f"{digest}  {name}")
+        return 0
+
+    required = {
+        "--source": args.source,
+        "--executed": args.executed,
+        "--output": args.output,
+        "--calculation-job-id": args.calculation_job_id,
+    }
+    missing = [option for option, value in required.items() if value is None]
+    if missing:
+        parser.error(f"notebook review requires: {', '.join(missing)}")
+    if args.checksums is not None or args.ovito_nbextension_dir is not None:
+        parser.error(
+            "--checksums and --ovito-nbextension-dir require --package-html"
+        )
+
+    assert args.source is not None
+    assert args.executed is not None
+    assert args.output is not None
+    assert args.calculation_job_id is not None
     source = nbformat.read(args.source, as_version=4)
     executed = nbformat.read(args.executed, as_version=4)
     if len(source.cells) != len(executed.cells):

@@ -111,9 +111,21 @@ _PROGRESS_STYLES: dict[str, _SemanticStyle] = {
 
 
 def _escaped_text(value: object) -> str:
-    """Escape untrusted text while preserving intentional line breaks."""
+    """Escape untrusted text while preserving line breaks and inline code."""
 
-    return escape(str(value), quote=True).replace("\n", "<br>")
+    text = str(value)
+    parts = text.split("`")
+    if len(parts) % 2 == 0:
+        return escape(text, quote=True).replace("\n", "<br>")
+    rendered = [
+        (
+            f"<code>{escape(part, quote=True)}</code>"
+            if index % 2
+            else escape(part, quote=True)
+        )
+        for index, part in enumerate(parts)
+    ]
+    return "".join(rendered).replace("\n", "<br>")
 
 
 def _escaped_attribute(value: object) -> str:

@@ -91,6 +91,13 @@ class _FakeCheckpoint:
         return self.raw_model
 
 
+class _ChattyCheckpoint(_FakeCheckpoint):
+    def build_model(self, **kwargs):
+        print("Converting model backend...")
+        print("unexpected checkpoint output")
+        return super().build_model(**kwargs)
+
+
 def test_load_raw_model_uses_plain_e3nn_and_freezes_parameters() -> None:
     raw_model = _FakeRawModel()
     checkpoint = _FakeCheckpoint(raw_model)
@@ -117,6 +124,18 @@ def test_load_raw_model_uses_plain_e3nn_and_freezes_parameters() -> None:
     assert not raw_model.weight.requires_grad
     assert config == checkpoint.config
     assert config is not checkpoint.config
+
+
+def test_load_raw_model_hides_only_expected_conversion_line(capsys) -> None:
+    checkpoint = _ChattyCheckpoint(_FakeRawModel())
+
+    load_raw_sevennet_omni(
+        "model.pth",
+        device="cpu",
+        checkpoint_loader=lambda _path: checkpoint,
+    )
+
+    assert capsys.readouterr().out == "unexpected checkpoint output\n"
 
 
 def test_load_raw_model_requires_the_configured_task() -> None:
