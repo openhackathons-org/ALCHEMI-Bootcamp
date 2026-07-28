@@ -29,8 +29,8 @@ and run it from top to bottom.
 ## Hardware and runtime
 
 - Target hardware: one NVIDIA H100-class GPU for the complete live notebook.
-- Checked H100 time: **12 min 51 s** for all code cells and **13 min 1 s** of
-  notebook wall time. The scheduler elapsed time was **15 min 49 s**.
+- Checked H100 time: **13 min 7.5 s** for all code cells and **13 min 17.7 s**
+  of notebook wall time. The scheduler elapsed time was **16 min 16 s**.
 - Other CUDA GPUs run the same declared calculation and may take longer.
 - The notebook does not silently shorten trajectories or add atom-count limits
   for weaker hardware.
@@ -54,25 +54,25 @@ long enough to support a convergence or accuracy claim.
 
 ### Checked H100 pacing
 
-Complete-notebook job `3317215` ran commit
-`1eca73058c5bae4a164f3b07c3e12fa944030086` on one NVIDIA H100 PCIe with
+Complete-notebook job `3319704` ran commit
+`19ca961acff86a89e770e36ab2f537459da3069b` on one NVIDIA H100 NVL with
 Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`. All 92 code cells completed;
 none failed. The measured section times were:
 
 | Current source section | Code time |
 |---|---:|
-| Setup and imports | 23.476 s |
-| Stage 1 | 18.211 s |
-| Stage 2 | 19.250 s |
-| Stage 3, ten code cells | 22.064 s |
-| Stage 4 | 17.649 s |
-| Stage 5 | 72.690 s |
-| Stage 6 | 567.180 s |
-| Stage 7 | 30.238 s |
-| **Total code time** | **770.760 s (12:51)** |
+| Setup and imports | 22.161 s |
+| Stage 1 | 20.532 s |
+| Stage 2 | 18.847 s |
+| Stage 3, ten code cells | 23.043 s |
+| Stage 4 | 26.337 s |
+| Stage 5 | 79.745 s |
+| Stage 6 | 566.060 s |
+| Stage 7 | 30.800 s |
+| **Total code time** | **787.525 s (13:07.5)** |
 
-Notebook wall time was `781.144 s` (`13:01`), and scheduler elapsed time was
-`15:49` with exit `0:0`. These values are useful for classroom pacing. They
+Notebook wall time was `797.720 s` (`13:17.7`), and scheduler elapsed time was
+`16:16` with exit `0:0`. These values are useful for classroom pacing. They
 are not an inference benchmark. The final notebook changes only the displayed
 timing text; its 92 code cells are byte-for-byte the same as the notebook that
 ran.
@@ -95,7 +95,7 @@ pacing, but they are not timings for the merged seven-stage notebook.
 | **Total code time** | **795.7 s (13:15.7)** |
 
 The scheduler elapsed time was `15:37`. The NCI Atlas stage was not present in
-that historical run. Current job `3317215` above supersedes these values for
+that historical run. Current job `3319704` above supersedes these values for
 classroom pacing.
 
 ## Main Toolkit APIs
@@ -356,7 +356,7 @@ theme and check the following before release:
   DomainParallel plots. Legends, units, reference lines, and captions should be
   readable and should match the displayed result tables.
 - Inspect every energy, force, charge, timing, and comparison table in the
-  reviewed output from H100 job `3317215`. Rows and units should remain
+  reviewed output from H100 job `3319704`. Rows and units should remain
   readable without clipped labels or hidden structures.
 - Before the checked multi-GPU result directory is installed, Stage 7 should
   say `NOT REPORTED`. After installation, it should show all one-, two-, and
