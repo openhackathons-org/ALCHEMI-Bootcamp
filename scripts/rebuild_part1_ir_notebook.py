@@ -163,8 +163,8 @@ def main(output_path: Path = NOTEBOOK) -> None:
                 ),
                 need=(
                     "One CUDA GPU and the tutorial environment. The checked run "
-                    "took 13 min 1 s of notebook wall time on one H100 PCIe; "
-                    "Stage 6 accounted for 9 min 27 s."
+                    "took 13 min 18 s of notebook wall time on one H100 NVL; "
+                    "Stage 6 accounted for 9 min 26 s."
                 ),
             )
             + "\n\n"
@@ -193,18 +193,18 @@ def main(output_path: Path = NOTEBOOK) -> None:
 
 ### Checked H100 pacing
 
-| Section | Code time on one H100 PCIe |
+| Section | Code time on one H100 NVL |
 |---|---:|
-| Setup | 23 s |
-| Stage 1: one structure | 18 s |
+| Setup | 22 s |
+| Stage 1: one structure | 21 s |
 | Stage 2: batching | 19 s |
-| Stage 3: NCI calculation | 22 s |
-| Stage 4: adapter and single points | 18 s |
-| Stage 5: preparation and harmonic check | 1 min 13 s |
-| Stage 6: trajectory and analysis | 9 min 27 s |
-| Stage 7: scaling paths | 30 s |
-| **Complete notebook code** | **12 min 51 s** |
-| **Notebook runner wall time** | **13 min 1 s** |
+| Stage 3: NCI calculation | 23 s |
+| Stage 4: adapter and single points | 26 s |
+| Stage 5: preparation and harmonic check | 1 min 20 s |
+| Stage 6: trajectory and analysis | 9 min 26 s |
+| Stage 7: scaling paths | 31 s |
+| **Complete notebook code** | **13 min 8 s** |
+| **Notebook runner wall time** | **13 min 18 s** |
 
 These are pacing measurements from one complete checked run, not benchmark
 results. Checkpoint caches were warm. Hardware, software, and cache state can
@@ -895,7 +895,7 @@ display(callout(
             outcome="Turn one ASE water molecule into AtomicData, a Batch, and one energy, force, and charge result.",
             before="Before running: isotope substitution changes nuclear mass, not this potential-energy prediction.",
             compute_time=(
-                "18 s on one H100 PCIe in the checked run"
+                "21 s on one H100 NVL in the checked run"
             ),
             body=r"""
 - Start with one molecule and inspect the data path before calculating an interaction energy.
@@ -1248,7 +1248,7 @@ display(callout(
             outcome="Check serial and batched agreement, then measure CPU/GPU and homogeneous/heterogeneous batch behavior.",
             before="Predict the shape of batch_idx and batch_ptr for eight AB/A/B triplets before inspecting them.",
             compute_time=(
-                "19 s on one H100 PCIe in the checked run"
+                "19 s on one H100 NVL in the checked run"
             ),
             body=(
                 r"""
@@ -1681,7 +1681,7 @@ display(callout(
             title="Complete and check the potential",
             outcome="Evaluate 90 NCI Atlas graphs in a few passes, add the checkpoint's Coulomb and D3 terms, and compare the complete interaction curves with DFT-D3 and CCSD(T)/CBS.",
             before="Before running: predict which interaction class will respond most strongly when explicit Coulomb is restored.",
-            compute_time="22 s on one H100 PCIe in the checked run",
+            compute_time="23 s on one H100 NVL in the checked run",
             body=(
                 r"""
 **NCI** means noncovalent interaction. NCI Atlas is a benchmark collection of molecular complexes and reference interaction energies. Intermolecular interactions influence solvation, molecular recognition, crystal packing, self-assembly, and the stability of molecular materials. The calculation below spans neutral hydrogen bonding, dispersion-dominated binding, and an ionic hydrogen bond.
@@ -2599,7 +2599,7 @@ display(callout(
             ),
             before="Before running: identify which model inputs, neighbor fields, and outputs must be translated at the wrapper.",
             compute_time=(
-                "18 s on one H100 PCIe in the checked run"
+                "26 s on one H100 NVL in the checked run"
             ),
             body="",
         ),
@@ -3359,7 +3359,7 @@ display(callout(
             outcome="Return to the charge-predicting molecular model, build the isotope × cluster batch, relax it, check harmonic frequencies, and wire one shared call to an IR recorder.",
             before="Predict which fields change between H₂O and D₂O: atomic number, coordinates, energy, force, charge, or mass.",
             compute_time=(
-                "1 min 13 s on one H100 PCIe in the checked run"
+                "1 min 20 s on one H100 NVL in the checked run"
             ),
             body=(
                 r"""
@@ -4149,7 +4149,7 @@ data path stay visible below.
                 "trajectory-length convergence study."
             ),
             compute_time=(
-                "9 min 27 s on one H100 PCIe in the checked run"
+                "9 min 26 s on one H100 NVL in the checked run"
             ),
             body=r"""
 - 5,000 steps Langevin NVT at 75 K; damped dynamics are not sampled.
@@ -4706,7 +4706,7 @@ display(callout(
             outcome="Refill one GPU from a larger dataset, then inspect how the same stages would be arranged in a two-rank DistributedPipeline.",
             before="Predict which limit applies to the live batch and which applies to the full dataset: max_atoms, max_batch_size, or dataset length.",
             compute_time=(
-                "30 s on one H100 PCIe in the checked run"
+                "31 s on one H100 NVL in the checked run"
             ),
             body=r"""
 - `FusedStage` shares one model call across stages on one GPU.
@@ -6969,7 +6969,7 @@ del inflight_source, inflight_dataset, completed
                 "periodic box for the domain-parallel path."
             ),
             state="ready",
-            compute_time="30 s on one H100 PCIe in the checked run",
+            compute_time="31 s on one H100 NVL in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -7340,8 +7340,8 @@ display(readable_table(
             ),
             need=(
                 "One CUDA GPU and the tutorial environment. The checked run took "
-                "13 min 1 s of notebook wall time on one H100 PCIe; Stage 6 "
-                "accounted for 9 min 27 s."
+                "13 min 18 s of notebook wall time on one H100 NVL; Stage 6 "
+                "accounted for 9 min 26 s."
             ),
         )
         + "\n\n"
@@ -7377,18 +7377,18 @@ reported correctness or timing result.
 
 ### Checked H100 pacing
 
-| Section | Code time on one H100 PCIe |
+| Section | Code time on one H100 NVL |
 |---|---:|
-| Setup | 23 s |
-| Stage 1: one structure | 18 s |
+| Setup | 22 s |
+| Stage 1: one structure | 21 s |
 | Stage 2: batching | 19 s |
-| Stage 3: NCI calculation | 22 s |
-| Stage 4: adapter and single points | 18 s |
-| Stage 5: preparation and harmonic check | 1 min 13 s |
-| Stage 6: trajectory and analysis | 9 min 27 s |
-| Stage 7: scaling paths | 30 s |
-| **Complete notebook code** | **12 min 51 s** |
-| **Notebook runner wall time** | **13 min 1 s** |
+| Stage 3: NCI calculation | 23 s |
+| Stage 4: adapter and single points | 26 s |
+| Stage 5: preparation and harmonic check | 1 min 20 s |
+| Stage 6: trajectory and analysis | 9 min 26 s |
+| Stage 7: scaling paths | 31 s |
+| **Complete notebook code** | **13 min 8 s** |
+| **Notebook runner wall time** | **13 min 18 s** |
 
 These are pacing measurements from one complete checked run, not benchmark
 results. Checkpoint caches were warm. Hardware, software, and cache state can
@@ -7483,7 +7483,7 @@ and raw Warp cells are a short comparison, not three competing workflow paths.
                 "interaction curves with two references."
             ),
             state="ready",
-            compute_time="22 s on one H100 PCIe in the checked run",
+            compute_time="23 s on one H100 NVL in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -7631,7 +7631,7 @@ The D3 component needs a different cutoff and neighbor layout. `PipelineModelWra
                 "one batched dynamics workflow."
             ),
             state="ready",
-            compute_time="1 min 13 s on one H100 PCIe in the checked run",
+            compute_time="1 min 20 s on one H100 NVL in the checked run",
         )
         + "\n\n"
         + callout_html(
@@ -7786,7 +7786,7 @@ Status belongs to each structure, so different structures can occupy different s
                 "calculating spectra."
             ),
             state="ready",
-            compute_time="9 min 27 s on one H100 PCIe in the checked run",
+            compute_time="9 min 26 s on one H100 NVL in the checked run",
         )
         + "\n\n"
         + callout_html(
