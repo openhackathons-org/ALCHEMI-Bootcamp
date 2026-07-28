@@ -1564,6 +1564,7 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
     display_results = _source(by_id["display-domain-parallel-results"])
 
     for methodology_field in (
+        "atoms_per_composition_unit",
         "fixed_molecules_per_species",
         "evaluation_warmup_count",
         "evaluation_pass_count",
@@ -1606,6 +1607,10 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
         "NOT REPORTED:",
     ):
         assert loader_check in loader
+    assert "domain_atoms_per_composition_unit" not in methodology
+    assert "domain_atoms_per_composition_unit" not in loader
+    assert "DOMAIN_METHODOLOGY.atoms_per_composition_unit" in methodology
+    assert "DOMAIN_METHODOLOGY.atoms_per_composition_unit" in loader
     assert "if domain_view.available:" in display_results
     for split_check in (
         'domain_takeaway["all_fixed_evaluations_succeeded"]',
@@ -2514,3 +2519,39 @@ def test_fresh_kernel_has_no_undefined_global_names() -> None:
                 unresolved.add(name)
 
     assert not unresolved, f"undefined names in a fresh kernel: {sorted(unresolved)}"
+
+
+def test_fresh_kernel_defines_names_before_later_cells_use_them() -> None:
+    """Catch a notebook cell that depends on state created by a later cell."""
+
+    available = set(dir(builtins)) | {"get_ipython"}
+    for cell in _notebook()["cells"]:
+        if cell.get("cell_type") != "code":
+            continue
+        cell_id = str(cell.get("id", "<missing-id>"))
+        transformed = ast.unparse(_parse_code(_source(cell)))
+        root = symtable.symtable(
+            transformed,
+            f"{NOTEBOOK_PATH}#{cell_id}",
+            "exec",
+        )
+        defined_here = {
+            name
+            for name in root.get_identifiers()
+            if (
+                root.lookup(name).is_assigned()
+                or root.lookup(name).is_imported()
+                or root.lookup(name).is_namespace()
+            )
+        }
+        referenced_here = {
+            name
+            for name in root.get_identifiers()
+            if root.lookup(name).is_referenced()
+        }
+        unresolved = referenced_here - available - defined_here
+        assert not unresolved, (
+            f"cell {cell_id!r} reads names before an earlier cell defines them: "
+            f"{sorted(unresolved)}"
+        )
+        available.update(defined_here)
