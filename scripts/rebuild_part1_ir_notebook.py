@@ -9471,12 +9471,9 @@ evenly across ranks.
         code(
             "domain-parallel-results",
             """
-domain_atoms_per_composition_unit = sum(
-    item.atom_count for item in domain_plan.templates
-)
 DOMAIN_FIXED_ATOM_COUNT = (
     DOMAIN_METHODOLOGY.fixed_molecules_per_species
-    * domain_atoms_per_composition_unit
+    * DOMAIN_METHODOLOGY.atoms_per_composition_unit
 )
 DOMAIN_REQUIRED_WORLD_SIZES = DOMAIN_METHODOLOGY.campaign_world_sizes
 DOMAIN_RESULT_DIR = PART_DIR / "data" / "domain_decomposition" / "recorded"
@@ -9556,7 +9553,7 @@ domain_h100_settings_progress = NotebookProgress(
 domain_h100_settings = pd.DataFrame([
     ("Fixed input",
      f"{DOMAIN_METHODOLOGY.fixed_molecules_per_species} molecules/species; "
-     f"{DOMAIN_METHODOLOGY.fixed_molecules_per_species * domain_atoms_per_composition_unit:,} "
+     f"{DOMAIN_METHODOLOGY.fixed_molecules_per_species * DOMAIN_METHODOLOGY.atoms_per_composition_unit:,} "
      "atoms on 1, 2, and 4 H100s"),
     ("Execution", f"partition once; "
      f"{DOMAIN_METHODOLOGY.evaluation_warmup_count} untimed warm-up; "
