@@ -10,7 +10,6 @@ from urllib.parse import SplitResult, urlsplit, urlunsplit
 LOCAL_NOTEBOOK_REFERENCES = (
     "assets/images/banner_candidates/water-ir-v2-04-trajectory-to-spectrum.png",
     "COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set",
-    "COMPUTE_LAB_RUNBOOK.md#6-check-the-separate-distributedpipeline-campaign",
     "../part-2-batched-adsorption-toolkit/README.md",
     "../THIRD_PARTY_NOTICES.md",
 )

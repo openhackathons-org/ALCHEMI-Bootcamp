@@ -809,6 +809,8 @@ def validate_run_details(
     run_manifest: Mapping[str, object],
     source_notebook: Path,
     source_root: Path,
+    *,
+    expected_notebook_sha256: str | None = None,
 ) -> dict[str, object]:
     run_details = require_mapping(
         run_manifest["run_details"], "run manifest run details"
@@ -867,10 +869,14 @@ def validate_run_details(
             "run manifest Torch version does not match the pinned 2.12.0 series"
         )
 
-    live_notebook_sha256 = sha256_file(source_notebook)
-    if run_details.get("notebook_sha256") != live_notebook_sha256:
+    notebook_sha256 = (
+        sha256_file(source_notebook)
+        if expected_notebook_sha256 is None
+        else expected_notebook_sha256
+    )
+    if run_details.get("notebook_sha256") != notebook_sha256:
         raise RuntimeError(
-            "run manifest notebook SHA-256 does not match the live source notebook"
+            "run manifest notebook SHA-256 does not match the calculation source"
         )
     bundle_details = expected_reference_bundle_details(source_root)
     for name, expected in bundle_details.items():
@@ -891,7 +897,7 @@ def validate_run_details(
         "checkpoint_override": False,
         "nci_checkpoints": list(EXPECTED_NCI_CHECKPOINTS),
         "torch": torch_version,
-        "notebook_sha256": live_notebook_sha256,
+        "notebook_sha256": notebook_sha256,
         **bundle_details,
     }
 
@@ -1430,6 +1436,7 @@ def validate_packaged_source_identity(
     value: object,
     *,
     source_root: Path,
+    expected_source: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Match the runtime report to the exact tutorial checkout being validated."""
 
@@ -1458,6 +1465,21 @@ def validate_packaged_source_identity(
         raise RuntimeError(
             "packaged runtime source manifest path does not match Part 1"
         )
+
+    if expected_source is not None:
+        if dict(source) != dict(expected_source):
+            raise RuntimeError(
+                "packaged runtime source does not match the calculation validation"
+            )
+        return {
+            **dict(source),
+            "files_sha256": dict(
+                require_mapping(
+                    source.get("files_sha256"),
+                    "packaged runtime source file SHA-256 values",
+                )
+            ),
+        }
 
     source_root = source_root.resolve()
     source_paths = load_source_paths(source_root)
@@ -1512,6 +1534,7 @@ def validate_packaged_runtime_check(
     path: Path,
     *,
     source_root: Path,
+    expected_source: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """Validate the preflight report stored beside the packaged notebook run."""
 
@@ -1547,6 +1570,7 @@ def validate_packaged_runtime_check(
     source = validate_packaged_source_identity(
         report.get("source"),
         source_root=source_root,
+        expected_source=expected_source,
     )
 
     versions = require_mapping(
@@ -4095,6 +4119,24 @@ def main() -> int:
     summary_path = args.summary.resolve()
     checksums_path = args.checksums.resolve()
     bundle_root = summary_path.parent
+    calculation_summary: Mapping[str, object] | None = None
+    calculation_source: Mapping[str, object] | None = None
+    if args.calculation_validation is not None:
+        calculation_summary = require_mapping(
+            json.loads(
+                args.calculation_validation.resolve().read_text(encoding="utf-8")
+            ),
+            "calculation validation summary",
+        )
+        calculation_runtime_check = require_mapping(
+            calculation_summary.get("packaged_runtime_check"),
+            "calculation validation packaged runtime check",
+        )
+        calculation_source = require_mapping(
+            calculation_runtime_check.get("source"),
+            "calculation validation packaged source",
+        )
+
     missing_bundle_files = [
         name for name in BUNDLE_REQUIRED_FILES if not (bundle_root / name).is_file()
     ]
@@ -4103,6 +4145,7 @@ def main() -> int:
     packaged_runtime_check = validate_packaged_runtime_check(
         bundle_root / RUNTIME_CHECK_NAME,
         source_root=source_root,
+        expected_source=calculation_source,
     )
     source_hashes = dict(
         require_mapping(
@@ -4174,16 +4217,21 @@ def main() -> int:
     source_notebook = (
         source_root / "part-1-scalable-atomistic-workflows" / "alchemi-water-ir.ipynb"
     )
-    calculation_summary: Mapping[str, object] | None = None
+    review_source_paths = load_source_paths(source_root)
+    review_source = {
+        **git_source_revision(source_root),
+        "manifest_path": SOURCE_MANIFEST_RELATIVE_PATH,
+        "manifest_sha256": sha256_file(
+            source_root / SOURCE_MANIFEST_RELATIVE_PATH
+        ),
+        "files_sha256": {
+            relative: sha256_file(source_root / relative)
+            for relative in review_source_paths
+        },
+    }
     timing_source_sha256: str | None = None
     timing_executed_sha256: str | None = None
-    if args.calculation_validation is not None:
-        calculation_summary = require_mapping(
-            json.loads(
-                args.calculation_validation.resolve().read_text(encoding="utf-8")
-            ),
-            "calculation validation summary",
-        )
+    if calculation_summary is not None:
         prior_source_hashes = require_mapping(
             calculation_summary.get("source_sha256"),
             "calculation validation source SHA-256 values",
@@ -4209,7 +4257,10 @@ def main() -> int:
         expected_executed_sha256=timing_executed_sha256,
     )
     verified_run_details = validate_run_details(
-        run_manifest, source_notebook, source_root
+        run_manifest,
+        source_notebook,
+        source_root,
+        expected_notebook_sha256=timing_source_sha256,
     )
     trajectory_path = output_dir / "water_ir_trajectory.npz"
     review_metadata = nbformat.read(executed, as_version=4).metadata.get(
@@ -4303,6 +4354,7 @@ def main() -> int:
         ),
         "notebook_review": review_metadata,
         "source_sha256": source_hashes,
+        "review_source": review_source,
         "executed_notebook_sha256": sha256_file(executed),
         "trajectory_sha256": sha256_file(trajectory_path),
         "required_outputs": required_outputs,
