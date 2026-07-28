@@ -93,6 +93,19 @@ def test_model_card_reads_live_model_and_declared_wrapper_facts() -> None:
     )
 
 
+def test_model_card_handles_omni_placeholder_and_compacts_full_range() -> None:
+    model = _ModelCardModel(
+        type_map={atomic_number: atomic_number for atomic_number in range(119)}
+    )
+
+    card = build_sevennet_model_card(
+        model=model,
+        wrapper=_model_card_wrapper(model),
+    ).set_index("Field")["Value"]
+
+    assert card["Supported elements"] == "118 elements: H–Og (Z=1–118)"
+
+
 def test_model_card_reports_required_optional_and_returned_fields() -> None:
     model = _ModelCardModel()
     wrapper = _model_card_wrapper(
@@ -120,6 +133,13 @@ def test_model_card_fails_when_required_facts_are_unavailable() -> None:
         build_sevennet_model_card(
             model=missing_elements,
             wrapper=_model_card_wrapper(missing_elements),
+        )
+
+    placeholder_only = _ModelCardModel(type_map={0: 0})
+    with pytest.raises(ValueError, match="no chemical elements"):
+        build_sevennet_model_card(
+            model=placeholder_only,
+            wrapper=_model_card_wrapper(placeholder_only),
         )
 
     no_parameters = torch.nn.Module()
