@@ -1233,11 +1233,14 @@ def test_precision_lesson_distinguishes_tensor_storage_from_model_math() -> None
         "precision_dtype_after_adapt == torch.float64",
         'precision_model_input["coord"].dtype == torch.float32',
         "precision_dtype_after_forward == torch.float32",
+        'precision_probe["energy"].dtype == torch.float64',
         "torch.nextafter(",
         "torch.get_float32_matmul_precision()",
         "precision_summary.widening_preserves_stored_values",
         "converts the batch positions",
-        "Energy, forces, and charges return in float32",
+        "atomic reference-energy shifts",
+        "forces and charges are float32",
+        "Check precision per tensor",
         "numerical resolution, not model error",
     ):
         assert term in implementation

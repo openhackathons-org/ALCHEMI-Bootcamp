@@ -41,7 +41,7 @@ def test_precision_table_requires_the_visible_dtype_observations() -> None:
         "probe coordinates before wrapper call": "torch.float64",
         "coordinates passed to AIMNet": "torch.float32",
         "probe coordinates after wrapper call": "torch.float32",
-        "probe energy / forces / charges": "torch.float32 / torch.float32 / torch.float32",
+        "probe energy / forces / charges": "torch.float64 / torch.float32 / torch.float32",
     }
 
     table = precision_display_table(
