@@ -2,6 +2,10 @@
 **/logs/
 **/assets/
 **/_fullrun_status.log
+# Checked domain-decomposition results include the scheduler logs named in
+# their SHA256SUMS file.
+!part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/job-records/*/logs/
+!part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/job-records/*/logs/*.log
 # Cache CSVs shipped to students for FAST_DEMO progress-replay
 !part-3-batched-melting-toolkit/assets/
 !part-3-batched-melting-toolkit/assets/naphthalene_long_2025/
