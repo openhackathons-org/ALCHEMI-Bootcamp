@@ -161,8 +161,8 @@ NCI_COMPONENT_COLUMNS = (
     "full",
 )
 NCI_COMPARISONS = {
-    "residual vs CC": ("core", "ccsd_t_cbs"),
-    "residual + Coulomb vs CC": ("core_plus_coulomb", "ccsd_t_cbs"),
+    "checkpoint base vs CC": ("core", "ccsd_t_cbs"),
+    "base + full Coulomb vs CC": ("core_plus_coulomb", "ccsd_t_cbs"),
     "complete vs CC": ("full", "ccsd_t_cbs"),
     "same-D3 bookkeeping identity": (
         "core_plus_coulomb",
