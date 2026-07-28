@@ -2,9 +2,9 @@
   "schema": "alchemi.part1-domain-base-box.v1",
   "bundle_id": "part1-phenol-nma-domain-base-128-v1",
   "methodology": {
-    "schema": "alchemi.part1-domain-methodology.v2",
+    "schema": "alchemi.part1-domain-methodology.v5",
     "name": "part1-packmol-domain-decomposition",
-    "version": "1.7.0"
+    "version": "1.10.0"
   },
   "source": {
     "nci_subset_file": "../../nci_atlas/nci-atlas-curves.csv.gz",

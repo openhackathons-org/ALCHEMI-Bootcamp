@@ -47,7 +47,7 @@ development failures belong beside the saved results they describe.
   periodic model with PME, and
   added the public `DomainConfig`/`DomainParallel` sequence. The live
   single-GPU call is labeled as an API demonstration without decomposition;
-  checked H100 capacity and multi-GPU results are loaded separately when
+  checked fixed-input 1/2/4-H100 energy/force passes are loaded separately when
   available.
 - Shortened the live molecular-dynamics segment for workshop pacing while
   keeping its qualitative limits explicit.

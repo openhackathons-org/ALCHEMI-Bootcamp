@@ -24,7 +24,7 @@ and run it from top to bottom.
 | 4. Bring a materials model into Toolkit | Explain why the molecular checkpoint does not cover Cu, connect SevenNet through a custom energy/force adapter, inspect its tasks, and reuse the loaded checkpoint for a small `mpa`/`oc20` model sweep before continuing with the `mpa` surface workflow. |
 | 5. Prepare the IR calculation | Check eager and compiled results on one fixed batch, relax the structures with Toolkit's `FIRE2` geometry optimizer, and calculate the harmonic reference. |
 | 6. Run, save, and inspect the trajectory | Run exact NVT and NVE stages, record predicted-charge dipoles, validate the route, and compare the resulting qualitative IR spectrum with separate DFT and experimental references. |
-| 7. Scale queues and single systems | Process a larger queue with inflight batching, load a checked periodic phenol/N-methylacetamide box, walk through `DomainParallel` on one GPU without decomposition, and analyze saved H100 capacity, OOM-recovery, and speed results when installed. `DistributedPipeline` remains a separate API preview with correctness and timing left `NOT REPORTED`. |
+| 7. Scale queues and single systems | Process a larger queue with inflight batching, load a checked periodic phenol/N-methylacetamide box, walk through `DomainParallel` on one GPU, and compare three fixed-structure energy/force passes for the same 51,200-atom input on 1, 2, and 4 H100s. `DistributedPipeline` remains a separate API preview with correctness and timing left `NOT REPORTED`. |
 
 ## Hardware and runtime
 
@@ -190,13 +190,13 @@ The tutorial term is finite-cutoff and tapered over 12–15 Å; it is not
 identical to the much longer, untapered reference D3 calculation.
 
 The checked bundle supplies a non-overlapping, unequilibrated initial placement
-at a declared construction density. Larger campaign inputs are integer
-supercell repeats of this base box, with repeat factors recorded for every
-case. This preserves the composition and construction density without rerunning
-Packmol for giant systems. The notebook does not describe the box as a liquid
-or infer density, structure, phase, or thermodynamic properties from it.
-AIMNet2 software support for periodic cells is also not a validation of this
-very large condensed-phase system; the box is used to teach the scaling API.
+at a declared construction density. The recorded 51,200-atom input is one
+integer supercell of that base box, with its repeat factors saved. This
+preserves composition and construction density without rerunning Packmol.
+The notebook does not describe the box as a liquid or infer density, structure,
+phase, or thermodynamic properties from it. AIMNet2 software support for
+periodic cells is also not a validation of this large condensed-phase system;
+the box is used to teach the scaling API.
 
 The AIMNet2-to-PME group uses autograd so the forces include the response of the
 predicted charges to geometry. D3 remains a separate direct-force contribution.
@@ -207,33 +207,32 @@ diagnostic, not treated as validated intermolecular charge transfer.
 
 The fixed 3,200-atom PME-versus-Ewald check requires the same predicted charge
 array in both solvers and applies the declared
-`|Σq − Qtarget| ≤ 1e-4 e` residual limit.
-Larger one-GPU runs save the float32 charge dtype, requested total, observed
-total, residual, and charge magnitudes as diagnostics. They do not reuse that
-small-box absolute limit. PME consumes the recorded predicted charges without a
-hidden charge adjustment.
+`|Σq − Qtarget| ≤ 1e-4 e` residual limit. The 51,200-atom one-GPU run saves
+the float32 charge dtype, requested total, observed total, residual, and charge
+magnitudes as diagnostics. It does not reuse that small-box absolute limit.
+PME consumes the recorded predicted charges without a hidden charge adjustment.
 
 The notebook estimates PME parameters and walks through the public one-GPU
 `DomainParallel` call. One GPU has one domain, so this checks the API and finite
 outputs without spatial decomposition or a speed claim. The checked offline
-results then answer three separate questions:
-
-1. A one-H100 supercell sweep records the largest successful input and the
-   first natural CUDA out-of-memory failure.
-2. The exact first-OOM input is retried unchanged on 2 and 4 H100s to show
-   whether decomposition makes it runnable.
-3. A separate input that already fits one H100 is measured on 1, 2, and 4
-   H100s to show whether communication is worth the saved local work.
+run keeps one 51,200-atom structure fixed on 1, 2, and 4 H100s. Each GPU count
+partitions the structure once, performs one untimed initialization and warm-up,
+then performs three measured energy/force evaluations before gathering the
+atom-level output once. `BaseDynamics` supplies the evaluator interface;
+its base update methods do not integrate atomic motion. Periodic wrapping may
+change the stored image of an atom without changing the physical structure.
 
 The offline run also checks fixed-charge PME against Ewald and compares
-distributed forces and energies before reporting performance. Each multi-GPU
-count means the same number of nodes, ranks, and H100s. Toolkit 0.2 repeats the
-PME mesh and FFT workspace on every GPU, so domain decomposition does not
-divide all memory. The input box has formal charge zero. Toolkit 0.2 does not
-expose the intermediate multi-rank predicted charges, so the recorded
-multi-GPU checks compare the supported energy and force outputs. These
-comparisons do not independently verify the global charge residual of the
-distributed prediction.
+distributed forces and energies before showing the three raw pass times and
+their median. Each multi-GPU count means the same number of nodes, ranks, and
+H100s. Toolkit 0.2 repeats the PME mesh and FFT workspace on every GPU, so
+domain decomposition does not divide all memory. The input box has formal
+charge zero. Toolkit 0.2 does not expose the intermediate multi-rank predicted
+charges, so the recorded multi-GPU checks compare the supported energy and
+force outputs. These comparisons do not independently verify the global charge
+residual of the distributed prediction. The short times apply only to this
+input, model, software, and hardware; they are not a trajectory or a general
+scaling claim.
 
 Exact cutoffs, halo depth, tolerances, energy-reduction handling, and launch
 commands are in the
@@ -294,23 +293,29 @@ batch to the original input queue and final results.
 `DomainParallel` solves a different problem: one periodic system is divided
 into spatial regions. The same high-level API can execute on one GPU, but that
 one-GPU walkthrough has one domain and does not partition atoms or measure
-multi-GPU scaling. The saved campaign keeps capacity, OOM recovery, and speed
-separate. The same failed input is used for every OOM-recovery row; a different
-input that fits one H100 is used for every speed row.
+multi-GPU scaling. The saved run uses the same 51,200-atom input on 1, 2, and
+4 H100s. It partitions once, performs one untimed warm-up, measures three
+energy/force passes, and gathers once. The gathered coordinates must remain
+PBC-equivalent to the input, with a maximum minimum-image displacement no
+larger than `1e-4 Å`.
 
-Before timing is interpreted, every multi-GPU force component must agree with
-the one-GPU result, while the 4-GPU energy must agree with the 2-GPU
-distributed result within `1e-4 eV/atom`. The raw one-GPU-to-multi-GPU energy
-offset is diagnostic only because Toolkit 0.2 reduces the one- and multi-GPU
-paths differently. Saved speedups also require interquartile range divided by
-the median (`IQR / median`) to be at most `0.10` at every GPU count. The 4-GPU
-row uses four nodes, each with one worker process and one H100. All GPU counts
-are reported together.
+Before the times are interpreted, every multi-GPU force component must agree
+with the one-GPU result. The one-GPU path returns a `torch.float32` energy.
+The pinned multi-GPU path returns `torch.float64` after Toolkit's distributed
+reduction. Each GPU layout is represented by the median of its three measured
+energies. The 2- and 4-GPU energy ranges must each remain within
+`1e-4 eV/atom`, and the 4-GPU median must agree with the 2-GPU median within
+`1e-4 eV/atom`. The raw one-GPU-to-multi-GPU offset and one-GPU pass range are
+diagnostic because Toolkit 0.2 reduces the one- and multi-GPU paths
+differently. The result shows all three pass times and their median for every
+GPU count. The 4-GPU row uses four nodes, each with one worker process and one
+H100.
 
 The checked `DomainParallel` release bundle belongs in
 `data/domain_decomposition/recorded/`. During development, an absent bundle is
 shown as `NOT REPORTED`; a present but invalid bundle stops the run. The
-release requires all one-, two-, and four-GPU rows and their checks.
+release requires all one-, two-, and four-GPU rows and their checks. It does
+not require or deliberately trigger an out-of-memory failure.
 
 `DistributedPipeline` places workflow stages on different ranks, where one
 rank is one worker process. It does not split one model call across GPUs. The
@@ -344,7 +349,7 @@ theme and check the following before release:
   readable without clipped labels or hidden structures.
 - Before the checked multi-GPU result directory is installed, Stage 7 should
   say `NOT REPORTED`. After installation, it should show all one-, two-, and
-  four-GPU rows, including failed capacity attempts.
+  four-GPU rows, all three measured passes, and every output-agreement check.
 
 ## Files written by a complete run
 

@@ -504,18 +504,21 @@ for charged periodic systems. The separate `DistributedPipeline` lesson still
 covers many independent systems moving through different workflow stages.
 
 The domain run has its own clean H100 path:
-`scripts/part1_domain_plan.py` creates and checks the Packmol inputs,
-`scripts/part1_domain_run.py` runs the public `partition` → `run` → `gather`
-path, and `scripts/slurm_part1_domain_decomposition.sbatch` records the
-single-GPU size sweep before retrying selected inputs on 2 and 4 GPUs.
+`scripts/part1_domain_plan.py` creates and checks one integer supercell of the
+saved Packmol base box, `scripts/part1_domain_run.py` runs the public
+`partition` → `run` → `gather` path, and
+`scripts/slurm_part1_domain_decomposition.sbatch` evaluates that same
+51,200-atom input independently on 1, 2, and 4 GPUs.
 The strict notebook loader accepts only a complete checksummed result set. The
-actual timing input uses separate force and energy checks because Toolkit 0.2
+fixed input uses separate force and energy checks because Toolkit 0.2
 reduces energy differently in the ordinary one-GPU and multi-GPU
 `DomainParallel` paths. Every force component on 2 and 4 GPUs is checked
 against one GPU. The 4-GPU energy is checked against the 2-GPU distributed
-result within `1e-4 eV/atom`. The raw one-GPU-to-multi-GPU energy
-offset is saved as a diagnostic only. Each timing row must also have
-`IQR / median <= 0.10`; all speedup points are shown together.
+result using the median of three measured energies. The 2- and 4-GPU energy
+ranges and the 4-versus-2 median difference must each remain within
+`1e-4 eV/atom`. The raw one-GPU-to-multi-GPU energy offset and one-GPU pass
+range are saved as diagnostics only. Every GPU count reports one untimed
+warm-up, all three measured energy/force pass times, and their median.
 Until that run is complete, all domain timings and speedups remain
 **NOT REPORTED**.
 
@@ -575,7 +578,7 @@ of Toolkit Core, model execution, and dynamics stays on the PyTorch path.
 | 4. Bring a materials model into Toolkit | Explain why the molecular checkpoint does not cover Cu, implement the SevenNet energy/force adapter, inspect the checkpoint's tasks, reuse one two-graph batch for an `mpa`/`oc20` model sweep, check Toolkit/native agreement, and evaluate the small fixed-geometry Cu(111) panel. | `BaseModelMixin`, `ModelConfig`, `NeighborConfig`, `NeighborListFormat`, `adapt_input`, `adapt_output`, `direct_derivative_keys`, `Batch`, `index_select`, `compute_neighbors` |
 | 5. Prepare the IR calculation | Check eager, compiled, and repeated results on one fixed batch; relax four systems with `FIRE2`; restore matched isotope coordinates; and calculate the harmonic reference. | `torch.compile`, `FIRE2`, `ConvergenceHook`, `make_neighbor_hooks`, `NaNDetectorHook`, `ZarrData` |
 | 6. Run, save, and inspect the trajectory | Run exactly 5,000 NVT and 20,000 NVE updates, save the raw trajectory before analysis, validate route and physical checks, build predicted-charge IR spectra, and keep the MD, B97-3c harmonic, and observed-position comparisons separate. | `initialize_velocities`, `NVTLangevin`, `NVE`, `FusedStage`, `Hook`, `DynamicsContext`, `segmented_sum`, `ZarrData` |
-| 7. Scale queues and single systems | Process a larger queue with bounded inflight batching; build a periodic phenol/N-methylacetamide box; replace finite Coulomb with PME; run the `DomainParallel` API on one GPU; inspect checked H100 capacity and domain results when present; then contrast this with the separate `DistributedPipeline` construction. | `InMemoryDataset`, `SizeAwareSampler`, `HostMemory`, `PMEModelWrapper`, `estimate_pme_parameters`, `DomainConfig`, `SpatialPartitioner`, `DomainParallel`, `partition`, `run`, `gather`, `DistributedPipeline`, `BufferConfig` |
+| 7. Scale queues and single systems | Process a larger queue with bounded inflight batching; load a checked periodic phenol/N-methylacetamide box; replace finite Coulomb with PME; run the `DomainParallel` API on one GPU; then inspect three checked fixed-structure passes for the same 51,200-atom input on 1, 2, and 4 H100s when present. Contrast this with the separate `DistributedPipeline` construction. | `InMemoryDataset`, `SizeAwareSampler`, `HostMemory`, `PMEModelWrapper`, `estimate_pme_parameters`, `DomainConfig`, `SpatialPartitioner`, `DomainParallel`, `partition`, `run`, `gather`, `DistributedPipeline`, `BufferConfig` |
 
 The historical 2026-07-10 job spent 1268.6 s in its dynamics cell, but that is
 a diagnostic timing for the wrong phase route. Old-pin job `3189534` spent
@@ -753,13 +756,16 @@ Three phases run on one batch of {H₂O, D₂O, (H₂O)₆, (D₂O)₆} (~42 ato
 - **Domain-decomposition evidence:** selected Core `331d6b2` exposes the
   `DomainParallel` path used by Stage 7, including the AIMNet2 → PME group and
   the independent D3 group. The Packmol input and local loader checks pass. The
-  runner now reads replicated energy from the local result and gathered forces
-  from the reconstructed atom fields, with finite-value, shape, and atom-order
-  checks before saving success. The H100 result checks compare 2/4-GPU force
-  components with one GPU, compare 4-GPU energies with the 2-GPU distributed
-  result at `1e-4 eV/atom`, and retain the raw one-to-multi-GPU energy offset
-  only as a diagnostic. No complete H100 result set is installed.
-  Domain timing, capacity, speedup, and efficiency remain **NOT REPORTED**.
+  runner reads replicated energy from the local result and gathered forces
+  from the reconstructed atom fields, with finite-value, shape, atom-order, and
+  exact-input and minimum-image position checks before saving success. The
+  replacement H100 run
+  keeps one 51,200-atom input fixed, performs one warm-up and three measured
+  energy/force passes on 1/2/4 GPUs, compares 2/4-GPU forces with one GPU, and
+  requires repeatable distributed energies before comparing the 4-GPU median
+  with the 2-GPU median at `1e-4 eV/atom`. The raw one-to-multi-GPU energy
+  offset and one-GPU pass range remain diagnostic. No complete H100 result set
+  is installed, so these results remain **NOT REPORTED**.
 - **Stage-pipeline evidence:** the separate `DistributedPipeline` path still
   fails the full-dtype transfer preflight because `Batch.put` skips integer
   segmented fields. Its retained producer also lacks the fixed-work selection

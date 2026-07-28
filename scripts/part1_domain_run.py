@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""Run one fresh Part 1 domain-decomposition or electrostatics case.
+"""Run one Part 1 fixed-input domain or electrostatics case.
 
-Launch ``capacity`` with ``torchrun``. The capacity path uses only the public
-Toolkit construction:
+Launch ``distributed`` with ``torchrun``. The distributed path uses only the
+public Toolkit construction:
 
 ``DistributedManager -> DeviceMesh -> DomainConfig -> DomainParallel ->
 partition -> run -> gather``.
 
-The Toolkit 0.2 version used here returns energy and forces but not the charge
-field from its distributed AIMNet2-to-PME group. One-GPU references record
-finite float32 charge diagnostics. The separate ``electrostatics-validation``
-mode applies the strict charge-residual limit and checks PME against Ewald on
-the same fixed charges.
+The fixed 51,200-atom input is partitioned once. One untimed energy/force pass
+initializes the pipeline, then three passes are measured with no integration
+update. DomainParallel can wrap coordinates to equivalent periodic images, so
+the runner verifies a strict minimum-image displacement limit instead of raw
+coordinate equality. The Toolkit 0.2 version used here returns energy and
+forces but not charges from its multi-GPU AIMNet2-to-PME group. The one-GPU run
+records the float32 charge diagnostic. ``electrostatics-validation`` checks PME
+against Ewald on the smaller 3,200-atom input using the same fixed charges.
 """
 
 from __future__ import annotations
@@ -25,7 +28,7 @@ import math
 import os
 from pathlib import Path
 import platform
-from statistics import median, quantiles
+from statistics import median
 import subprocess
 import sys
 from time import perf_counter
@@ -41,11 +44,9 @@ if str(PART_DIR) not in sys.path:
 from aux.domain.config import DOMAIN_METHODOLOGY  # noqa: E402
 
 
-DOMAIN_METHODOLOGY_CONFIG_PATH = (
-    PART_DIR / "aux" / "domain" / "config.py"
-).resolve()
-RESULT_SCHEMA = "alchemi.part1-domain-case.v3"
-RANK_SCHEMA = "alchemi.part1-domain-rank.v1"
+DOMAIN_METHODOLOGY_CONFIG_PATH = (PART_DIR / "aux" / "domain" / "config.py").resolve()
+RESULT_SCHEMA = "alchemi.part1-domain-case.v5"
+RANK_SCHEMA = "alchemi.part1-domain-rank.v2"
 CORE_COMMIT = "331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409"
 OPS_COMMIT = "e8e7a7464f6745277a156a3d6f433d06b58c60e3"
 CHECKPOINT_SHA256 = "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28"
@@ -68,10 +69,11 @@ DEFAULT_D3_SMOOTHING_FRACTION = DOMAIN_METHODOLOGY.d3_smoothing_fraction
 DEFAULT_DOMAIN_SKIN_A = DOMAIN_METHODOLOGY.domain_halo_skin_a
 EXPECTED_AIMNET_NEIGHBOR_CUTOFF_A = DOMAIN_METHODOLOGY.aimnet_neighbor_cutoff_a
 ATOMS_PER_COMPOSITION_UNIT = DOMAIN_METHODOLOGY.atoms_per_composition_unit
-DEFAULT_STEADY_TIMING_WARMUP_COUNT = (
-    DOMAIN_METHODOLOGY.steady_timing_warmup_count
+DEFAULT_EVALUATION_WARMUP_COUNT = DOMAIN_METHODOLOGY.evaluation_warmup_count
+DEFAULT_EVALUATION_PASS_COUNT = DOMAIN_METHODOLOGY.evaluation_pass_count
+DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A = (
+    DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
 )
-DEFAULT_STEADY_TIMING_SAMPLE_COUNT = DOMAIN_METHODOLOGY.steady_timing_sample_count
 EXPECTED_PYTHON_MAJOR_MINOR = (3, 12)
 EXPECTED_TORCH_VERSION = "2.12.0+cu130"
 EXPECTED_TORCH_CUDA_VERSION = "13.0"
@@ -82,12 +84,8 @@ EXPECTED_RUNTIME_DISTRIBUTIONS = {
     "nvalchemi-toolkit-ops": "0.4.0",
 }
 
-COLD_MEASUREMENT_ROLES = frozenset({"capacity", "parity", "rescue"})
 MEASUREMENT_ROLE_BY_MODE = {
-    "capacity": "capacity",
-    "parity": "parity",
-    "distributed": "rescue",
-    "steady-timing": "steady_timing",
+    "distributed": "fixed_evaluation",
     "electrostatics-validation": "electrostatics_validation",
 }
 
@@ -105,25 +103,16 @@ def sha256_file(path: Path) -> str:
 
 
 def summarize_timing_samples(samples_s: list[float]) -> dict[str, float]:
-    """Return median and inclusive quartiles for max-rank workflow samples."""
+    """Return the simple statistics shown for the three measured passes."""
 
     if not samples_s or any(
         not math.isfinite(value) or value <= 0.0 for value in samples_s
     ):
         raise ValueError("timing samples must be nonempty, positive, and finite")
-    sample_median = float(median(samples_s))
-    if len(samples_s) == 1:
-        q1 = q3 = sample_median
-    else:
-        q1, _, q3 = (
-            float(value)
-            for value in quantiles(samples_s, n=4, method="inclusive")
-        )
     return {
-        "median_s": sample_median,
-        "q1_s": q1,
-        "q3_s": q3,
-        "iqr_s": q3 - q1,
+        "median_s": float(median(samples_s)),
+        "min_s": float(min(samples_s)),
+        "max_s": float(max(samples_s)),
     }
 
 
@@ -152,8 +141,7 @@ def validate_spatial_layout(
             f"Toolkit rank_grid {rank_grid} does not match {world_size} ranks"
         )
     if any(
-        ranks > cells
-        for ranks, cells in zip(rank_grid, cells_per_dim, strict=True)
+        ranks > cells for ranks, cells in zip(rank_grid, cells_per_dim, strict=True)
     ):
         raise RuntimeError(
             f"Toolkit rank_grid {rank_grid} exceeds cells_per_dim {cells_per_dim}"
@@ -173,37 +161,35 @@ def validate_spatial_layout(
 
 
 def validate_measurement_args(args: argparse.Namespace) -> None:
-    """Resolve timing counts and reject a mode/role mismatch before imports."""
+    """Derive the fixed work from the selected mode before CUDA imports."""
 
-    expected_role = MEASUREMENT_ROLE_BY_MODE[args.mode]
-    if args.measurement_role != expected_role:
-        raise ValueError(
-            f"mode {args.mode!r} requires measurement role {expected_role!r}"
-        )
-    if args.warmup_count is None:
-        args.warmup_count = (
-            DEFAULT_STEADY_TIMING_WARMUP_COUNT
-            if expected_role == "steady_timing"
-            else 0
-        )
-    if args.sample_count is None:
-        args.sample_count = (
-            DEFAULT_STEADY_TIMING_SAMPLE_COUNT
-            if expected_role == "steady_timing"
-            else 1
-        )
-    if expected_role == "steady_timing":
-        if args.warmup_count < 1:
-            raise ValueError("steady_timing requires at least one warmup")
-        if args.sample_count < 5:
-            raise ValueError("steady_timing requires at least five samples")
-    elif expected_role in COLD_MEASUREMENT_ROLES or expected_role == (
-        "electrostatics_validation"
-    ):
-        if (args.warmup_count, args.sample_count) != (0, 1):
+    args.measurement_role = MEASUREMENT_ROLE_BY_MODE[args.mode]
+    if args.mode == "distributed":
+        if args.world_size not in DOMAIN_METHODOLOGY.supported_world_sizes:
             raise ValueError(
-                f"{expected_role} requires one cold sample and no warmup"
+                f"distributed world size must be one of "
+                f"{DOMAIN_METHODOLOGY.supported_world_sizes}"
             )
+        if args.pair_count != DOMAIN_METHODOLOGY.fixed_molecules_per_species:
+            raise ValueError(
+                "distributed mode requires the fixed "
+                f"{DOMAIN_METHODOLOGY.fixed_molecules_per_species}-pair input"
+            )
+        args.warmup_count = DEFAULT_EVALUATION_WARMUP_COUNT
+        args.sample_count = DEFAULT_EVALUATION_PASS_COUNT
+    else:
+        if args.world_size != 1:
+            raise ValueError("electrostatics-validation requires one GPU")
+        expected_pairs = (
+            DOMAIN_METHODOLOGY.electrostatics_validation_molecules_per_species
+        )
+        if args.pair_count != expected_pairs:
+            raise ValueError(
+                "electrostatics-validation requires the fixed "
+                f"{expected_pairs}-pair input"
+            )
+        args.warmup_count = 0
+        args.sample_count = 1
 
 
 def file_identity(path: Path) -> dict[str, Any]:
@@ -235,23 +221,13 @@ def resolved_methodology_record(
             "pme_ewald_energy_tolerance_ev_per_atom": (
                 args.pme_ewald_energy_tol_ev_per_atom
             ),
-            "pme_ewald_force_max_tolerance_ev_a": (
-                args.pme_ewald_force_max_tol_ev_a
-            ),
+            "pme_ewald_force_max_tolerance_ev_a": (args.pme_ewald_force_max_tol_ev_a),
             "charge_sum_tolerance_e": args.charge_sum_tol_e,
             "d3_cutoff_a": args.d3_cutoff_a,
             "d3_smoothing_fraction": args.d3_smoothing_fraction,
             "domain_halo_skin_a": args.domain_skin_a,
-            "steady_timing_warmup_count": (
-                args.warmup_count
-                if args.measurement_role == "steady_timing"
-                else DOMAIN_METHODOLOGY.steady_timing_warmup_count
-            ),
-            "steady_timing_sample_count": (
-                args.sample_count
-                if args.measurement_role == "steady_timing"
-                else DOMAIN_METHODOLOGY.steady_timing_sample_count
-            ),
+            "evaluation_warmup_count": DOMAIN_METHODOLOGY.evaluation_warmup_count,
+            "evaluation_pass_count": DOMAIN_METHODOLOGY.evaluation_pass_count,
         }
     )
     return {
@@ -633,12 +609,56 @@ def predict_gathered_source_ids(
     rank_assignment = rank_assignment.to(torch.int64).reshape(-1)
     if rank_assignment.shape != source_ids.shape:
         raise RuntimeError("spatial rank assignment has the wrong shape")
-    if bool((rank_assignment < 0).any()) or bool(
-        (rank_assignment >= world_size).any()
-    ):
+    if bool((rank_assignment < 0).any()) or bool((rank_assignment >= world_size).any()):
         raise RuntimeError("spatial rank assignment is outside the rank mesh")
     scatter_order = torch.argsort(rank_assignment, stable=True)
     return source_ids[scatter_order]
+
+
+def maximum_minimum_image_displacement_a(
+    reference_positions: Any,
+    current_positions: Any,
+    *,
+    cell: Any,
+    pbc: Any,
+) -> Any:
+    """Return the largest PBC-aware displacement from one fixed structure."""
+
+    import torch
+
+    if (
+        reference_positions.shape != current_positions.shape
+        or reference_positions.ndim != 2
+        or reference_positions.shape[1] != 3
+    ):
+        raise ValueError("position arrays must have the same (n_atoms, 3) shape")
+    if cell.numel() != 9 or pbc.numel() != 3:
+        raise ValueError("the fixed-input MIC check requires one 3D periodic cell")
+
+    reference = reference_positions.detach().to(torch.float64)
+    current = current_positions.detach().to(torch.float64)
+    cell_matrix = cell.detach().to(torch.float64).reshape(3, 3)
+    pbc_flags = pbc.detach().to(torch.bool).reshape(3)
+    if not bool(torch.isfinite(reference).all()) or not bool(
+        torch.isfinite(current).all()
+    ):
+        raise RuntimeError("position invariance check received non-finite coordinates")
+    if not bool(torch.isfinite(cell_matrix).all()):
+        raise RuntimeError("position invariance check received a non-finite cell")
+
+    fractional = (current - reference) @ torch.linalg.inv(cell_matrix)
+    fractional = torch.where(
+        pbc_flags.unsqueeze(0),
+        fractional - torch.round(fractional),
+        fractional,
+    )
+    displacement = fractional @ cell_matrix
+    if displacement.shape[0] == 0:
+        return torch.zeros((), dtype=torch.float64, device=displacement.device)
+    maximum = torch.linalg.vector_norm(displacement, dim=1).max()
+    if not bool(torch.isfinite(maximum)):
+        raise RuntimeError("position invariance check produced a non-finite result")
+    return maximum
 
 
 def source_order_from_gathered_ids(
@@ -775,9 +795,7 @@ def verify_runtime_source(repository_root: Path) -> dict[str, Any]:
         "domain_methodology_name": DOMAIN_METHODOLOGY.name,
         "domain_methodology_version": DOMAIN_METHODOLOGY.version,
         "domain_methodology_config_file": str(DOMAIN_METHODOLOGY_CONFIG_PATH),
-        "domain_methodology_config_sha256": sha256_file(
-            DOMAIN_METHODOLOGY_CONFIG_PATH
-        ),
+        "domain_methodology_config_sha256": sha256_file(DOMAIN_METHODOLOGY_CONFIG_PATH),
         "domain_methodology_record": DOMAIN_METHODOLOGY.as_record(),
     }
 
@@ -814,8 +832,7 @@ def load_atoms_and_manifest(
         if (
             manifest_source.get("domain_methodology_config_sha256")
             != sha256_file(DOMAIN_METHODOLOGY_CONFIG_PATH)
-            or manifest_source.get("domain_methodology_name")
-            != DOMAIN_METHODOLOGY.name
+            or manifest_source.get("domain_methodology_name") != DOMAIN_METHODOLOGY.name
             or manifest_source.get("domain_methodology_version")
             != DOMAIN_METHODOLOGY.version
         ):
@@ -904,8 +921,7 @@ def estimate_pme_setup(
         "accuracy": float(accuracy),
         "mesh_safety_factor": float(mesh_safety_factor),
         "parameter_rule": (
-            "estimate_pme_parameters(accuracy, real_space_cutoff, "
-            "mesh_safety_factor)"
+            "estimate_pme_parameters(accuracy, real_space_cutoff, mesh_safety_factor)"
         ),
     }
 
@@ -1116,7 +1132,7 @@ def force_summary(forces: Any) -> dict[str, Any]:
     magnitudes = torch.linalg.vector_norm(values, dim=1)
     return {
         "shape": list(values.shape),
-        "dtype": str(forces.dtype),
+        "dtype": str(forces.dtype).removeprefix("torch."),
         "sha256": tensor_checksum(forces),
         "sum_vector_ev_a": [float(v) for v in values.sum(dim=0).cpu()],
         "sum_abs_ev_a": float(values.abs().sum().item()),
@@ -1124,6 +1140,103 @@ def force_summary(forces: Any) -> dict[str, Any]:
         "rms_ev_a": float(torch.sqrt((values * values).mean()).item()),
         "max_norm_ev_a": float(magnitudes.max().item()),
         "finite": bool(torch.isfinite(values).all()),
+    }
+
+
+def distributed_force_summary(forces: Any) -> dict[str, Any]:
+    """Summarize owned forces across ranks without gathering every pass."""
+
+    import torch
+    import torch.distributed as dist
+
+    values = forces.detach().to(torch.float64)
+    if values.ndim != 2 or values.shape[1] != 3:
+        raise RuntimeError("owned forces must have shape (n_atoms, 3)")
+    magnitudes = torch.linalg.vector_norm(values, dim=1)
+    summed = torch.tensor(
+        [
+            float(values.shape[0]),
+            *[float(value) for value in values.sum(dim=0)],
+            float(values.abs().sum().item()),
+            float((values * values).sum().item()),
+        ],
+        dtype=torch.float64,
+        device=values.device,
+    )
+    dist.all_reduce(summed, op=dist.ReduceOp.SUM)
+    maximum = torch.tensor(
+        [float(magnitudes.max().item()) if magnitudes.numel() else 0.0],
+        dtype=torch.float64,
+        device=values.device,
+    )
+    dist.all_reduce(maximum, op=dist.ReduceOp.MAX)
+    finite = torch.tensor(
+        [int(torch.isfinite(values).all())],
+        dtype=torch.int32,
+        device=values.device,
+    )
+    dist.all_reduce(finite, op=dist.ReduceOp.MIN)
+    atom_count = int(round(float(summed[0].item())))
+    if atom_count <= 0:
+        raise RuntimeError("distributed force summary has no atoms")
+    sum_squares = float(summed[5].item())
+    return {
+        "shape": [atom_count, 3],
+        "dtype": str(forces.dtype).removeprefix("torch."),
+        "sum_vector_ev_a": [float(value) for value in summed[1:4].cpu()],
+        "sum_abs_ev_a": float(summed[4].item()),
+        "sum_squares_ev2_a2": sum_squares,
+        "rms_ev_a": math.sqrt(sum_squares / (3 * atom_count)),
+        "max_norm_ev_a": float(maximum.item()),
+        "finite": bool(finite.item()),
+    }
+
+
+def evaluation_output_diagnostics(
+    batch: Any,
+    *,
+    world_size: int,
+) -> dict[str, Any]:
+    """Describe the energy and forces returned by one domain rank."""
+
+    import torch
+
+    expected_energy_dtype = DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(
+        world_size
+    )
+    energy = getattr(batch, "energy", None)
+    forces = getattr(batch, "forces", None)
+    energy_is_tensor = isinstance(energy, torch.Tensor)
+    forces_is_tensor = isinstance(forces, torch.Tensor)
+    valid = (
+        energy_is_tensor
+        and energy.numel() == 1
+        and bool(torch.isfinite(energy).all())
+        and str(energy.dtype) == expected_energy_dtype
+        and forces_is_tensor
+        and forces.ndim == 2
+        and forces.shape[1] == 3
+        and bool(torch.isfinite(forces).all())
+    )
+    return {
+        "valid": bool(valid),
+        "expected_energy_dtype": expected_energy_dtype,
+        "energy": {
+            "available": energy_is_tensor,
+            "shape": list(energy.shape) if energy_is_tensor else None,
+            "dtype": str(energy.dtype) if energy_is_tensor else None,
+            "finite": (
+                bool(torch.isfinite(energy).all()) if energy_is_tensor else None
+            ),
+        },
+        "forces": {
+            "available": forces_is_tensor,
+            "shape": list(forces.shape) if forces_is_tensor else None,
+            "dtype": str(forces.dtype) if forces_is_tensor else None,
+            "finite": (
+                bool(torch.isfinite(forces).all()) if forces_is_tensor else None
+            ),
+        },
     }
 
 
@@ -1144,10 +1257,7 @@ def run_electrostatics_validation(
         raise ValueError("electrostatics-validation requires exactly one rank")
     batch = make_batch(atoms, device)
     source_atom_ids = source_atom_ids_tensor(atoms, device)
-    input_hash = source_input_checksum(
-        batch,
-        source_atom_ids,
-    )
+    input_hash = source_input_checksum(batch, source_atom_ids)
     aimnet, aimnet_info = build_aimnet(checkpoint, device)
     torch.cuda.reset_peak_memory_stats(device)
     torch.cuda.synchronize(device)
@@ -1303,7 +1413,7 @@ def run_electrostatics_validation(
         },
         "timing": {
             "wall_s": elapsed,
-            "boundary": (
+            "timed_work": (
                 "AIMNet2 charge forward, PME forward, and Ewald forward after "
                 "model loading; includes neighbor construction."
             ),
@@ -1316,7 +1426,7 @@ def run_electrostatics_validation(
     return row
 
 
-def run_capacity(
+def run_fixed_evaluation(
     args: argparse.Namespace,
     *,
     device: Any,
@@ -1328,7 +1438,6 @@ def run_capacity(
 ) -> dict[str, Any]:
     import torch
     import torch.distributed as dist
-    from nvalchemi.data import Batch
     from nvalchemi.distributed import (
         DistributedManager,
         DomainConfig,
@@ -1347,6 +1456,7 @@ def run_capacity(
         raise ValueError(
             f"torchrun world size {world_size} != declared {args.world_size}"
         )
+    global_atom_count = args.pair_count * ATOMS_PER_COMPOSITION_UNIT
     mesh = manager.initialize_mesh(
         mesh_shape=(world_size,),
         mesh_dim_names=("domain",),
@@ -1359,9 +1469,7 @@ def run_capacity(
     setup_start = perf_counter()
     stage_tracker["stage"] = "input_transfer"
     full_batch = make_batch(atoms, device) if rank == 0 else None
-    source_atom_ids = (
-        source_atom_ids_tensor(atoms, device) if rank == 0 else None
-    )
+    source_atom_ids = source_atom_ids_tensor(atoms, device) if rank == 0 else None
     stage_tracker["stage"] = "model_setup"
     pme_values = torch.zeros(7, dtype=torch.float64, device=device)
     if rank == 0:
@@ -1403,8 +1511,7 @@ def run_capacity(
         "accuracy": args.pme_accuracy,
         "mesh_safety_factor": args.pme_mesh_safety_factor,
         "parameter_rule": (
-            "estimate_pme_parameters(accuracy, real_space_cutoff, "
-            "mesh_safety_factor)"
+            "estimate_pme_parameters(accuracy, real_space_cutoff, mesh_safety_factor)"
         ),
     }
     pipeline, model_info = build_complete_pipeline(
@@ -1429,10 +1536,7 @@ def run_capacity(
     input_tensor_hash = None
     if full_batch is not None:
         assert source_atom_ids is not None
-        input_tensor_hash = source_input_checksum(
-            full_batch,
-            source_atom_ids,
-        )
+        input_tensor_hash = source_input_checksum(full_batch, source_atom_ids)
     domain_config = DomainConfig(
         cutoff=max(
             aimnet_cutoff_a,
@@ -1494,190 +1598,173 @@ def run_capacity(
     )
     setup_s = perf_counter() - setup_start
 
-    local_samples_s: list[float] = []
-    samples_s_max_rank: list[float] = []
-    workflow_max_allocated_bytes: list[int] = []
-    workflow_max_reserved_bytes: list[int] = []
-    source_input_hashes: list[str] = []
-    owned: Batch | None = None
-    result_owned: Batch | None = None
-    gathered: Batch | None = None
-    # Multi-rank DomainParallel primes forces once before its first requested
-    # step. The one-rank pass-through does not. Equalize only the reportable
-    # timing series so every GPU count performs two model evaluations.
-    run_steps = (
-        DOMAIN_METHODOLOGY.steady_timing_run_steps(world_size)
-        if args.measurement_role == "steady_timing"
-        else 1
-    )
-    if world_size > 1 and run_steps != 1:
-        raise RuntimeError(
-            "multi-rank source-order reconstruction requires one requested step"
+    pass_times_s_local: list[float] = []
+    pass_times_s: list[float] = []
+    pass_max_allocated_bytes: list[int] = []
+    pass_max_reserved_bytes: list[int] = []
+    pass_maximum_minimum_image_displacements_a: list[float] = []
+    measured_passes: list[dict[str, Any]] = []
+    owned = None
+    result_owned = None
+    gathered = None
+    warmup_maximum_minimum_image_displacement_a = math.inf
+
+    # BaseDynamics has no integration update. DomainParallel may still wrap
+    # coordinates to equivalent periodic images, which is checked below with a
+    # strict minimum-image displacement rather than raw tensor equality.
+    hooks = pipeline.make_neighbor_hooks() if world_size == 1 else []
+    evaluator = BaseDynamics(model=pipeline, n_steps=1, hooks=hooks)
+    with DomainParallel(
+        dynamics=evaluator,
+        config=domain_config,
+        n_steps=1,
+    ) as domain:
+        stage_tracker["stage"] = "partition"
+        owned = domain.partition(full_batch if rank == 0 else None)
+        owned_count = int(owned.num_nodes)
+        owned_reference_positions = owned.positions.detach().clone()
+
+        stage_tracker["stage"] = "warmup"
+        dist.barrier()
+        torch.cuda.synchronize(device)
+        result_owned = domain.run(owned, n_steps=1)
+        torch.cuda.synchronize(device)
+        warmup_maximum_displacement = maximum_minimum_image_displacement_a(
+            owned_reference_positions,
+            result_owned.positions,
+            cell=result_owned.cell,
+            pbc=result_owned.pbc,
         )
-    automatic_initial_evaluations = (
-        DOMAIN_METHODOLOGY.domain_parallel_multi_rank_initial_force_evaluations
-        if world_size > 1
-        else 0
-    )
-    model_evaluations_per_workflow = run_steps + automatic_initial_evaluations
-    if (
-        args.measurement_role == "steady_timing"
-        and model_evaluations_per_workflow
-        != DOMAIN_METHODOLOGY.steady_timing_model_evaluations_per_workflow
-    ):
-        raise RuntimeError("steady timing must perform two model evaluations")
+        dist.all_reduce(
+            warmup_maximum_displacement,
+            op=dist.ReduceOp.MAX,
+        )
+        warmup_maximum_minimum_image_displacement_a = float(
+            warmup_maximum_displacement.item()
+        )
+        if (
+            warmup_maximum_minimum_image_displacement_a
+            > DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+        ):
+            raise RuntimeError(
+                "the untimed evaluation exceeded the declared "
+                "minimum-image position tolerance"
+            )
 
-    def run_public_workflow(*, measured: bool, index: int) -> None:
-        """Run one synchronized workflow with a fresh public wrapper."""
-
-        nonlocal owned, result_owned, gathered
-
-        # Multi-rank DistributedPipelineModel builds its neighbor lists
-        # internally. The normal one-rank pipeline receives fresh hooks with
-        # each fresh BaseDynamics wrapper.
-        hooks = pipeline.make_neighbor_hooks() if world_size == 1 else []
-        inner = BaseDynamics(model=pipeline, n_steps=1, hooks=hooks)
-        with DomainParallel(
-            dynamics=inner,
-            config=domain_config,
-            n_steps=1,
-        ) as domain:
-            # Context construction/entry, reset, barrier, and initial CUDA
-            # synchronization are deliberately outside the timer.
-            torch.cuda.reset_peak_memory_stats(device)
+        for pass_index in range(1, args.sample_count + 1):
+            stage_tracker["stage"] = f"measured_pass_{pass_index}"
             dist.barrier()
             torch.cuda.synchronize(device)
-            if measured:
-                start = perf_counter()
-            stage_tracker["stage"] = (
-                f"sample_{index}_partition" if measured else f"warmup_{index}_partition"
-            )
-            owned = domain.partition(full_batch if rank == 0 else None)
-            stage_tracker["stage"] = (
-                f"sample_{index}_run" if measured else f"warmup_{index}_run"
-            )
-            result_owned = domain.run(owned, n_steps=run_steps)
-            stage_tracker["stage"] = (
-                f"sample_{index}_gather" if measured else f"warmup_{index}_gather"
-            )
-            gathered = domain.gather(result_owned, dst=0)
+            torch.cuda.reset_peak_memory_stats(device)
+            started = perf_counter()
+            result_owned = domain.run(result_owned, n_steps=1)
             torch.cuda.synchronize(device)
-            if measured:
-                local_elapsed_s = perf_counter() - start
-            workflow_max_allocated_bytes.append(
-                int(torch.cuda.max_memory_allocated(device))
-            )
-            workflow_max_reserved_bytes.append(
-                int(torch.cuda.max_memory_reserved(device))
-            )
+            local_elapsed_s = perf_counter() - started
+            local_allocated = int(torch.cuda.max_memory_allocated(device))
+            local_reserved = int(torch.cuda.max_memory_reserved(device))
 
-        # DomainParallel exit and the unchanged-input check remain outside the
-        # timed public partition -> run -> gather boundary.
-        input_unchanged = True
-        if rank == 0:
-            assert full_batch is not None
-            assert source_atom_ids is not None
-            observed_hash = source_input_checksum(
-                full_batch,
-                source_atom_ids,
-            )
-            source_input_hashes.append(observed_hash)
-            input_unchanged = observed_hash == input_tensor_hash
-        input_unchanged_tensor = torch.tensor(
-            [int(input_unchanged)],
-            dtype=torch.int32,
-            device=device,
-        )
-        dist.broadcast(input_unchanged_tensor, src=0)
-        if int(input_unchanged_tensor.item()) != 1:
-            raise RuntimeError("the public workflow mutated the source input Batch")
-
-        if measured:
-            local_samples_s.append(local_elapsed_s)
             max_elapsed = torch.tensor(
                 [local_elapsed_s],
                 dtype=torch.float64,
                 device=device,
             )
             dist.all_reduce(max_elapsed, op=dist.ReduceOp.MAX)
-            samples_s_max_rank.append(float(max_elapsed.item()))
+            pass_times_s_local.append(local_elapsed_s)
+            pass_times_s.append(float(max_elapsed.item()))
+            pass_max_allocated_bytes.append(local_allocated)
+            pass_max_reserved_bytes.append(local_reserved)
 
-    for warmup_index in range(args.warmup_count):
-        run_public_workflow(measured=False, index=warmup_index)
-    for sample_index in range(args.sample_count):
-        run_public_workflow(measured=True, index=sample_index)
+            output_diagnostics = evaluation_output_diagnostics(
+                result_owned,
+                world_size=world_size,
+            )
+            outputs_valid = torch.tensor(
+                [int(output_diagnostics["valid"])],
+                dtype=torch.int32,
+                device=device,
+            )
+            dist.all_reduce(outputs_valid, op=dist.ReduceOp.MIN)
+            if not bool(outputs_valid.item()):
+                diagnostics_by_rank: list[dict[str, Any] | None] = [None] * world_size
+                dist.all_gather_object(diagnostics_by_rank, output_diagnostics)
+                raise RuntimeError(
+                    "DomainParallel returned a missing, non-finite, malformed, "
+                    "or unexpected-dtype energy/force result: "
+                    f"{json.dumps(diagnostics_by_rank, sort_keys=True)}"
+                )
 
-    timing_summary = summarize_timing_samples(samples_s_max_rank)
-    local_timing_summary = summarize_timing_samples(local_samples_s)
-    timed_max_allocated_bytes = max(workflow_max_allocated_bytes)
-    timed_max_reserved_bytes = max(workflow_max_reserved_bytes)
-    if owned is None or result_owned is None:
-        raise RuntimeError("no DomainParallel workflow completed")
-    owned_count = int(owned.num_nodes)
-    stage_tracker["stage"] = "result_collection"
+            replicated_energy = result_owned.energy.detach().clone()
+            energies_by_rank = [
+                torch.empty_like(replicated_energy) for _ in range(world_size)
+            ]
+            dist.all_gather(energies_by_rank, replicated_energy)
+            if not all(
+                torch.equal(energy, energies_by_rank[0])
+                for energy in energies_by_rank[1:]
+            ):
+                raise RuntimeError("the globally reduced energy differs between ranks")
 
-    # Shared-filesystem writes happen only after the measured CUDA work.
-    atomic_write_json(
-        args.rank_output_dir.resolve() / f"rank-{rank:02d}.json",
-        {
-            "schema": RANK_SCHEMA,
-            "created_utc": utc_now(),
-            "run_id": args.run_id,
-            "case_id": args.case_id,
-            "measurement_role": args.measurement_role,
-            "rank": rank,
-            "local_rank": int(os.environ["LOCAL_RANK"]),
-            "status": "running",
-            "success": False,
-            "stage": "partition_run_gather_complete",
-            "owned_atom_count": owned_count,
-            "halo_atom_count": None,
-            "halo_atom_count_reason": "not_exposed_by_public_api",
-            "cells_per_dim": list(cells_per_dim),
-            "rank_grid": list(rank_grid),
-            "wall_s": local_timing_summary["median_s"],
-            "samples_s_local_rank": local_samples_s,
-            "samples_s_max_rank": samples_s_max_rank,
-            "max_allocated_bytes": timed_max_allocated_bytes,
-            "max_reserved_bytes": timed_max_reserved_bytes,
-        },
-    )
+            maximum_displacement = maximum_minimum_image_displacement_a(
+                owned_reference_positions,
+                result_owned.positions,
+                cell=result_owned.cell,
+                pbc=result_owned.pbc,
+            )
+            dist.all_reduce(
+                maximum_displacement,
+                op=dist.ReduceOp.MAX,
+            )
+            maximum_displacement_a = float(maximum_displacement.item())
+            if maximum_displacement_a > DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A:
+                raise RuntimeError(
+                    f"measured evaluation pass {pass_index} exceeded the declared "
+                    "minimum-image position tolerance"
+                )
+            pass_maximum_minimum_image_displacements_a.append(maximum_displacement_a)
 
-    local_outputs_valid = (
-        result_owned.energy is not None
-        and result_owned.energy.numel() == 1
-        and bool(torch.isfinite(result_owned.energy).all())
-        and result_owned.forces is not None
-        and result_owned.forces.ndim == 2
-        and result_owned.forces.shape[1] == 3
-        and bool(torch.isfinite(result_owned.forces).all())
-    )
-    all_outputs_valid = torch.tensor(
-        [int(local_outputs_valid)], dtype=torch.int32, device=device
-    )
-    dist.all_reduce(all_outputs_valid, op=dist.ReduceOp.MIN)
-    if int(all_outputs_valid.item()) != 1:
-        raise RuntimeError(
-            "DomainParallel returned a missing, non-finite, or malformed "
-            "energy/force result on at least one rank"
-        )
-    replicated_energy = result_owned.energy.detach().clone()
-    energies_by_rank = [torch.empty_like(replicated_energy) for _ in range(world_size)]
-    dist.all_gather(energies_by_rank, replicated_energy)
-    if not all(
-        torch.equal(energy, energies_by_rank[0]) for energy in energies_by_rank[1:]
+            energy_ev = float(replicated_energy.reshape(-1)[0].item())
+            force_record = distributed_force_summary(result_owned.forces)
+            measured_passes.append(
+                {
+                    "pass_index": pass_index,
+                    "energy_ev": energy_ev,
+                    "energy_ev_per_atom": energy_ev / global_atom_count,
+                    "energy_dtype": str(replicated_energy.dtype),
+                    "forces": force_record,
+                    "maximum_minimum_image_displacement_a": (maximum_displacement_a),
+                }
+            )
+
+        stage_tracker["stage"] = "gather"
+        gathered = domain.gather(result_owned, dst=0)
+
+    timing_summary = summarize_timing_samples(pass_times_s)
+    local_timing_summary = summarize_timing_samples(pass_times_s_local)
+    if (
+        len(pass_times_s) != DOMAIN_METHODOLOGY.evaluation_pass_count
+        or len(measured_passes) != DOMAIN_METHODOLOGY.evaluation_pass_count
     ):
-        raise RuntimeError("the globally reduced energy differs between ranks")
+        raise RuntimeError(
+            "the fixed evaluation did not complete three measured passes"
+        )
+
+    stage_tracker["stage"] = "result_collection"
 
     local = {
         **runtime_row(rank, int(os.environ["LOCAL_RANK"]), device),
         "owned_atom_count": owned_count,
         "halo_atom_count": None,
         "halo_atom_count_reason": "not_exposed_by_public_api",
-        "wall_s": local_timing_summary["median_s"],
-        "samples_s_local_rank": local_samples_s,
-        "max_allocated_bytes": timed_max_allocated_bytes,
-        "max_reserved_bytes": timed_max_reserved_bytes,
+        "pass_times_s_local": pass_times_s_local,
+        "median_s_local": local_timing_summary["median_s"],
+        "pass_max_allocated_bytes": pass_max_allocated_bytes,
+        "pass_max_reserved_bytes": pass_max_reserved_bytes,
+        "warmup_maximum_minimum_image_displacement_a": (
+            warmup_maximum_minimum_image_displacement_a
+        ),
+        "measured_pass_maximum_minimum_image_displacements_a": (
+            pass_maximum_minimum_image_displacements_a
+        ),
     }
     atomic_write_json(
         args.rank_output_dir.resolve() / f"rank-{rank:02d}.json",
@@ -1689,7 +1776,9 @@ def run_capacity(
             "measurement_role": args.measurement_role,
             "status": "running",
             "success": False,
-            "stage": "runtime_identity_complete",
+            "stage": "fixed_evaluation_complete",
+            "cells_per_dim": list(cells_per_dim),
+            "rank_grid": list(rank_grid),
             **local,
         },
     )
@@ -1702,8 +1791,6 @@ def run_capacity(
         runtime_rows,
         expected_software=source["runtime_software"],
     )
-    input_hashes: list[str | None] = [None] * world_size
-    dist.all_gather_object(input_hashes, input_tensor_hash)
 
     row: dict[str, Any] = {}
     if rank == 0:
@@ -1733,16 +1820,39 @@ def run_capacity(
         sorted_forces = gathered.forces[order]
         sorted_positions = gathered.positions[order]
         sorted_atomic_numbers = gathered.atomic_numbers.reshape(-1)[order]
+        assert full_batch is not None
         source_file_order = torch.argsort(source_atom_ids, stable=True)
+        sorted_reference_positions = full_batch.positions[source_file_order]
         expected_atomic_numbers = torch.as_tensor(
             atoms.numbers, dtype=sorted_atomic_numbers.dtype, device=device
         )[source_file_order]
         if not torch.equal(sorted_atomic_numbers, expected_atomic_numbers):
             raise RuntimeError("gather changed the source-ordered atomic numbers")
-        # Toolkit 0.2 gathers atom-level fields. The globally reduced total
-        # energy is already replicated on each rank before gather.
-        energy_ev = float(replicated_energy.reshape(-1)[0].item())
-        assert full_batch is not None
+        final_gather_displacement = maximum_minimum_image_displacement_a(
+            sorted_reference_positions,
+            sorted_positions,
+            cell=gathered.cell,
+            pbc=gathered.pbc,
+        )
+        final_gather_maximum_minimum_image_displacement_a = float(
+            final_gather_displacement.item()
+        )
+        if (
+            final_gather_maximum_minimum_image_displacement_a
+            > DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+        ):
+            raise RuntimeError(
+                "gathered positions exceeded the declared minimum-image "
+                "position tolerance"
+            )
+        overall_maximum_minimum_image_displacement_a = max(
+            warmup_maximum_minimum_image_displacement_a,
+            *pass_maximum_minimum_image_displacements_a,
+            final_gather_maximum_minimum_image_displacement_a,
+        )
+
+        energy_ev = float(measured_passes[-1]["energy_ev"])
+        assert input_tensor_hash is not None
         target_charge_sum_e = float(
             full_batch.charge.detach().to(torch.float64).sum().item()
         )
@@ -1774,7 +1884,7 @@ def run_capacity(
             "runtime": runtime_rows,
             "input": build_input_record(
                 input_path=args.input_extxyz.resolve(),
-                tensor_sha256=input_hashes[0],
+                tensor_sha256=input_tensor_hash,
                 manifest_path=(
                     args.input_manifest.resolve() if args.input_manifest else None
                 ),
@@ -1795,28 +1905,59 @@ def run_capacity(
                 "owned_atom_counts": [
                     int(item["owned_atom_count"]) for item in runtime_rows
                 ],
+                "owned_atom_count_min": min(
+                    int(item["owned_atom_count"]) for item in runtime_rows
+                ),
+                "owned_atom_count_max": max(
+                    int(item["owned_atom_count"]) for item in runtime_rows
+                ),
                 "halo_atom_counts": None,
                 "halo_atom_counts_reason": "not_exposed_by_public_api",
+                "partition_count": 1,
+                "gather_count": 1,
                 "pme_reciprocal_mesh": (
                     "replicated on every rank in the Toolkit 0.2 version used here"
                 ),
                 "gathered_atom_order": (
-                    "source_atom_id kept outside Batch; rank-contiguous gather "
-                    "order reproduced with "
-                    "SpatialPartitioner.assign_atoms_to_ranks"
+                    "Stable source_atom_id values stay outside the Toolkit Batch. "
+                    "SpatialPartitioner assigns the fixed input to ranks; its "
+                    "stable rank-contiguous order restores the gathered forces "
+                    "to input atom order."
                 ),
             },
             "output": {
                 "energy_ev": energy_ev,
                 "energy_ev_per_atom": energy_ev / int(gathered.num_nodes),
+                "energy_dtype": measured_passes[-1]["energy_dtype"],
                 "forces_source_atom_order": force_summary(sorted_forces),
-                "positions_source_atom_order_sha256": tensor_checksum(sorted_positions),
                 "atomic_numbers_source_atom_order_sha256": tensor_checksum(
                     sorted_atomic_numbers
                 ),
-                "source_atom_id_sha256": tensor_checksum(
-                    gathered_source_ids[order]
-                ),
+                "source_atom_id_sha256": tensor_checksum(gathered_source_ids[order]),
+                "measured_passes": measured_passes,
+                "position_invariance": {
+                    "method": "maximum_minimum_image_displacement",
+                    "tolerance_a": (DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A),
+                    "warmup_maximum_minimum_image_displacement_a": (
+                        warmup_maximum_minimum_image_displacement_a
+                    ),
+                    "measured_pass_maximum_minimum_image_displacements_a": (
+                        pass_maximum_minimum_image_displacements_a
+                    ),
+                    "final_gather_maximum_minimum_image_displacement_a": (
+                        final_gather_maximum_minimum_image_displacement_a
+                    ),
+                    "maximum_minimum_image_displacement_a": (
+                        overall_maximum_minimum_image_displacement_a
+                    ),
+                    "all_within_tolerance": True,
+                    "interpretation": (
+                        "BaseDynamics applies no integration update. "
+                        "DomainParallel may wrap coordinates to equivalent "
+                        "periodic images; this minimum-image check verifies a "
+                        "PBC-equivalent fixed structure."
+                    ),
+                },
             },
             "charges": (
                 one_gpu_charge_record
@@ -1845,76 +1986,91 @@ def run_capacity(
             ),
             "timing": {
                 "setup_s_rank0": setup_s,
-                "wall_s_max_rank": timing_summary["median_s"],
-                "samples_s_max_rank": samples_s_max_rank,
+                "pass_times_s": pass_times_s,
                 **timing_summary,
-                "measurement_kind": (
-                    "steady_partition_run_gather"
-                    if args.measurement_role == "steady_timing"
-                    else "cold_one_shot_partition_run_gather"
-                ),
+                "measurement_kind": "fixed_structure_energy_force_pass",
                 "measurement_role": args.measurement_role,
                 "warmup_count": args.warmup_count,
-                "sample_count": args.sample_count,
-                "run_steps": run_steps,
-                "automatic_multi_rank_force_prime": world_size > 1,
-                "automatic_initial_force_evaluations": (
-                    automatic_initial_evaluations
+                "measured_pass_count": args.sample_count,
+                "requested_steps_per_pass": 1,
+                "measured_model_evaluations_per_pass": (
+                    DOMAIN_METHODOLOGY.measured_model_evaluations_per_pass
                 ),
-                "model_evaluations_per_workflow": model_evaluations_per_workflow,
+                "warmup_requested_steps": 1,
+                "warmup_automatic_force_prime_evaluations": (
+                    DOMAIN_METHODOLOGY.domain_parallel_multi_rank_warmup_force_prime_evaluations
+                    if world_size > 1
+                    else 0
+                ),
+                "warmup_model_evaluations": (
+                    1
+                    + (
+                        DOMAIN_METHODOLOGY.domain_parallel_multi_rank_warmup_force_prime_evaluations
+                        if world_size > 1
+                        else 0
+                    )
+                ),
+                "partition_count": 1,
+                "gather_count": 1,
                 "publishable_benchmark": False,
                 "elapsed_reduction": "maximum across ranks via all_reduce",
-                "quartile_method": "inclusive linear interpolation",
-                "source_input_sha256_before": input_tensor_hash,
-                "source_input_sha256_after_each_workflow": source_input_hashes,
-                "boundary": (
-                    "Each workflow uses a fresh BaseDynamics and DomainParallel "
-                    "context. Context entry, the rank barrier, initial CUDA "
-                    "synchronization, max-rank reduction, context exit, input and "
-                    "output checks, statistics, and file writes are outside the "
-                    "timer. The timer covers exactly the public partition, run, "
-                    "and gather calls plus final CUDA synchronization. In steady "
-                    "timing, one rank requests two BaseDynamics steps; several "
-                    "ranks request one step after DomainParallel's automatic "
-                    "initial force evaluation, giving two model evaluations in "
-                    "both paths."
+                "source_input_sha256": input_tensor_hash,
+                "timed_work": (
+                    "The input is partitioned once, followed by one untimed "
+                    "initialization/warmup pass. Each raw time covers exactly one "
+                    "public DomainParallel.run(..., n_steps=1) call and final CUDA "
+                    "synchronization. The pre-pass barrier, max-rank reduction, "
+                    "checks, the single final gather, and file writes are outside "
+                    "the timer."
                 ),
                 "interpretation": (
-                    "Speedup is reportable only for the complete dedicated "
-                    "steady_timing 1/2/4-GPU series on the identical input."
+                    "These three short PBC-equivalent fixed-structure passes "
+                    "demonstrate the public API and observed run time on this "
+                    "setup; they are not a general performance benchmark."
                 ),
             },
             "memory": {
-                "max_allocated_bytes_per_rank": [
-                    int(item["max_allocated_bytes"]) for item in runtime_rows
+                "measured_pass_max_allocated_bytes_per_rank": [
+                    [
+                        int(item["pass_max_allocated_bytes"][pass_index])
+                        for item in runtime_rows
+                    ]
+                    for pass_index in range(args.sample_count)
                 ],
-                "max_reserved_bytes_per_rank": [
-                    int(item["max_reserved_bytes"]) for item in runtime_rows
+                "measured_pass_max_reserved_bytes_per_rank": [
+                    [
+                        int(item["pass_max_reserved_bytes"][pass_index])
+                        for item in runtime_rows
+                    ]
+                    for pass_index in range(args.sample_count)
                 ],
                 "max_allocated_bytes": max(
-                    int(item["max_allocated_bytes"]) for item in runtime_rows
+                    int(value)
+                    for item in runtime_rows
+                    for value in item["pass_max_allocated_bytes"]
                 ),
                 "max_reserved_bytes": max(
-                    int(item["max_reserved_bytes"]) for item in runtime_rows
+                    int(value)
+                    for item in runtime_rows
+                    for value in item["pass_max_reserved_bytes"]
                 ),
-                "boundary": (
-                    "Peaks reset after model setup and input transfer for each "
-                    "workflow; the reported value is the maximum over workflows. "
-                    "Validation and file writes are excluded."
+                "measured_memory": (
+                    "Peak counters are reset immediately before each measured "
+                    "DomainParallel.run call. Model setup, partition, warmup, "
+                    "result checks, gather, and file writes are excluded."
                 ),
             },
         }
         if args.force_output_npy is None:
             raise ValueError(
-                "--force-output-npy is required for capacity, parity, rescue, "
-                "and steady-timing measurements"
+                "--force-output-npy is required for distributed measurements"
             )
         force_path = args.force_output_npy.resolve()
         atomic_write_npy(force_path, sorted_forces.detach().cpu().numpy())
         force_file = file_identity(force_path)
         row["output"]["forces_source_atom_order_npy"] = {
             **force_file,
-            "dtype": str(sorted_forces.dtype),
+            "dtype": str(sorted_forces.dtype).removeprefix("torch."),
             "shape": list(sorted_forces.shape),
         }
     return row
@@ -1924,30 +2080,11 @@ def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--mode",
-        choices=(
-            "capacity",
-            "parity",
-            "distributed",
-            "steady-timing",
-            "electrostatics-validation",
-        ),
+        choices=("distributed", "electrostatics-validation"),
         required=True,
     )
     parser.add_argument("--run-id", required=True)
     parser.add_argument("--case-id", required=True)
-    parser.add_argument(
-        "--measurement-role",
-        choices=(
-            "capacity",
-            "parity",
-            "rescue",
-            "steady_timing",
-            "electrostatics_validation",
-        ),
-        required=True,
-    )
-    parser.add_argument("--warmup-count", type=int)
-    parser.add_argument("--sample-count", type=int)
     parser.add_argument("--world-size", type=int, required=True)
     parser.add_argument("--pair-count", type=int, required=True)
     parser.add_argument("--input-extxyz", type=Path, required=True)
@@ -2068,7 +2205,7 @@ def main() -> int:
             )
         else:
             distributed_manager_initialized = True
-            row = run_capacity(
+            row = run_fixed_evaluation(
                 args,
                 device=device,
                 checkpoint=checkpoint,

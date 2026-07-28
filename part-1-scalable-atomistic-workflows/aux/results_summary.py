@@ -19,8 +19,8 @@ from .domain.config import DOMAIN_METHODOLOGY
 
 _COLUMNS = ("Result", "Status", "Measured", "Applies to")
 _NOT_REPORTED = "NOT REPORTED"
-_DOMAIN_DISTRIBUTED_GPU_TEXT = " or ".join(
-    str(world_size) for world_size in DOMAIN_METHODOLOGY.distributed_world_sizes
+_DOMAIN_GPU_TEXT = ", ".join(
+    str(world_size) for world_size in DOMAIN_METHODOLOGY.campaign_world_sizes
 )
 
 
@@ -316,6 +316,10 @@ def build_results_summary(
             name="domain_measured_max_atom_count",
             positive=True,
         )
+        if measured_domain_max_atoms != planned_domain_max_atoms:
+            raise ValueError(
+                "fixed DomainParallel atom count differs from the declared input"
+            )
     else:
         if domain_results_unavailable_reason is None:
             raise ValueError(
@@ -391,10 +395,7 @@ def build_results_summary(
                 "Result": "CPU/GPU warm-call crossover",
                 "Status": "OBSERVED",
                 "Measured": (
-                    (
-                        f"GPU first exceeds CPU at batch size "
-                        f"{crossover_batch_size}; "
-                    )
+                    (f"GPU first exceeds CPU at batch size {crossover_batch_size}; ")
                     if crossover_batch_size is not None
                     else (
                         f"GPU crossover not reached through batch size "
@@ -482,26 +483,26 @@ def build_results_summary(
                 ),
             },
             {
-                "Result": "DomainParallel multi-GPU scaling",
+                "Result": "Fixed-input DomainParallel passes",
                 "Status": "RECORDED" if has_domain_results else _NOT_REPORTED,
                 "Measured": (
                     (
                         f"{successful_domain_cases} successful saved cases; "
                         f"{failed_domain_cases} failed saved cases; "
-                        f"measured maximum {measured_domain_max_atoms:,} atoms"
+                        f"same {measured_domain_max_atoms:,}-atom input"
                     )
                     if has_domain_results
                     else (
                         f"{unavailable_domain_reason}; "
                         f"{successful_domain_cases} successful saved cases; "
                         f"{failed_domain_cases} failed saved cases; "
-                        f"measured maximum {_NOT_REPORTED}"
+                        f"fixed input {_NOT_REPORTED}"
                     )
                 ),
                 "Applies to": (
-                    f"planned maximum {planned_domain_max_atoms:,} atoms; "
-                    "one periodic system split across "
-                    f"{_DOMAIN_DISTRIBUTED_GPU_TEXT} GPUs"
+                    f"fixed {planned_domain_max_atoms:,}-atom input; "
+                    "one warm-up and three measured energy/force passes on "
+                    f"{_DOMAIN_GPU_TEXT} GPUs"
                 ),
             },
             {

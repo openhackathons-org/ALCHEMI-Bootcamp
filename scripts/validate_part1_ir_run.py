@@ -509,18 +509,14 @@ def expected_reference_bundle_details(
             "producer_set_sha256": campaign_provenance.get("producer_set_sha256"),
         }
 
-    planned_atom_counts = tuple(
-        count * DOMAIN_METHODOLOGY.atoms_per_composition_unit
-        for count in DOMAIN_METHODOLOGY.capacity_molecules_per_species
-    )
-    parity_atom_count = (
-        DOMAIN_METHODOLOGY.parity_molecules_per_species
+    fixed_atom_count = (
+        DOMAIN_METHODOLOGY.fixed_molecules_per_species
         * DOMAIN_METHODOLOGY.atoms_per_composition_unit
     )
     domain_view = load_domain_lesson_view(
         domain_dir,
-        planned_atom_counts=planned_atom_counts,
-        expected_parity_atom_count=parity_atom_count,
+        expected_atom_count=fixed_atom_count,
+        expected_world_sizes=DOMAIN_METHODOLOGY.campaign_world_sizes,
     )
     if domain_view.available:
         domain_source = require_mapping(
@@ -1180,7 +1176,9 @@ def validate_packaged_source_identity(
     if source.get("clean_checkout") is not True:
         raise RuntimeError("packaged runtime did not use a clean tutorial checkout")
     if source.get("manifest_path") != SOURCE_MANIFEST_RELATIVE_PATH:
-        raise RuntimeError("packaged runtime source manifest path does not match Part 1")
+        raise RuntimeError(
+            "packaged runtime source manifest path does not match Part 1"
+        )
 
     source_root = source_root.resolve()
     source_paths = load_source_paths(source_root)
@@ -1473,7 +1471,11 @@ def validate_d3_cache_report(path: Path) -> dict[str, object]:
     if not isinstance(parameter_file, str) or not parameter_file.strip():
         raise ValueError("D3 cache report parameter_file must be non-empty text")
     byte_count = report.get("bytes")
-    if not isinstance(byte_count, int) or isinstance(byte_count, bool) or byte_count < 1:
+    if (
+        not isinstance(byte_count, int)
+        or isinstance(byte_count, bool)
+        or byte_count < 1
+    ):
         raise ValueError("D3 cache report bytes must be a positive integer")
     if report.get("sha256") != EXPECTED_D3_PARAMETER_SHA256:
         raise RuntimeError("D3 cache report SHA-256 does not match Part 1")
@@ -1532,7 +1534,9 @@ def validate_notebook_timing_report(
         "cell_timings",
     }
     if set(report) != expected_fields:
-        raise ValueError("notebook timing report fields differ from the expected schema")
+        raise ValueError(
+            "notebook timing report fields differ from the expected schema"
+        )
     if report.get("schema") != TIMING_REPORT_SCHEMA:
         raise ValueError("notebook timing report has an unexpected schema")
     if report.get("status") != "complete":
@@ -1641,7 +1645,10 @@ def validate_notebook_timing_report(
             raise RuntimeError("notebook timing cell identity or stage does not match")
         if record.get("status") != "complete":
             raise RuntimeError("notebook timing report contains an incomplete cell")
-        if record.get("error_type") is not None or record.get("error_message") is not None:
+        if (
+            record.get("error_type") is not None
+            or record.get("error_message") is not None
+        ):
             raise RuntimeError("completed notebook timing cell contains an error")
         for field in ("stage_title", "first_line", "started_utc"):
             value = record.get(field)
@@ -1691,7 +1698,9 @@ def validate_notebook_timing_report(
 
     stage_timings = report.get("stage_timings")
     expected_stages = sorted(cells_by_stage)
-    if not isinstance(stage_timings, list) or len(stage_timings) != len(expected_stages):
+    if not isinstance(stage_timings, list) or len(stage_timings) != len(
+        expected_stages
+    ):
         raise ValueError("notebook timing report has incomplete stage totals")
     checked_stages: list[dict[str, object]] = []
     for expected_stage, raw_stage in zip(expected_stages, stage_timings, strict=True):
@@ -3317,9 +3326,7 @@ def validate_harmonic_outputs(
     frequency_mae = float(
         expected_comparison["AIMNet+Coulomb+D3_minus_B97-3c_cm-1"].abs().mean()
     )
-    recorded_frequency_mae = checks.get(
-        "harmonic_frequency_MAE_vs_B97_3c_cm1"
-    )
+    recorded_frequency_mae = checks.get("harmonic_frequency_MAE_vs_B97_3c_cm1")
     if comparison_reported:
         if not saved_comparison[["system", "mode"]].equals(
             expected_comparison[["system", "mode"]]
@@ -3354,9 +3361,7 @@ def validate_harmonic_outputs(
                 "unreported harmonic comparison table must contain no data rows"
             )
         if recorded_frequency_mae is not None:
-            raise RuntimeError(
-                "unreported harmonic frequency MAE must be null"
-            )
+            raise RuntimeError("unreported harmonic frequency MAE must be null")
 
     return {
         "comparison_reported": comparison_reported,
@@ -3800,9 +3805,7 @@ def main() -> int:
         bundle_root / RUNTIME_CHECK_NAME,
         source_root=source_root,
     )
-    d3_cache_report = validate_d3_cache_report(
-        bundle_root / D3_CACHE_REPORT_NAME
-    )
+    d3_cache_report = validate_d3_cache_report(bundle_root / D3_CACHE_REPORT_NAME)
     missing_files = [
         name for name in REQUIRED_FILES if not (output_dir / name).is_file()
     ]
@@ -3886,9 +3889,7 @@ def main() -> int:
         timing_source_sha256 = prior_source_hashes.get(
             "part-1-scalable-atomistic-workflows/alchemi-water-ir.ipynb"
         )
-        timing_executed_sha256 = calculation_summary.get(
-            "executed_notebook_sha256"
-        )
+        timing_executed_sha256 = calculation_summary.get("executed_notebook_sha256")
         if (
             not isinstance(timing_source_sha256, str)
             or not timing_source_sha256

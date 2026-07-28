@@ -190,7 +190,7 @@ def main(output_path: Path = NOTEBOOK) -> None:
 4. **Bring a model for a new domain:** adapt SevenNet-Omni to Toolkit and evaluate fixed Cu(111) adsorption structures.
 5. **Prepare dynamics and IR:** return to the charge-predicting molecular model, relax, compare harmonic frequencies, and build fused NVT → NVE stages.
 6. **Run and inspect the trajectory:** save raw state first, then check temperature, topology, and predicted-charge IR.
-7. **Choose a scaling path:** refill one GPU, pack one periodic box, exercise the `DomainParallel` API, then load verified multi-GPU results when available.
+7. **Choose a scaling path:** refill one GPU, load a checked periodic box, exercise the `DomainParallel` API, then compare three fixed-structure passes on 1, 2, and 4 H100s.
 
 ### Historical reference compute time
 
@@ -5333,10 +5333,11 @@ updates when you rerun the notebook.
 
 The live one-GPU `DomainParallel` row records the API call made in this
 notebook; one GPU means one domain, so it does not claim spatial decomposition.
-Multi-GPU capacity, recovery of the exact first-OOM input, and speed on a
-separate one-GPU-fit input are **RECORDED** only after loading the checked H100
-result set; otherwise they remain **NOT REPORTED**. `DistributedPipeline`
-correctness, overlap, and timing are **NOT REPORTED** for this release.
+The same 51,200-atom input on 1, 2, and 4 H100s is **RECORDED** only after
+loading the checked H100 result set; otherwise it remains **NOT REPORTED**.
+Each GPU count has one warm-up and three measured energy/force passes, not a
+trajectory or a capacity search. `DistributedPipeline` correctness, overlap,
+and timing are **NOT REPORTED** for this release.
 """,
         ),
         code(
@@ -5444,7 +5445,7 @@ results_summary, not_reported_count = build_results_summary(
     ),
     domain_successful_cases=domain_view.successful_case_count,
     domain_failed_cases=domain_view.failed_case_count,
-    domain_planned_max_atom_count=max(DOMAIN_PLANNED_ATOM_COUNTS),
+    domain_planned_max_atom_count=DOMAIN_FIXED_ATOM_COUNT,
     domain_measured_max_atom_count=domain_view.measured_max_atom_count,
     campaign_available=False,
     campaign_unavailable_reason=campaign_unavailable_reason,
@@ -5517,25 +5518,37 @@ summary_display_progress.complete("calculated and recorded results shown")
 
 **Models and data**
 
-- [AIMNet2-2025 B97-3c model card](https://huggingface.co/isayevlab/aimnet2-2025), [ωB97M-D3 model card](https://huggingface.co/isayevlab/aimnet2-wb97m-d3), and [AIMNet2 paper](https://doi.org/10.1039/D4SC08572H). The checkpoints are MIT-licensed and their metadata declares the external Coulomb and D3 terms used here. The official [short-range Coulomb source](https://github.com/isayevlab/aimnetcentral/blob/main/aimnet/modules/lr.py) and [calculator composition](https://github.com/isayevlab/aimnetcentral/blob/main/aimnet/calculators/calculator.py) show how full Coulomb is restored.
-- [SevenNet pretrained models](https://sevennet.readthedocs.io/en/latest/user_guide/pretrained.html), [SevenNet-Omni paper](https://doi.org/10.1038/s41467-026-70195-8), and [checkpoint record](https://doi.org/10.6084/m9.figshare.30399814). The software is MIT-licensed. The image excludes the checkpoint; runtime checks the official file by size and SHA-256. Confirm its exact terms before redistribution.
-- [NCI Atlas](https://github.com/Honza-R/NCIAtlas) and its [benchmark paper](https://doi.org/10.1021/acs.jctc.9b01265). The included 90-graph subset is CC BY 4.0 and keeps its source identifiers.
+- [AIMNet2 model cards](https://huggingface.co/isayevlab/aimnet2-2025) and
+  [paper](https://doi.org/10.1039/D4SC08572H): MIT checkpoints. Metadata declares
+  the external Coulomb and D3 terms; the official [Coulomb
+  source](https://github.com/isayevlab/aimnetcentral/blob/main/aimnet/modules/lr.py)
+  shows their composition.
+- [SevenNet pretrained models](https://sevennet.readthedocs.io/en/latest/user_guide/pretrained.html),
+  [paper](https://doi.org/10.1038/s41467-026-70195-8), and
+  [checkpoint](https://doi.org/10.6084/m9.figshare.30399814): MIT software. The
+  checkpoint is downloaded and checksum-checked, not redistributed.
+- [NCI Atlas](https://github.com/Honza-R/NCIAtlas) and
+  [paper](https://doi.org/10.1021/acs.jctc.9b01265): the 90-graph subset is
+  CC BY 4.0 and retains source IDs.
 
 **Scientific methods and references**
 
-- [B97-3c](https://doi.org/10.1063/1.5012601) for the matched DFT-D3 calculations.
-- [Particle mesh Ewald](https://doi.org/10.1063/1.470117) for periodic electrostatics in the large molecular-box lesson.
-- [Water-cluster frequency benchmark](https://doi.org/10.1063/1.4936654) and [near-CCSD(T) water-cluster frequencies](https://doi.org/10.1021/acs.jctc.5b00225) for harmonic context.
-- [Molecular-dynamics vibrational spectra](https://doi.org/10.1039/C3CP44302G) for the trajectory-to-spectrum analysis.
+- [B97-3c](https://doi.org/10.1063/1.5012601), [particle mesh
+  Ewald](https://doi.org/10.1063/1.470117), and [MD vibrational
+  spectra](https://doi.org/10.1039/C3CP44302G) support the DFT, periodic, and IR
+  methods.
+- [Water-cluster frequencies](https://doi.org/10.1063/1.4936654) provide
+  harmonic context.
 - [Dinu et al., Table 1](https://doi.org/10.1021/acs.jpca.9b07221), CC BY 4.0. Toth: [stretch](https://doi.org/10.1006/jmsp.1998.7771), [bend](https://doi.org/10.1006/jmsp.1998.7611), and [D₂O](https://doi.org/10.1006/jmsp.1999.7815). Positions only.
 
 **Software**
 
-- NVIDIA [ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) and [Toolkit-Ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops): Apache-2.0.
-- [Packmol](https://github.com/m3g/packmol) and its [initial-configuration paper](https://doi.org/10.1002/jcc.21224): MIT-licensed software used to build the periodic starting box.
+- NVIDIA [ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) and
+  [Toolkit-Ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops): Apache-2.0.
+- [Packmol](https://github.com/m3g/packmol): MIT; used offline for the periodic box.
 - [Psi4](https://psicode.org/): LGPL-3.0. `dftd3-python` and `mctc-gcp`: LGPL-3.0-or-later.
 
-See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and the data READMEs for the complete release notes. The water-hexamer seed is generated in the notebook.
+See [THIRD_PARTY_NOTICES.md](../THIRD_PARTY_NOTICES.md) and the data READMEs.
 """,
         ),
     ]
@@ -6829,7 +6842,7 @@ del inflight_source, inflight_dataset, completed
 | `Batch` | independent systems that fit together | one model call evaluates all graphs | used throughout |
 | `FusedStage` | one active batch at different workflow stages | systems share model calls while keeping their own status | live, one GPU |
 | inflight `FusedStage` | a queue larger than the active batch | finished systems are replaced | live, one GPU |
-| `DomainParallel` | one large periodic system | multiple GPUs own spatial regions plus nearby halo atoms | live one-GPU walkthrough with no decomposition; checked H100 capacity, OOM recovery, and speed when installed, otherwise `NOT REPORTED` |
+| `DomainParallel` | one large periodic system | multiple GPUs own spatial regions plus nearby halo atoms | live one-GPU walkthrough; three saved fixed-structure passes for the same 51,200-atom input on 1, 2, and 4 H100s when installed, otherwise `NOT REPORTED` |
 | `DistributedPipeline` | independent batches moving through different stages | workflow stages run on different GPUs | API sketch only |
 """,
     )
@@ -6933,17 +6946,13 @@ def run_two_rank_pipeline(device):
         pipeline.run()
 ```
 
-`SizeAwareSampler` chooses which queued systems fill the active batch.
-`BufferConfig` reserves the largest batch that can move between the two ranks;
-both communicating stages must use the same values. `comm_mode` controls the
-send and receive between adjacent stages. The final
-`ConvergedSnapshotHook` writes completed systems to CPU `HostMemory`.
+`SizeAwareSampler` fills the active batch. `BufferConfig` sets the matching
+transfer capacity on both ranks, `comm_mode` controls adjacent transfers, and
+`ConvergedSnapshotHook` writes finished systems to CPU `HostMemory`.
 
-In Toolkit 0.2, `synchronized=False` removes an optional
-barrier, but `run()` still performs a blocking completion `all_reduce` after
-every iteration. The current transfer also omits integer atom fields. We
-therefore show the construction only. It does not demonstrate stage overlap
-and it does not support a speedup claim.
+In Toolkit 0.2, the transfer omits integer atom fields and `run()` still uses a
+blocking completion check each iteration. This is construction only: stage
+overlap and speedup are not reported.
 """,
     )
 
@@ -7198,44 +7207,42 @@ print("NaN/Inf safety check: every 100 steps; workload is never shortened")
         r"""
 ## Notebook map
 
-1. **Run one structure:** convert ASE data to `AtomicData` and `Batch`, then inspect energy, forces, and charges.
-2. **Scale the same calculation:** compare individual calls, GPU batches, and mixed graph sizes.
-3. **Complete the model:** add Coulomb and D3, then check interaction-energy curves.
-4. **Change model domains:** connect SevenNet-Omni, inspect and switch its tasks, then evaluate fixed Cu(111) adsorption structures.
-5. **Prepare dynamics:** build four molecular systems, relax them, and connect NVT and NVE.
-6. **Run and inspect:** save the trajectory, check it, and calculate a qualitative IR spectrum.
-7. **Choose a scaling path:** refill one GPU, load a checked periodic box, exercise `DomainParallel` on one GPU without decomposition, then analyze verified capacity, OOM-recovery, and speed results when available.
+1. **Run one structure:** create `AtomicData` and `Batch`; inspect energy, forces, and charges.
+2. **Scale it:** compare serial calls, GPU batches, and mixed graph sizes.
+3. **Complete the model:** add Coulomb and D3; check interaction curves.
+4. **Change domains:** connect SevenNet-Omni, switch tasks, and evaluate Cu(111) adsorption structures.
+5. **Prepare dynamics:** relax four systems and connect NVT to NVE.
+6. **Run and inspect:** save and check a trajectory; calculate qualitative IR.
+7. **Choose a scaling path:** refill one GPU, exercise `DomainParallel` on one GPU without decomposition, then compare the same fixed input on 1, 2, and 4 H100s.
 
 **Learning depth:** work directly with `AtomicData`, `Batch`, model composition,
 batching, adapters, hooks, and inflight execution. PME and `DomainParallel` are
-walked through live on one GPU without decomposition. Checked H100 results are loaded only
-for multi-GPU `DomainParallel`. `DistributedPipeline` is an API preview with no
+walked through live on one GPU without decomposition. Saved H100 results cover
+multi-GPU `DomainParallel`; `DistributedPipeline` is an API preview with no
 reported correctness or timing result.
 
 ### Historical reference compute time
 
 | Section | Historical code time on one H100 |
 |---|---:|
-| Setup | 22 s, earlier source |
-| Stage 1 | 18 s, earlier source |
-| Stage 2 | 11 s, earlier source |
+| Setup | 22 s, earlier run |
+| Stage 1 | 18 s, earlier run |
+| Stage 2 | 11 s, earlier run |
 | Stage 3: NCI calculation | 22.6 s for an earlier six-cell form using the current Toolkit versions; current eight-cell stage not measured |
 | Stage 4: adapter, tasks, and single points | 17 s for an earlier form without the task comparison; current stage not measured |
-| Stage 5: preparation and harmonic check | 1 min 42 s, earlier source |
-| Stage 6: trajectory and analysis | 10 min 3 s, earlier source |
+| Stage 5: preparation and harmonic check | 1 min 42 s, earlier run |
+| Stage 6: trajectory and analysis | 10 min 3 s, earlier run |
 | Stage 7: scaling paths | **Not measured** |
 | Complete merged notebook | **Not measured** |
 
-Numeric rows are earlier H100 references. The **22.643 s** Stage 3 measurement
-used the current Toolkit versions but an earlier six-cell form. The merged
-notebook and current eight-cell Stage 3 have not been timed in the release
-environment.
+The **22.643 s** Stage 3 measurement used the current Toolkit versions and an
+earlier six-cell form. The merged notebook and current eight-cell Stage 3 have
+not been timed in the release environment.
 """
         + "\n\n"
         + callout_html(
-            "In historical runs, dynamics was the longest pause. Stage 7 and "
-            "the complete merged notebook are not timed yet. The saved "
-            "trajectory lets you change plots without rerunning dynamics.",
+            "Dynamics was the longest historical pause. Stage 7 and the merged "
+            "notebook are not timed. Reuse the saved trajectory for plotting.",
             kind="note",
         ),
     )
@@ -7366,8 +7373,7 @@ full Coulomb is added. We evaluate four combinations:
                 "Batching changes the number of calls, not the structures or "
                 "the interaction-energy definition."
             ),
-        )
-        ,
+        ),
     )
     replace_markdown_source(
         "surface-model-switch",
@@ -7804,7 +7810,7 @@ The notebook therefore leaves pipeline correctness, overlap, and speed as
 - Connect an external energy-and-force model through the Toolkit model interface.
 - Relax and propagate several systems together, then record results through hooks.
 - Keep a larger queue moving with inflight batching.
-- Use `DomainParallel` for one large periodic system. This notebook walks through the public API with one domain on one GPU, then shows verified saved capacity, OOM-recovery, and speed rows when installed.
+- Use `DomainParallel` for one large periodic system. This notebook walks through the public API with one domain on one GPU, then shows three checked energy/force passes for the same 51,200-atom input on 1, 2, and 4 H100s when installed.
 - `DistributedPipeline` is the intended API when many independent systems pass
   through different stages. The Toolkit 0.2 API shape is introduced here, but its
   correctness, overlap, and speed remain `NOT REPORTED`.
@@ -8934,10 +8940,10 @@ one GPU, `DomainParallel` passes the box through without splitting it.
                     "partition → run → gather",
                     "saved multi-GPU checks",
                 ),
-                    caption=(
-                        "The model on each rank evaluates "
-                        "E_composed = E_base + E_PME(q(R)) + E_D3."
-                    ),
+                caption=(
+                    "The model on each rank evaluates "
+                    "E_composed = E_base + E_PME(q(R)) + E_D3."
+                ),
             )
             + "\n\n"
             + callout_html(
@@ -9320,7 +9326,10 @@ domain_output_progress.complete("result table displayed")
 to `DomainParallel`.
 
 ```python
+from time import perf_counter
+
 import torch
+import torch.distributed as dist
 from nvalchemi.distributed import (
     DistributedManager, DomainConfig, DomainParallel, SpatialPartitioner,
 )
@@ -9349,23 +9358,37 @@ if manager.rank == 0:
     print(layout.cells_per_dim, layout.rank_grid)
 
 hooks = periodic_model.make_neighbor_hooks() if manager.world_size == 1 else []
-inner = BaseDynamics(model=periodic_model, n_steps=1, hooks=hooks)
-with DomainParallel(dynamics=inner, config=config, n_steps=1) as run:
-    local = run.partition(full)
-    local = run.run(local)
+evaluator = BaseDynamics(model=periodic_model, n_steps=1, hooks=hooks)
+with DomainParallel(dynamics=evaluator, config=config, n_steps=1) as domain:
+    local = domain.partition(full)
+
+    # Initialization and warm-up are not timed.
+    local = domain.run(local, n_steps=1)
+
+    pass_times_s = []
+    for _ in range(3):
+        dist.barrier()
+        torch.cuda.synchronize(device)
+        started = perf_counter()
+        local = domain.run(local, n_steps=1)
+        torch.cuda.synchronize(device)
+        pass_times_s.append(perf_counter() - started)
+
     total_energy = local.energy.detach().clone()
-    full_result = run.gather(local, dst=0)
+    full_result = domain.gather(local, dst=0)
 
 DistributedManager.cleanup()
 ```
 
-The total energy is summed across GPUs; `gather` collects atom-level fields on
-rank 0. Multi-GPU `DomainParallel` rebuilds neighbors inside each region; the
-one-GPU path uses the model's ordinary neighbor hooks.
+`BaseDynamics` does not integrate. Because `DomainParallel` may wrap equivalent
+periodic coordinates, the run checks minimum-image displacement. Each timed
+`run(..., n_steps=1)` is one energy-and-force evaluation; the slowest rank sets
+the time.
 
-`SpatialPartitioner` records the layout. The offline one-step check uses
-`assign_atoms_to_ranks(...)` to restore gathered rows before comparing forces.
-`require_nondegenerate=True` rejects halos that cover the full structure.
+Partition and gather each occur once. An untimed warm-up initializes forces.
+Multi-GPU `DomainParallel` rebuilds neighbors inside each region; the one-GPU
+path uses the model's ordinary neighbor hooks. `SpatialPartitioner` records the
+layout, and `require_nondegenerate=True` rejects a full-structure halo.
 
 | Layout | Role |
 |---|---|
@@ -9374,11 +9397,13 @@ one-GPU path uses the model's ordinary neighbor hooks.
 | PME grid | defines the electrostatics FFT repeated on every GPU |
 
 Toolkit 0.2 restricts this example to an input total-charge target of zero
-because that target is not copied into each GPU region. Toolkit passes
-AIMNet2 charges to PME unchanged.
-`gather` collects forces, but the distributed AIMNet2-to-PME group does not
-emit predicted atomic charges. Rank consistency is checked through
-source-ordered forces and distributed energies.
+because it is not copied into each region. Toolkit passes AIMNet2 charges to
+PME unchanged, sums total energy across GPUs, and `gather` collects atom-level
+fields, including forces, on rank 0. Stable `source_atom_id` values in the
+saved input, together with the recorded `SpatialPartitioner` assignment,
+restore force order. The distributed AIMNet2-to-PME group does not emit
+predicted atomic charges. Rank consistency is checked through source-ordered
+forces and distributed energies.
 """,
         ),
     )
@@ -9387,44 +9412,42 @@ source-ordered forces and distributed energies.
         markdown(
             "domain-scaling-plan",
             r"""
-### Measure where one GPU stops fitting
+### Run the same large system on 1, 2, and 4 GPUs
 
-The offline H100 campaign uses integer supercells, preserving composition and
-construction density; Packmol is not rerun.
+The offline H100 run uses one checked 51,200-atom supercell; Packmol is not
+rerun. The structure, composed AIMNet2 + PME + D3 model, precision, cutoffs,
+and outputs stay fixed. Only the number of spatial regions changes.
 
-The notebook never triggers an out-of-memory failure live. Checked results
-answer three different questions:
-
-| Measurement | Input | Nodes = ranks = GPUs | Question |
+| Run | Input | Nodes = ranks = GPUs | Work |
 |---|---:|---:|---|
-| live API walkthrough | 3,200-atom base box | 1 | does the public call sequence work? |
-| 1. capacity | growing supercells through the first natural CUDA OOM | 1 | what is the largest input one H100 runs? |
-| 2. OOM recovery | the exact first-OOM input, unchanged | 2, 4 | do more GPUs make that input runnable? |
-| 3. performance | a separate input that already fits one H100 | 1, 2, 4 | where does communication stop outweighing saved work? |
+| live API walkthrough | 3,200-atom base box | 1 | one fixed-structure energy/force evaluation |
+| recorded comparison | 51,200-atom supercell | 1, 2, 4 | one warm-up, then three measured energy/force evaluations |
 
-Four GPUs means four nodes, each with one worker and one H100. A separate fixed
-input checks 1-GPU forces against 2/4 GPUs and 2-GPU distributed energy
-against 4. The raw 1-to-multi energy offset is diagnostic because Toolkit
-0.2 reduces those paths differently. Timing reports the slowest-rank median
-and interquartile range (IQR) for each complete `partition → run → gather`.
-Successful one-GPU rows record the actual float32 charges passed to PME:
-dtype, target, sum, residual, absolute residual per atom, magnitude statistics,
-shape, and hash.
-The residual is reported, not limited; `1e-4 e` applies only to the separate
-3,200-atom fixed-charge PME-versus-Ewald validation. See the
+The box is partitioned once and gathered once. Warm-up is outside timing. Each
+measured pass is one `run(..., n_steps=1)` call for energy and forces, with no
+integration update. Periodic images must remain equivalent within the minimum-image
+tolerance. All three slowest-rank times and their median are shown. This is not
+a trajectory or a general scaling benchmark.
+
+Four GPUs means four one-H100 nodes. The result set checks 1-GPU forces against
+2/4 GPUs and 2-GPU distributed energy against 4. The 1-to-multi energy offset
+is diagnostic because Toolkit 0.2 reduces those paths differently. The one-GPU
+row records the float32 charges passed to PME. Its residual is reported, not
+limited; `1e-4 e` applies only to the separate 3,200-atom PME-versus-Ewald
+check. See the
 [runbook](COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set).
 """
             + "\n\n"
             + callout_html(
-                "Check force and distributed-energy agreement before speed. "
-                "The first OOM and its unchanged retries measure capacity; "
-                "the separate one-GPU-fit input measures speed.",
+                "Check the energy and forces before reading the times. The "
+                "same 51,200-atom input must pass on 1, 2, and 4 GPUs.",
                 kind="check",
             )
             + "\n\n"
             + r"""
 Missing files produce `NOT REPORTED`, never an estimate. Every GPU repeats the
-PME FFT and workspace, so decomposition may not rescue every one-GPU OOM.
+PME FFT and workspace, so this example does not claim that all memory is split
+evenly across ranks.
 """,
         ),
     )
@@ -9433,30 +9456,22 @@ PME FFT and workspace, so decomposition may not rescue every one-GPU OOM.
         code(
             "domain-parallel-results",
             """
-DOMAIN_CAPACITY_MOLECULES_PER_SPECIES = (
-    DOMAIN_METHODOLOGY.capacity_molecules_per_species
-)
-DOMAIN_PARITY_MOLECULES_PER_SPECIES = (
-    DOMAIN_METHODOLOGY.parity_molecules_per_species
-)
 domain_atoms_per_composition_unit = sum(
     item.atom_count for item in domain_plan.templates
 )
-DOMAIN_PLANNED_ATOM_COUNTS = tuple(
-    count * domain_atoms_per_composition_unit
-    for count in DOMAIN_CAPACITY_MOLECULES_PER_SPECIES
+DOMAIN_FIXED_ATOM_COUNT = (
+    DOMAIN_METHODOLOGY.fixed_molecules_per_species
+    * domain_atoms_per_composition_unit
 )
-DOMAIN_PARITY_ATOM_COUNT = (
-    DOMAIN_PARITY_MOLECULES_PER_SPECIES * domain_atoms_per_composition_unit
-)
+DOMAIN_REQUIRED_WORLD_SIZES = DOMAIN_METHODOLOGY.campaign_world_sizes
 DOMAIN_RESULT_DIR = PART_DIR / "data" / "domain_decomposition" / "recorded"
 domain_results_progress = NotebookProgress(
     title="Load recorded H100 domain results", total=1, unit="result set"
 )
 domain_view = load_domain_lesson_view(
     DOMAIN_RESULT_DIR,
-    planned_atom_counts=DOMAIN_PLANNED_ATOM_COUNTS,
-    expected_parity_atom_count=DOMAIN_PARITY_ATOM_COUNT,
+    expected_atom_count=DOMAIN_FIXED_ATOM_COUNT,
+    expected_world_sizes=DOMAIN_REQUIRED_WORLD_SIZES,
 )
 if not domain_view.available:
     domain_results_progress.complete("no complete H100 result set installed")
@@ -9524,24 +9539,41 @@ domain_h100_settings_progress = NotebookProgress(
     title="Show the H100 comparison method", total=1, unit="table"
 )
 domain_h100_settings = pd.DataFrame([
-    ("Timing", f"{DOMAIN_METHODOLOGY.steady_timing_warmup_count} warmup + "
-     f"{DOMAIN_METHODOLOGY.steady_timing_sample_count} measured fresh workflows; "
-     f"{DOMAIN_METHODOLOGY.steady_timing_model_evaluations_per_workflow} "
-     f"model evaluations each; median and IQR on 1, 2, and 4 GPUs"),
-    ("Repeatability", f"IQR / median ≤ "
-     f"{DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr:.0%}"),
+    ("Fixed input",
+     f"{DOMAIN_METHODOLOGY.fixed_molecules_per_species} molecules/species; "
+     f"{DOMAIN_METHODOLOGY.fixed_molecules_per_species * domain_atoms_per_composition_unit:,} "
+     "atoms on 1, 2, and 4 H100s"),
+    ("Execution", f"partition once; "
+     f"{DOMAIN_METHODOLOGY.evaluation_warmup_count} untimed warm-up; "
+     f"{DOMAIN_METHODOLOGY.evaluation_pass_count} measured "
+     f"`run(..., n_steps=1)` passes; gather once"),
+    ("Measured work",
+     f"{DOMAIN_METHODOLOGY.measured_model_evaluations_per_pass} complete "
+     "energy/force evaluation per pass; report all three slowest-rank times "
+     "and their median"),
+    ("Energy statistic",
+     f"1 GPU: {DOMAIN_METHODOLOGY.evaluation_energy_dtype_single_rank}; "
+     f"2/4 GPUs: {DOMAIN_METHODOLOGY.evaluation_energy_dtype_multi_rank}; "
+     "use the median of the three measured energies for GPU-layout comparisons"),
+    ("Coordinates",
+     "no integration update; maximum minimum-image displacement ≤ "
+     f"{DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a:g} Å"),
     ("One-GPU predicted charges",
      "finite float32 values; record target, sum, residual, absolute residual / atom, "
      "magnitude statistics, shape, and hash; do not renormalize after model "
      "evaluation or apply a residual threshold"),
     ("3,200-atom PME ↔ Ewald charge check",
      f"|Σq - Qtarget| ≤ {DOMAIN_METHODOLOGY.charge_sum_tolerance_e:g} e"),
+    ("2/4-GPU repeated energy",
+     "(max(Epass) - min(Epass)) / N ≤ "
+     f"{DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom:g} "
+     "eV/atom"),
     ("2 → 4-GPU energy",
      f"|ΔEdistributed| / N ≤ "
-     f"{DOMAIN_METHODOLOGY.parity_energy_tolerance_ev_per_atom:g} eV/atom"),
+     f"{DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom:g} eV/atom"),
     ("1 → 2/4-GPU force",
-     f"|ΔFᵢ| ≤ {DOMAIN_METHODOLOGY.parity_force_atol_ev_a:g} eV/Å + "
-     f"{DOMAIN_METHODOLOGY.parity_force_rtol:g}×|Fᵢ,₁|"),
+     f"|ΔFᵢ| ≤ {DOMAIN_METHODOLOGY.evaluation_force_atol_ev_a:g} eV/Å + "
+     f"{DOMAIN_METHODOLOGY.evaluation_force_rtol:g}×|Fᵢ,₁|"),
     ("1 → multi-GPU energy",
      "show the raw offset; do not use it as an agreement check"),
 ], columns=["Check", "Declared method"])
@@ -9565,102 +9597,78 @@ domain_display_progress = NotebookProgress(
 )
 if domain_view.available:
     display(readable_table(
-        domain_view.capacity_table.round(3),
-        label="1 · One-H100 capacity, including the first natural OOM",
+        domain_view.run_settings_table,
+        label="Recorded H100 run settings",
+        show_index=False,
+    ))
+    display(readable_table(
+        domain_view.layout_table,
+        label=f"Spatial layout · same {DOMAIN_FIXED_ATOM_COUNT:,}-atom input",
+        show_index=False,
+    ))
+    display(readable_table(
+        domain_view.timing_table.round(3),
+        label="Three fixed-structure energy/force passes",
+        show_index=False,
+    ))
+    display(readable_table(
+        domain_view.output_agreement_table.round(6),
+        label="Energy and force agreement",
         show_index=False,
     ))
     display(readable_table(
         domain_view.charge_diagnostics_table.round(9),
-        label="One-H100 charge residuals passed to PME",
+        label="One-H100 predicted charges passed to PME",
         show_index=False,
     ))
     display(readable_table(
         domain_view.electrostatics_table.round(6),
-        label="Fixed-charge PME versus Ewald check", show_index=False,
-    ))
-    display(readable_table(
-        domain_view.parity_table.round(6),
-        label="Force and distributed-energy checks", show_index=False,
-    ))
-    domain_oom_recovery = domain_view.distributed_table.loc[
-        domain_view.distributed_table["measurement_role"].eq("rescue")
-    ]
-    display(readable_table(
-        domain_oom_recovery.round(3),
-        label="2 · The same first-OOM input on 2 and 4 H100s",
-        show_index=False,
-    ))
-    domain_performance = domain_view.distributed_table.loc[
-        domain_view.distributed_table["measurement_role"].eq("steady_timing")
-    ]
-    display(readable_table(
-        domain_performance.round(3),
-        label="3 · A separate one-H100-fit input on 1, 2, and 4 H100s",
+        label="Fixed-charge PME versus Ewald check",
         show_index=False,
     ))
     domain_takeaway = domain_view.takeaway
-    assert domain_takeaway["all_one_gpu_force_checks_passed"]
-    assert domain_takeaway["all_distributed_energy_checks_passed"]
-    assert domain_takeaway["timed_one_gpu_force_checks_passed"]
-    assert domain_takeaway["timed_distributed_energy_checks_passed"]
-    rescued_by = ", ".join(
-        str(value) for value in domain_takeaway["rescue_successful_gpu_counts"]
-    )
-    efficiency_by_gpu = dict(domain_takeaway["parallel_efficiency_by_gpu"])
-    if not domain_takeaway["speedup_by_gpu"]:
-        speedup_text = "No same-size multi-GPU speedup was reportable."
-    else:
-        speedup_text = "Same-input speedup: " + "; ".join(
-            f"{gpu_count} GPUs {speedup:.2f}× "
-            f"({efficiency_by_gpu[gpu_count]:.1%} efficiency)"
-            for gpu_count, speedup in domain_takeaway["speedup_by_gpu"]
-        )
-        speedup_text += "."
-    rescue_check_count = domain_takeaway["rescue_output_comparison_count"]
-    rescue_check_text = (
-        f" {rescue_check_count} successful OOM-retry output comparison"
-        f"{'s' if rescue_check_count != 1 else ''} also passed."
-        if rescue_check_count
-        else ""
+    assert domain_takeaway["all_fixed_evaluations_succeeded"]
+    assert domain_takeaway["positions_pbc_equivalent"]
+    assert domain_takeaway["all_output_checks_passed"]
+    speedup_rows = domain_view.timing_table.loc[
+        domain_view.timing_table["world_size"].gt(1)
+    ]
+    speedup_text = "; ".join(
+        f"{int(row.world_size)} GPUs: {row.speedup_vs_1gpu:.2f}×"
+        for row in speedup_rows.itertuples(index=False)
     )
     display(callout(
-        f"Largest successful one-GPU case: "
-        f"{domain_takeaway['largest_successful_single_gpu_atoms']:,} atoms. "
-        f"First one-GPU CUDA OOM: "
-        f"{domain_takeaway['first_single_gpu_oom_atoms']:,} atoms; successful "
-        f"unchanged retries used {rescued_by} GPUs. The "
-        f"{DOMAIN_PARITY_ATOM_COUNT:,}-atom agreement "
-        f"calculation and the separate one-GPU-fit timed input passed the "
-        f"1-to-multi force checks and "
-        f"the 2-to-4 distributed-energy check. The one-to-multi energy "
-        f"offset is reported above only as a diagnostic."
-        f"{rescue_check_text} {speedup_text} "
-        f"The global PME charge mesh and full reciprocal "
-        f"FFT path remain replicated on every rank.",
+        f"The same {DOMAIN_FIXED_ATOM_COUNT:,}-atom structure ran through the "
+        f"public DomainParallel path on 1, 2, and 4 H100s. Every declared "
+        f"force and distributed-energy check passed. There was no integration "
+        f"update; the largest minimum-image displacement was "
+        f"{domain_takeaway['max_minimum_image_displacement_a']:.2e} Å. "
+        f"Observed median speedup "
+        f"against one GPU: {speedup_text}. Each median comes from "
+        f"three raw energy/force passes shown above. These short times apply to this "
+        f"input, model, software, and hardware; they do not measure a "
+        f"trajectory or a memory limit. The global PME charge mesh and full "
+        f"reciprocal FFT path remain replicated on every rank.",
         kind="result", result_state="pass",
     ))
-    domain_figure, _ = plot_domain_decomposition(
-        domain_view.capacity_table,
-        domain_view.distributed_table,
-    )
+    domain_figure, _ = plot_domain_decomposition(domain_view.plot_data)
     display(figure_with_alt(
         domain_figure,
         alt_text=(
-            "Two-panel H100 domain-decomposition result showing single-GPU "
-            "Torch peak allocated memory against atom count and median "
-            "partition, two-evaluation, and gather time for a separate "
-            "one-GPU-fit input, with interquartile range against GPU count."
+            "Two-panel H100 domain-decomposition result for one fixed "
+            "51,200-atom input. The first panel shows the recorded range of "
+            "owned atoms per rank on one, two, and four GPUs. The second shows "
+            "all three energy-and-force pass times and their median."
         ),
     ))
     plt.close(domain_figure)
-    domain_display_progress.complete("tables and scaling plot displayed")
+    domain_display_progress.complete("tables and fixed-input plot displayed")
 else:
     display(callout(
         "The live one-GPU cell exercised the public DomainParallel call "
-        "sequence with one domain and no spatial splitting. The first natural "
-        "OOM, unchanged multi-GPU retries, and separate one-GPU-fit speed "
-        "comparison are NOT REPORTED until a complete H100 result set is "
-        "installed.",
+        "sequence with one domain and no spatial splitting. The fixed "
+        "51,200-atom comparison on 1, 2, and 4 H100s is NOT REPORTED until a "
+        "complete checked result set is installed.",
         kind="result", result_state="not_reported",
     ))
     domain_display_progress.complete("no recorded result set to display")

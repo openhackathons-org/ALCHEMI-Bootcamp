@@ -53,10 +53,10 @@ def _inputs() -> dict[str, object]:
         "domain_live_charge_sum_e": 2.30e-6,
         "domain_results_available": True,
         "domain_results_unavailable_reason": None,
-        "domain_successful_cases": 11,
-        "domain_failed_cases": 2,
-        "domain_planned_max_atom_count": 409_600,
-        "domain_measured_max_atom_count": 204_800,
+        "domain_successful_cases": 4,
+        "domain_failed_cases": 0,
+        "domain_planned_max_atom_count": 51_200,
+        "domain_measured_max_atom_count": 51_200,
         "campaign_available": True,
         "campaign_unavailable_reason": None,
         "campaign_successes": 12,
@@ -81,7 +81,7 @@ def test_all_reported_rows_keep_the_exact_order_and_wording() -> None:
         "Full-model harmonic IR vs B97-3c",
         "Inflight queue completed",
         "Live one-GPU DomainParallel API call",
-        "DomainParallel multi-GPU scaling",
+        "Fixed-input DomainParallel passes",
         "DistributedPipeline throughput",
         "H2O/D2O monomer shift",
         "Cluster/monomer shifts",
@@ -134,19 +134,16 @@ def test_all_reported_rows_keep_the_exact_order_and_wording() -> None:
         "energy/atom=-0.123456 eV; max |F|=1.234 eV/Å; Σq=2.300e-06 e"
     )
     assert table.loc[7, "Measured"] == (
-        "11 successful saved cases; 2 failed saved cases; "
-        "measured maximum 204,800 atoms"
+        "4 successful saved cases; 0 failed saved cases; same 51,200-atom input"
     )
     assert table.loc[7, "Applies to"] == (
-        "planned maximum 409,600 atoms; "
-        "one periodic system split across 2 or 4 GPUs"
+        "fixed 51,200-atom input; one warm-up and three measured "
+        "energy/force passes on 1, 2, 4 GPUs"
     )
     assert table.loc[8, "Measured"] == (
         "12 successful saved timing runs; 0 failed runs"
     )
-    assert table.loc[10, "Measured"] == (
-        "temperature and topology requirements met"
-    )
+    assert table.loc[10, "Measured"] == ("temperature and topology requirements met")
 
 
 def test_unreported_rows_keep_reasons_and_exclude_check_failed_from_count() -> None:
@@ -205,11 +202,11 @@ def test_unreported_rows_keep_reasons_and_exclude_check_failed_from_count() -> N
     assert table.loc[7, "Measured"] == (
         "Recorded DomainParallel results are unavailable because transfer failed; "
         "0 successful saved cases; 0 failed saved cases; "
-        "measured maximum NOT REPORTED"
+        "fixed input NOT REPORTED"
     )
     assert table.loc[7, "Applies to"] == (
-        "planned maximum 409,600 atoms; "
-        "one periodic system split across 2 or 4 GPUs"
+        "fixed 51,200-atom input; one warm-up and three measured "
+        "energy/force passes on 1, 2, 4 GPUs"
     )
     assert table.loc[8, "Measured"] == (
         "Recorded H100 timings are unavailable because transfer failed"
@@ -270,7 +267,7 @@ def test_campaign_reporting_requires_available_successful_timings(
         "expected_count",
     ),
     [
-        (True, None, 3, 2, 204_800, "RECORDED", 0),
+        (True, None, 4, 0, 51_200, "RECORDED", 0),
         (
             False,
             "No verified DomainParallel bundle is installed",
@@ -308,14 +305,13 @@ def test_domain_reporting_distinguishes_recorded_and_unavailable_results(
     assert not_reported_count == expected_count
     if available:
         assert table.loc[7, "Measured"] == (
-            "3 successful saved cases; 2 failed saved cases; "
-            "measured maximum 204,800 atoms"
+            "4 successful saved cases; 0 failed saved cases; same 51,200-atom input"
         )
     else:
         assert table.loc[7, "Measured"] == (
             "No verified DomainParallel bundle is installed; "
             "0 successful saved cases; 0 failed saved cases; "
-            "measured maximum NOT REPORTED"
+            "fixed input NOT REPORTED"
         )
 
 

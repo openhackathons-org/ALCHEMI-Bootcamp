@@ -55,7 +55,7 @@ surface science, or spectroscopy.
 | Compare IR results honestly | Save the trajectory immediately after dynamics and before post-run analysis, then check temperature, energy, and topology before comparing finite-temperature MD, B97-3c harmonic calculations, and selected experimental gas-phase positions in separate lanes. | Route or shape failures before persistence are hard failures. Later temperature or topology failures keep the saved trajectory and mark affected comparisons as `NOT REPORTED`; no shared intensity scale or combined IR error is reported. |
 | Explain scaling beyond one batch | Demonstrate inflight replacement live with `InMemoryDataset`, `SizeAwareSampler`, `HostMemory`, stable `system_id`, and bounded active work. Load a checked 3,200-atom phenol/N-methylacetamide base box and static OVITO preview, replace finite Coulomb with PME, walk through the `DomainParallel` API on one GPU with no decomposition, and show the separate `DistributedPipeline` stage layout. | The learner can say which API fits many independent systems and which fits one oversized periodic system. Multi-GPU measurements remain `NOT REPORTED` until complete H100 result sets pass their checks. |
 | Teach the intended domain API without exposing internals | Keep `DomainConfig`, `SpatialPartitioner`, `DomainParallel`, `partition`, `run`, and `gather` visible. Explain that `DistributedManager` creates the rank mesh, `grid_dims` controls spatial cells rather than the rank layout, each GPU owns one region plus a halo, the globally reduced energy stays on the local result, and `gather` reconstructs atom fields. | No private fields, hand-written collectives, ad-hoc multiprocessing, live giant-box packing, or live OVITO rendering appears in the learner path. The single-GPU walkthrough is labeled as one domain with no decomposition, and the Toolkit 0.2 example is limited explicitly to a neutral system. |
-| Keep the large-box claim honest | Build and check the small base box once offline, then create larger inputs as recorded integer supercell repeats so composition and density stay fixed without rerunning Packmol. Retain every one-H100 size attempt and the first natural OOM; retry that exact failed input on 2/4 GPUs; measure speed on a separate input that already fits one H100. Compare 2/4-GPU force components with one GPU, compare the 4-GPU energy with the 2-GPU distributed result at `1e-4 eV/atom`, and keep the raw one-to-multi-GPU energy offset as a diagnostic. | The lesson keeps capacity, OOM recovery, and speed as three different questions. It does not claim generic 1/2/4 energy parity, call the box equilibrated, claim bulk AIMNet2 accuracy, or say all memory divides by GPU count because each GPU runs the full reciprocal PME FFT and holds its workspace. Every timing row must pass `IQR / median <= 0.10`, and all GPU counts are reported together. |
+| Keep the large-box claim honest | Build and check the small base box once offline, then create one recorded 51,200-atom integer supercell so composition and density stay fixed without rerunning Packmol. Run that same input on 1/2/4 H100s with one warm-up and three measured fixed-structure energy/force passes. Compare 2/4-GPU force components with one GPU, require repeatable 2/4-GPU energies, compare the 4-GPU median energy with the 2-GPU median at `1e-4 eV/atom`, and keep the raw one-to-multi-GPU energy offset and one-GPU pass range as diagnostics. | The lesson reports every raw pass time and its median. It does not search for an OOM, claim generic 1/2/4 energy parity, call the box equilibrated, claim bulk AIMNet2 accuracy, or say all memory divides by GPU count because each GPU runs the full reciprocal PME FFT and holds its workspace. |
 | Keep supporting code out of the lesson | Put structure generation, parsing, plotting, repeated numerical reductions, reference formatting, and output-file mechanics in documented `aux/` modules. | Public Toolkit choices stay in the notebook; `aux/__init__.py` exports no competing tutorial API. |
 | Keep the notebook readable | Use seven consistent stage cards, short explanations, visible compute progress, compact tables, result callouts, and descriptive figure text. | Every learner-visible code cell stays at or below 60 lines; the adapter keeps only its essential interface visible and moves repetitive support code to `aux/`. |
 
@@ -70,14 +70,15 @@ surface science, or spectroscopy.
    setup.
 6. The full NVT and NVE trajectory, saved results, checks, and qualitative IR.
 7. Inflight replacement on one GPU, a checked periodic base-box
-   `DomainParallel` walkthrough, recorded multi-GPU capacity/OOM/speed results,
-   and an offline `DistributedPipeline` contrast.
+   `DomainParallel` walkthrough, three recorded fixed-structure passes for one
+   51,200-atom input on 1/2/4 H100s, and an offline `DistributedPipeline`
+   contrast.
 
 ## Current size and pacing checks
 
 - 129 notebook cells, including 34 hidden code cells.
 - 54 learner-visible code cells and 1,791 visible source lines.
-- 6,397 learner-facing Markdown words after HTML tags are removed.
+- 6,443 learner-facing Markdown words after HTML tags are removed.
 - Stage 1 begins at cell 9; the first model result is at cell 13.
 - The longest learner-visible code cell is 59 lines.
 - An older six-stage run on one H100 recorded about 13 minutes of code time,
@@ -91,7 +92,7 @@ surface science, or spectroscopy.
 - Run the learner-facing notebook checks.
 - Run all helper and scientific-analysis tests in the declared environment.
 - Run the complete notebook on one H100 without runtime patches.
-- Run the single-GPU size sweep in fresh H100 processes, then require
+- Run the same fixed 51,200-atom input in fresh 1/2/4-H100 jobs, then require
   one-versus-multi-GPU componentwise force agreement and 2-versus-4-GPU
   energy agreement at `1e-4 eV/atom` for the exact AIMNet2 + PME + D3
   composition before plotting it. Keep the raw one-to-multi-GPU energy offset
@@ -116,16 +117,16 @@ The results below were observed on 2026-07-27 in the `v2` checkout on
 | Check | Current result |
 |---|---|
 | Source notebook | 129 cells, 54 learner-visible code cells, 34 hidden helper cells, and no visible code cell longer than 59 lines |
-| Notebook identity | SHA-256 `bca20fc3436232b3282322b3c2aafc175c8fc39cc0e52288fcea09c5d8a8ba32` |
+| Notebook identity | SHA-256 `d8d5f2ac57a94189b8f744eaa57851cbc187ab99bacee3c9e3740ab2a8b9af10` |
 | Deterministic generation | Two independent rebuilds produced the same notebook bytes |
 | Executed notebook | Not available for the current source; all 88 code cells have null execution counts and no saved outputs |
-| Current focused tests | The 1/2/4-GPU campaign conversion passed 192 domain, result, launch, summary, and notebook checks. |
-| Broad local compatible tests | 806 passed with 2 subtests against pinned Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`. Retired patched-pipeline and OrbMol-only tests were excluded because those files are not part of the learner source. This does not replace the target H100 run. |
-| Source checks | All shell and Slurm launch files pass `bash -n`; all Python sources compile; active Python files pass Ruff's syntax and undefined-name checks; notebook JSON, the base-box checksums, the reference-data checksums, and `git diff --check` pass. Existing formatting outside the remaster was not rewritten. |
+| Current focused tests | The fixed 1/2/4-GPU domain files passed 102 tests with 6 Torch-only skips. Of 47 notebook checks, 46 passed locally; the exact SevenNet wrapper-cell check requires Torch and is deferred to the target environment. |
+| Broad local compatible tests | 847 passed, 1 hardware-only test skipped, and 2 subtests passed against pinned Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`. This includes the full maintained Part 1 helper, scientific-analysis, notebook, and reference test set. It does not replace the target H100 run. |
+| Source checks | All shell and Slurm launch files pass `bash -n`; all Python sources compile and pass Ruff checks and formatting; notebook JSON, deterministic regeneration, the base-box checksums, the reference-data checksums, and `git diff --check` pass. |
 | Static learner review | The HTML render contains seven stage cards, seven progress bars, 32 callouts, and ten process diagrams. Scientific review led to interaction-level NCI route checks, corrected ionic-system charge wording, and an enforced upstream NCI revision check. Exact Toolkit 0.2 API review led to a fixed-step `FusedStage` in the offline pipeline sketch. No other medium or larger source issue remains from those reviews. |
 | Rendered human review | Pending for the executed notebook in the target theme, including pacing, table width, figures, widgets, hidden inputs, and callout consistency |
-| Current H100 execution | Not run for this source revision. The clean 1/2/4-GPU campaign is the next scheduled step after the signed-off source commit. |
-| Recorded scaling results | `DomainParallel` 1/2/4-GPU capacity, agreement, and timing plus `DistributedPipeline` correctness and timing are **NOT REPORTED** |
+| Current H100 execution | The earlier capacity-search jobs were cancelled. The replacement fixed-input 1/2/4-GPU run is pending source validation and a signed commit. |
+| Recorded scaling results | Three-pass `DomainParallel` 1/2/4-GPU output agreement and timing plus `DistributedPipeline` correctness and timing are **NOT REPORTED** |
 | Container build | Not run because no Docker-compatible container engine is installed locally |
 | Git publication | Use the source commit recorded by Git. No remote `v2` branch is required when the exact commit is transferred to Compute Lab as a checked Git bundle. |
 

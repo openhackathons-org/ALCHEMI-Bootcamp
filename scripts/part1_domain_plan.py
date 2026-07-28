@@ -1,16 +1,14 @@
 #!/usr/bin/env python3
-"""Plan, prepare, and assemble the Part 1 domain-decomposition run.
+"""Prepare and combine the short Part 1 multi-GPU evaluation.
 
-The ``plan`` command uses only the Python standard library. It is safe to run
-on a laptop without CUDA, Torch, ALCHEMI Toolkit, ASE, or Packmol.
+The recorded example uses one fixed 51,200-atom molecular box on 1, 2, and
+4 H100 GPUs. Each job prepares the same deterministic integer supercell,
+performs one untimed initialization pass, then measures three fixed-structure
+energy-and-force passes through Toolkit ``DomainParallel``.
 
-The ``prepare`` command loads the checked 3,200-atom periodic box used in the
-live notebook and builds larger inputs as deterministic integer supercells.
-Packmol is not run during the campaign.
-
-The capacity ladder is explicit. Every planned case is run in a fresh
-``torchrun`` process by the Slurm launcher. A failed process is turned into a
-normal result row by ``record-failure`` and retained by ``assemble``.
+There is no size search and no deliberate out-of-memory run. Failures are
+recorded because cluster jobs can fail, but a complete lesson bundle requires
+successful results from all three GPU counts.
 """
 
 from __future__ import annotations
@@ -23,10 +21,9 @@ import json
 import math
 import os
 from pathlib import Path
-import re
 import shutil
 import sys
-from typing import Any, Iterable
+from typing import Any, Iterable, Mapping
 
 
 REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
@@ -37,99 +34,20 @@ if str(PART_DIR) not in sys.path:
 from aux.domain.config import DOMAIN_METHODOLOGY  # noqa: E402
 
 
-DOMAIN_METHODOLOGY_CONFIG_PATH = (
-    PART_DIR / "aux" / "domain" / "config.py"
-).resolve()
-PLAN_SCHEMA = "alchemi.part1-domain-plan.v2"
-INPUT_SCHEMA = "alchemi.part1-domain-input.v2"
+DOMAIN_METHODOLOGY_CONFIG_PATH = PART_DIR / "aux" / "domain" / "config.py"
+PLAN_SCHEMA = "alchemi.part1-domain-plan.v4"
+INPUT_SCHEMA = "alchemi.part1-domain-input.v3"
 BASE_BOX_SCHEMA = "alchemi.part1-domain-base-box.v1"
-RESULT_SCHEMA = "alchemi.part1-domain-case.v3"
-COLLECTION_SCHEMA = "alchemi.part1-domain-collection.v3"
-SELECTION_SCHEMA = "alchemi.part1-domain-selection.v3"
-DISTRIBUTED_PLAN_SCHEMA = "alchemi.part1-domain-distributed-plan.v2"
-BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v3"
-PHASE_SUMMARY_SCHEMA = "alchemi.part1-domain-phase-summary.v1"
+BASE_BOX_METHODOLOGY = {
+    "schema": DOMAIN_METHODOLOGY.schema,
+    "name": DOMAIN_METHODOLOGY.name,
+    "version": DOMAIN_METHODOLOGY.version,
+}
+RESULT_SCHEMA = "alchemi.part1-domain-case.v5"
+COLLECTION_SCHEMA = "alchemi.part1-domain-collection.v5"
+BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v5"
+PHASE_SUMMARY_SCHEMA = "alchemi.part1-domain-phase-summary.v2"
 CHECKPOINT_PREFLIGHT_SCHEMA = "alchemi.part1-domain-checkpoint-preflight.v1"
-
-CAPACITY_COLUMNS = (
-    "case_id",
-    "atom_count",
-    "molecules_per_species",
-    "gpus",
-    "success",
-    "status",
-    "failure_type",
-    "failure_stage",
-    "error",
-    "elapsed_s",
-    "peak_memory_bytes_max_rank",
-    "energy_ev",
-    "force_rms_ev_per_a",
-    "force_max_ev_per_a",
-    "structure_sha256",
-    "settings_sha256",
-    "measurement_role",
-    "measurement_kind",
-)
-PARITY_COLUMNS = (
-    "case_id",
-    "atom_count",
-    "force_reference_gpus",
-    "energy_reference_gpus",
-    "gpus",
-    "success",
-    "status",
-    "failure_type",
-    "failure_stage",
-    "error",
-    "one_gpu_energy_abs_offset_ev",
-    "one_gpu_energy_abs_offset_ev_per_atom",
-    "distributed_energy_difference_ev",
-    "distributed_energy_difference_ev_per_atom",
-    "force_rms_difference_ev_per_a",
-    "force_max_difference_ev_per_a",
-    "energy_tolerance_ev_per_atom",
-    "force_tolerance_ev_per_a",
-    "distributed_energy_passed",
-    "force_passed",
-    "parity_passed",
-    "structure_sha256",
-    "settings_sha256",
-    "measurement_role",
-    "measurement_kind",
-)
-DISTRIBUTED_COLUMNS = (
-    "case_id",
-    "atom_count",
-    "molecules_per_species",
-    "nodes",
-    "gpus",
-    "ranks",
-    "success",
-    "status",
-    "failure_type",
-    "failure_stage",
-    "error",
-    "elapsed_s",
-    "warmup_count",
-    "sample_count",
-    "elapsed_samples_s",
-    "elapsed_median_s",
-    "elapsed_q1_s",
-    "elapsed_q3_s",
-    "elapsed_iqr_s",
-    "peak_memory_bytes_max_rank",
-    "owned_atoms_min_rank",
-    "owned_atoms_max_rank",
-    "spatial_grid",
-    "energy_ev",
-    "force_rms_ev_per_a",
-    "force_max_ev_per_a",
-    "structure_sha256",
-    "settings_sha256",
-    "measurement_role",
-    "measurement_kind",
-)
 
 CORE_COMMIT = "331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409"
 OPS_COMMIT = "e8e7a7464f6745277a156a3d6f433d06b58c60e3"
@@ -139,39 +57,32 @@ AIMNET_CHECKPOINT_SHA256 = (
     "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28"
 )
 D3_PARAMETER_SHA256 = "b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84"
+
 NCI_SYSTEM_ID = DOMAIN_METHODOLOGY.nci_system_id
 NCI_SCALE = DOMAIN_METHODOLOGY.nci_scale
 BASE_PAIR_COUNT = DOMAIN_METHODOLOGY.live_molecules_per_species
-BASE_ATOM_COUNT = BASE_PAIR_COUNT * DOMAIN_METHODOLOGY.atoms_per_composition_unit
-DEFAULT_BASE_BOX_DIR = (
-    PART_DIR / "data" / "domain_decomposition" / "prebuilt_base_box"
-)
-
-# Phenol (C6H6O) + N-methylacetamide (C3H7NO), using standard atomic
-# weights. ``prepare`` recomputes this mass from the actual ASE templates and
-# records both values.
-PAIR_MASS_U_FROM_FORMULAS = 167.208
 ATOMS_PER_PAIR = DOMAIN_METHODOLOGY.atoms_per_composition_unit
-AIMNET_NEIGHBOR_CUTOFF_A = DOMAIN_METHODOLOGY.aimnet_neighbor_cutoff_a
+BASE_ATOM_COUNT = BASE_PAIR_COUNT * ATOMS_PER_PAIR
+PAIR_MASS_U_FROM_FORMULAS = 167.208
 MOLECULE_COUNT_DEFINITION = (
     "The count is the number of independent phenol molecules and the equal "
     "number of independent N-methylacetamide molecules; it is not a count "
     "of pre-bound dimers."
 )
 
-DEFAULT_WORLD_SIZES = DOMAIN_METHODOLOGY.capacity_world_sizes
-DEFAULT_DISTRIBUTED_WORLD_SIZES = DOMAIN_METHODOLOGY.distributed_world_sizes
-# This is a declared benchmark ladder, not a runtime fit estimate. No case is
-# skipped based on an atom or memory threshold.
-DEFAULT_CAPACITY_PAIR_COUNTS = DOMAIN_METHODOLOGY.capacity_molecules_per_species
+DEFAULT_WORLD_SIZES = tuple(DOMAIN_METHODOLOGY.campaign_world_sizes)
+DEFAULT_FIXED_PAIR_COUNT = DOMAIN_METHODOLOGY.fixed_molecules_per_species
 DEFAULT_VALIDATION_PAIRS = (
     DOMAIN_METHODOLOGY.electrostatics_validation_molecules_per_species
 )
+DEFAULT_WARMUP_COUNT = DOMAIN_METHODOLOGY.evaluation_warmup_count
+DEFAULT_PASS_COUNT = DOMAIN_METHODOLOGY.evaluation_pass_count
 DEFAULT_DENSITY_G_CM3 = DOMAIN_METHODOLOGY.construction_density_g_cm3
 DEFAULT_PACKMOL_TOLERANCE_A = DOMAIN_METHODOLOGY.packmol_tolerance_a
 DEFAULT_PACKMOL_PRECISION_A = DOMAIN_METHODOLOGY.packmol_precision_a
 DEFAULT_PACKMOL_SEED = DOMAIN_METHODOLOGY.packmol_seed
 EXPECTED_PACKMOL_VERSION = "21.2.1"
+DEFAULT_BASE_BOX_DIR = PART_DIR / "data" / "domain_decomposition" / "prebuilt_base_box"
 
 DEFAULT_PME_CUTOFF_A = DOMAIN_METHODOLOGY.pme_realspace_cutoff_a
 DEFAULT_PME_MESH_SAFETY_FACTOR = DOMAIN_METHODOLOGY.pme_mesh_safety_factor
@@ -185,31 +96,58 @@ DEFAULT_PME_EWAL_FORCE_MAX_TOL_EV_A = (
     DOMAIN_METHODOLOGY.pme_ewald_force_max_tolerance_ev_a
 )
 DEFAULT_CHARGE_SUM_TOL_E = DOMAIN_METHODOLOGY.charge_sum_tolerance_e
-DEFAULT_PARITY_PAIR_COUNT = DOMAIN_METHODOLOGY.parity_molecules_per_species
-# These same-input limits are declared before the multi-GPU differences are
-# inspected. Energy is normalized by atom count so atomic baselines do not
-# loosen the comparison.
-DEFAULT_PARITY_ENERGY_TOL_EV_PER_ATOM = (
-    DOMAIN_METHODOLOGY.parity_energy_tolerance_ev_per_atom
+DEFAULT_DISTRIBUTED_ENERGY_REPEATABILITY_TOL_EV_PER_ATOM = (
+    DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
 )
-DEFAULT_PARITY_FORCE_ATOL_EV_A = DOMAIN_METHODOLOGY.parity_force_atol_ev_a
-DEFAULT_PARITY_FORCE_RTOL = DOMAIN_METHODOLOGY.parity_force_rtol
+DEFAULT_EVALUATION_ENERGY_TOL_EV_PER_ATOM = (
+    DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom
+)
+DEFAULT_EVALUATION_FORCE_ATOL_EV_A = DOMAIN_METHODOLOGY.evaluation_force_atol_ev_a
+DEFAULT_EVALUATION_FORCE_RTOL = DOMAIN_METHODOLOGY.evaluation_force_rtol
+DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A = (
+    DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
+)
 DEFAULT_D3_CUTOFF_A = DOMAIN_METHODOLOGY.d3_cutoff_a
 DEFAULT_D3_SMOOTHING_FRACTION = DOMAIN_METHODOLOGY.d3_smoothing_fraction
-# The Toolkit 0.2 multi-GPU D3 tests use a 4 A margin for coordination
-# numbers around borrowed atoms. This is a declared starting value, not a
-# universal bound; the campaign accepts it only after same-input force parity.
 DEFAULT_DOMAIN_SKIN_A = DOMAIN_METHODOLOGY.domain_halo_skin_a
-DEFAULT_STEADY_TIMING_WARMUP_COUNT = (
-    DOMAIN_METHODOLOGY.steady_timing_warmup_count
-)
-DEFAULT_STEADY_TIMING_SAMPLE_COUNT = DOMAIN_METHODOLOGY.steady_timing_sample_count
 
-CUDA_OOM_PATTERNS = (
-    re.compile(r"CUDA out of memory", re.IGNORECASE),
-    re.compile(r"OutOfMemoryError", re.IGNORECASE),
-    re.compile(r"CUDNN_STATUS_ALLOC_FAILED", re.IGNORECASE),
-    re.compile(r"CUBLAS_STATUS_ALLOC_FAILED", re.IGNORECASE),
+DISTRIBUTED_COLUMNS = (
+    "case_id",
+    "atom_count",
+    "molecules_per_species",
+    "nodes",
+    "gpus",
+    "ranks",
+    "success",
+    "status",
+    "failure_type",
+    "failure_stage",
+    "error",
+    "warmup_count",
+    "measured_pass_count",
+    "pass_times_s",
+    "median_s",
+    "min_s",
+    "max_s",
+    "peak_memory_bytes_max_rank",
+    "owned_atoms_min_rank",
+    "owned_atoms_max_rank",
+    "spatial_grid",
+    "energy_ev",
+    "energy_ev_per_atom",
+    "comparison_energy_ev",
+    "comparison_energy_ev_per_atom",
+    "comparison_energy_statistic",
+    "energy_dtype",
+    "force_rms_ev_per_a",
+    "force_max_ev_per_a",
+    "structure_sha256",
+    "settings_sha256",
+    "input_tensor_sha256",
+    "positions_pbc_equivalent",
+    "max_minimum_image_displacement_a",
+    "measurement_role",
+    "measurement_kind",
 )
 
 
@@ -225,71 +163,73 @@ def sha256_file(path: Path) -> str:
     return digest.hexdigest()
 
 
-def methodology_source_identity() -> dict[str, Any]:
-    """Identify the versioned methodology module used to resolve defaults."""
+def canonical_json_sha256(value: Any) -> str:
+    encoded = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        allow_nan=False,
+    ).encode("utf-8")
+    return sha256(encoded).hexdigest()
 
+
+def atomic_write_json(path: Path, value: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(
+        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n",
+        encoding="utf-8",
+    )
+    temporary.replace(path)
+
+
+def atomic_write_jsonl(
+    path: Path,
+    rows: Iterable[Mapping[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with temporary.open("w", encoding="utf-8") as stream:
+        for row in rows:
+            stream.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
+    temporary.replace(path)
+
+
+def _write_csv(
+    path: Path,
+    columns: tuple[str, ...],
+    rows: Iterable[Mapping[str, Any]],
+) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    with temporary.open("w", encoding="utf-8", newline="") as stream:
+        writer = csv.DictWriter(stream, fieldnames=columns)
+        writer.writeheader()
+        for row in rows:
+            unknown = set(row) - set(columns)
+            if unknown:
+                raise ValueError(
+                    "CSV row contains unknown fields: " + ", ".join(sorted(unknown))
+                )
+            writer.writerow({column: row.get(column, "") for column in columns})
+    temporary.replace(path)
+
+
+def methodology_source_identity() -> dict[str, Any]:
     return {
         "schema": DOMAIN_METHODOLOGY.schema,
         "name": DOMAIN_METHODOLOGY.name,
         "version": DOMAIN_METHODOLOGY.version,
-        "path": str(DOMAIN_METHODOLOGY_CONFIG_PATH),
+        "path": str(DOMAIN_METHODOLOGY_CONFIG_PATH.relative_to(REPOSITORY_ROOT)),
         "sha256": sha256_file(DOMAIN_METHODOLOGY_CONFIG_PATH),
     }
 
 
-def resolved_methodology_values(
-    *,
-    capacity_pair_counts: tuple[int, ...] | None = None,
-    validation_pairs: int | None = None,
-    parity_pairs: int | None = None,
-    density_g_cm3: float | None = None,
-    pme_cutoff_a: float | None = None,
-    pme_mesh_safety_factor: float | None = None,
-    pme_spline_order: int | None = None,
-    pme_accuracy: float | None = None,
-    ewald_reference_accuracy: float | None = None,
-    d3_cutoff_a: float | None = None,
-    d3_smoothing_fraction: float | None = None,
-    domain_skin_a: float | None = None,
-    packmol_tolerance_a: float | None = None,
-    packmol_precision_a: float | None = None,
-    packmol_seed: int | None = None,
-    steady_timing_warmup_count: int | None = None,
-    steady_timing_sample_count: int | None = None,
-) -> dict[str, Any]:
-    """Return defaults with every explicit campaign override applied."""
-
-    values = DOMAIN_METHODOLOGY.resolved_values(json_compatible=True)
-    overrides = {
-        "capacity_molecules_per_species": (
-            list(capacity_pair_counts)
-            if capacity_pair_counts is not None
-            else None
-        ),
-        "electrostatics_validation_molecules_per_species": validation_pairs,
-        "parity_molecules_per_species": parity_pairs,
-        "construction_density_g_cm3": density_g_cm3,
-        "pme_realspace_cutoff_a": pme_cutoff_a,
-        "pme_mesh_safety_factor": pme_mesh_safety_factor,
-        "pme_spline_order": pme_spline_order,
-        "pme_accuracy": pme_accuracy,
-        "ewald_reference_accuracy": ewald_reference_accuracy,
-        "d3_cutoff_a": d3_cutoff_a,
-        "d3_smoothing_fraction": d3_smoothing_fraction,
-        "domain_halo_skin_a": domain_skin_a,
-        "packmol_tolerance_a": packmol_tolerance_a,
-        "packmol_precision_a": packmol_precision_a,
-        "packmol_seed": packmol_seed,
-        "steady_timing_warmup_count": steady_timing_warmup_count,
-        "steady_timing_sample_count": steady_timing_sample_count,
-    }
-    values.update({name: value for name, value in overrides.items() if value is not None})
-    return values
+def resolved_methodology_values() -> dict[str, Any]:
+    return DOMAIN_METHODOLOGY.resolved_values(json_compatible=True)
 
 
 def checkpoint_preflight(args: argparse.Namespace) -> dict[str, Any]:
-    """Resolve and verify the exact AIMNet2 checkpoint before launching cases."""
-
     from importlib import metadata
 
     from aimnet.calculators.model_registry import get_model_path
@@ -300,8 +240,8 @@ def checkpoint_preflight(args: argparse.Namespace) -> dict[str, Any]:
     observed_sha256 = sha256_file(checkpoint)
     if observed_sha256 != AIMNET_CHECKPOINT_SHA256:
         raise ValueError(
-            "AIMNet2 checkpoint SHA-256 does not match the declared campaign "
-            f"value: {observed_sha256}"
+            "AIMNet2 checkpoint SHA-256 does not match the declared value: "
+            f"{observed_sha256}"
         )
     report = {
         "schema": CHECKPOINT_PREFLIGHT_SCHEMA,
@@ -315,25 +255,6 @@ def checkpoint_preflight(args: argparse.Namespace) -> dict[str, Any]:
     }
     atomic_write_json(args.output.resolve(), report)
     return report
-
-
-def atomic_write_json(path: Path, value: Any) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    temporary.write_text(
-        json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + "\n",
-        encoding="utf-8",
-    )
-    temporary.replace(path)
-
-
-def atomic_write_jsonl(path: Path, rows: Iterable[dict[str, Any]]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("w", encoding="utf-8") as stream:
-        for row in rows:
-            stream.write(json.dumps(row, sort_keys=True, allow_nan=False) + "\n")
-    temporary.replace(path)
 
 
 def parse_positive_ints(values: Iterable[str | int]) -> tuple[int, ...]:
@@ -350,20 +271,15 @@ def equivalent_cubic_length_angstrom(
     density_g_cm3: float,
     pair_mass_u: float = PAIR_MASS_U_FROM_FORMULAS,
 ) -> float:
-    """Return the side of a cube with the input's volume."""
-
     if pair_count <= 0:
         raise ValueError("pair_count must be positive")
     if not math.isfinite(density_g_cm3) or density_g_cm3 <= 0.0:
         raise ValueError("density_g_cm3 must be positive and finite")
-    # 1 u = 1.66053906660e-24 g and 1 cm3 = 1e24 A3.
     volume_a3 = pair_count * pair_mass_u * 1.66053906660 / density_g_cm3
     return volume_a3 ** (1.0 / 3.0)
 
 
 def balanced_repeat_factors(pair_count: int) -> tuple[int, int, int]:
-    """Plan balanced x/y/z repeats of the checked 128-pair base box."""
-
     if pair_count < BASE_PAIR_COUNT or pair_count % BASE_PAIR_COUNT:
         raise ValueError(
             f"pair_count must be a multiple of the {BASE_PAIR_COUNT}-pair base box"
@@ -383,36 +299,125 @@ def planned_supercell_geometry(
     pair_count: int,
     density_g_cm3: float,
 ) -> dict[str, Any]:
-    """Return the orthorhombic geometry implied by the base-box repeats."""
-
     repeat_factors = balanced_repeat_factors(pair_count)
     base_length_a = equivalent_cubic_length_angstrom(
         BASE_PAIR_COUNT,
         density_g_cm3,
     )
-    cell_lengths_a = tuple(
-        base_length_a * repeat_factor for repeat_factor in repeat_factors
-    )
-    volume_a3 = math.prod(cell_lengths_a)
+    lengths = tuple(base_length_a * repeat_factor for repeat_factor in repeat_factors)
+    volume_a3 = math.prod(lengths)
     return {
         "cell_geometry": "orthorhombic",
-        "cell_lengths_a": list(cell_lengths_a),
-        "minimum_cell_length_a": min(cell_lengths_a),
+        "cell_lengths_a": list(lengths),
+        "minimum_cell_length_a": min(lengths),
+        "equivalent_cubic_length_a": volume_a3 ** (1.0 / 3.0),
+        "volume_a3": volume_a3,
+    }
+
+
+def _cell_geometry_from_matrix(
+    cell_a: Any,
+) -> tuple[tuple[float, float, float], float]:
+    try:
+        matrix = tuple(
+            tuple(float(component) for component in vector) for vector in cell_a
+        )
+    except (TypeError, ValueError) as exc:
+        raise ValueError("cell_a must be a 3 by 3 numeric matrix") from exc
+    if len(matrix) != 3 or any(len(vector) != 3 for vector in matrix):
+        raise ValueError("cell_a must be a 3 by 3 numeric matrix")
+    if any(not math.isfinite(component) for vector in matrix for component in vector):
+        raise ValueError("cell_a must contain only finite values")
+    lengths = tuple(
+        math.sqrt(sum(component * component for component in vector))
+        for vector in matrix
+    )
+    if any(length <= 0.0 for length in lengths):
+        raise ValueError("cell vectors must have positive lengths")
+    for first in range(3):
+        for second in range(first + 1, 3):
+            dot = sum(matrix[first][axis] * matrix[second][axis] for axis in range(3))
+            if not math.isclose(
+                dot,
+                0.0,
+                rel_tol=0.0,
+                abs_tol=1.0e-10 * lengths[first] * lengths[second],
+            ):
+                raise ValueError("the domain example requires an orthorhombic cell")
+    volume_a3 = abs(
+        matrix[0][0] * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
+        - matrix[0][1] * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
+        + matrix[0][2] * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
+    )
+    if volume_a3 <= 0.0:
+        raise ValueError("cell_a must have a positive volume")
+    return lengths, volume_a3
+
+
+def validated_manifest_cell_geometry(
+    manifest: Mapping[str, Any],
+) -> dict[str, Any]:
+    if manifest.get("schema") != INPUT_SCHEMA:
+        raise ValueError("input manifest has an unknown schema")
+    required = (
+        "cell_geometry",
+        "cell_a",
+        "cell_lengths_a",
+        "minimum_cell_length_a",
+        "equivalent_cubic_length_a",
+        "volume_a3",
+    )
+    missing = [name for name in required if name not in manifest]
+    if missing:
+        raise ValueError(
+            "input manifest is missing cell geometry: " + ", ".join(missing)
+        )
+    if manifest["cell_geometry"] != "orthorhombic":
+        raise ValueError("the domain example requires an orthorhombic cell")
+    lengths, volume_a3 = _cell_geometry_from_matrix(manifest["cell_a"])
+    observed = (
+        *(float(value) for value in manifest["cell_lengths_a"]),
+        float(manifest["minimum_cell_length_a"]),
+        float(manifest["equivalent_cubic_length_a"]),
+        float(manifest["volume_a3"]),
+    )
+    expected = (
+        *lengths,
+        min(lengths),
+        volume_a3 ** (1.0 / 3.0),
+        volume_a3,
+    )
+    if len(observed) != len(expected) or any(
+        not math.isclose(
+            observed_value,
+            expected_value,
+            rel_tol=1.0e-10,
+            abs_tol=1.0e-10,
+        )
+        for observed_value, expected_value in zip(
+            observed,
+            expected,
+            strict=True,
+        )
+    ):
+        raise ValueError("input manifest cell geometry is internally inconsistent")
+    return {
+        "cell_geometry": "orthorhombic",
+        "cell_lengths_a": list(lengths),
+        "minimum_cell_length_a": min(lengths),
         "equivalent_cubic_length_a": volume_a3 ** (1.0 / 3.0),
         "volume_a3": volume_a3,
     }
 
 
 def require_planned_supercell_geometry(
-    geometry: dict[str, Any],
+    geometry: Mapping[str, Any],
     *,
     pair_count: int,
     density_g_cm3: float,
 ) -> None:
-    """Require an input cell to match the declared base-box repeats."""
-
     expected = planned_supercell_geometry(pair_count, density_g_cm3)
-    if geometry.get("cell_geometry") != expected["cell_geometry"]:
+    if geometry.get("cell_geometry") != "orthorhombic":
         raise ValueError("input cell geometry does not match the plan")
     for name in (
         "minimum_cell_length_a",
@@ -442,143 +447,6 @@ def require_planned_supercell_geometry(
         raise ValueError("input cell geometry does not match the plan")
 
 
-def _cell_geometry_from_matrix(
-    cell_a: Any,
-) -> tuple[tuple[float, float, float], float]:
-    """Return vector lengths and volume for one orthorhombic cell matrix."""
-
-    try:
-        matrix = tuple(
-            tuple(float(component) for component in vector) for vector in cell_a
-        )
-    except (TypeError, ValueError) as exc:
-        raise ValueError("cell_a must be a 3 by 3 numeric matrix") from exc
-    if len(matrix) != 3 or any(len(vector) != 3 for vector in matrix):
-        raise ValueError("cell_a must be a 3 by 3 numeric matrix")
-    if any(not math.isfinite(component) for vector in matrix for component in vector):
-        raise ValueError("cell_a must contain only finite values")
-
-    cell_lengths_a = tuple(
-        math.sqrt(sum(component * component for component in vector))
-        for vector in matrix
-    )
-    if any(length <= 0.0 for length in cell_lengths_a):
-        raise ValueError("cell vectors must have positive lengths")
-    for first in range(3):
-        for second in range(first + 1, 3):
-            dot = sum(
-                matrix[first][axis] * matrix[second][axis] for axis in range(3)
-            )
-            scale = cell_lengths_a[first] * cell_lengths_a[second]
-            if not math.isclose(dot, 0.0, rel_tol=0.0, abs_tol=1.0e-10 * scale):
-                raise ValueError("the domain campaign requires an orthorhombic cell")
-
-    volume_a3 = abs(
-        matrix[0][0]
-        * (matrix[1][1] * matrix[2][2] - matrix[1][2] * matrix[2][1])
-        - matrix[0][1]
-        * (matrix[1][0] * matrix[2][2] - matrix[1][2] * matrix[2][0])
-        + matrix[0][2]
-        * (matrix[1][0] * matrix[2][1] - matrix[1][1] * matrix[2][0])
-    )
-    if volume_a3 <= 0.0:
-        raise ValueError("cell_a must have a positive volume")
-    return cell_lengths_a, volume_a3
-
-
-def validated_manifest_cell_geometry(
-    manifest: dict[str, Any],
-) -> dict[str, Any]:
-    """Validate and return the explicit geometry in an input manifest."""
-
-    if manifest.get("schema") != INPUT_SCHEMA:
-        raise ValueError("input manifest has an unknown schema")
-    required_fields = (
-        "cell_geometry",
-        "cell_a",
-        "cell_lengths_a",
-        "minimum_cell_length_a",
-        "equivalent_cubic_length_a",
-        "volume_a3",
-    )
-    missing = [name for name in required_fields if name not in manifest]
-    if missing:
-        raise ValueError(
-            "input manifest is missing explicit cell geometry: "
-            + ", ".join(missing)
-        )
-    if manifest["cell_geometry"] != "orthorhombic":
-        raise ValueError("the domain campaign requires an orthorhombic cell")
-
-    cell_lengths_a, volume_a3 = _cell_geometry_from_matrix(manifest["cell_a"])
-    try:
-        recorded_lengths = tuple(float(value) for value in manifest["cell_lengths_a"])
-        recorded_minimum = float(manifest["minimum_cell_length_a"])
-        recorded_equivalent = float(manifest["equivalent_cubic_length_a"])
-        recorded_volume = float(manifest["volume_a3"])
-    except (TypeError, ValueError) as exc:
-        raise ValueError("input manifest cell geometry is not numeric") from exc
-    if len(recorded_lengths) != 3:
-        raise ValueError("cell_lengths_a must contain x, y, and z lengths")
-
-    equivalent_cubic_length_a = volume_a3 ** (1.0 / 3.0)
-    expected_values = (
-        (*cell_lengths_a, min(cell_lengths_a), equivalent_cubic_length_a, volume_a3)
-    )
-    observed_values = (
-        (*recorded_lengths, recorded_minimum, recorded_equivalent, recorded_volume)
-    )
-    if any(
-        not math.isclose(observed, expected, rel_tol=1.0e-10, abs_tol=1.0e-10)
-        for observed, expected in zip(
-            observed_values,
-            expected_values,
-            strict=True,
-        )
-    ):
-        raise ValueError("input manifest cell geometry is internally inconsistent")
-    return {
-        "cell_geometry": "orthorhombic",
-        "cell_lengths_a": list(cell_lengths_a),
-        "minimum_cell_length_a": min(cell_lengths_a),
-        "equivalent_cubic_length_a": equivalent_cubic_length_a,
-        "volume_a3": volume_a3,
-    }
-
-
-def domain_partition_check(
-    *,
-    cell_lengths_a: Iterable[float],
-    ghost_width_a: float,
-) -> dict[str, Any]:
-    """Describe the runtime check for a meaningful domain partition."""
-
-    try:
-        lengths = tuple(float(value) for value in cell_lengths_a)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("cell_lengths_a must contain numeric values") from exc
-    if len(lengths) != 3 or any(
-        not math.isfinite(value) or value <= 0.0 for value in lengths
-    ):
-        raise ValueError("cell_lengths_a must contain three positive finite values")
-    if not math.isfinite(ghost_width_a) or ghost_width_a <= 0.0:
-        raise ValueError("ghost_width_a must be positive and finite")
-    return {
-        "cell_lengths_a": list(lengths),
-        "ghost_width_a": ghost_width_a,
-        "acceptance_rule": (
-            "Toolkit DomainParallel require_nondegenerate=True must confirm "
-            "that every rank retains remote atoms"
-        ),
-        "checked_during_each_multi_gpu_run": True,
-        "box_length_only_precheck": "not_used",
-        "reason": (
-            "Whether a halo covers the full structure depends on the actual "
-            "rank layout and atom positions, not only the shortest box axis."
-        ),
-    }
-
-
 def expected_pme_setup(
     *,
     cell_lengths_a: Iterable[float],
@@ -586,53 +454,37 @@ def expected_pme_setup(
     accuracy: float,
     mesh_safety_factor: float,
 ) -> dict[str, Any]:
-    """Mirror the pinned Toolkit-Ops PME estimator for one orthorhombic cell."""
-
-    try:
-        lengths = tuple(float(value) for value in cell_lengths_a)
-    except (TypeError, ValueError) as exc:
-        raise ValueError("cell_lengths_a must contain numeric values") from exc
+    lengths = tuple(float(value) for value in cell_lengths_a)
     if len(lengths) != 3 or any(
         not math.isfinite(value) or value <= 0.0 for value in lengths
     ):
         raise ValueError("cell_lengths_a must contain three positive finite values")
-    values = {
-        "real_space_cutoff_a": real_space_cutoff_a,
-        "accuracy": accuracy,
-        "mesh_safety_factor": mesh_safety_factor,
-    }
-    if any(not math.isfinite(value) or value <= 0.0 for value in values.values()):
+    if any(
+        not math.isfinite(value) or value <= 0.0
+        for value in (
+            real_space_cutoff_a,
+            accuracy,
+            mesh_safety_factor,
+        )
+    ):
         raise ValueError("PME estimator inputs must be positive and finite")
     alpha = math.sqrt(-math.log(accuracy)) / real_space_cutoff_a
-    raw_mesh_dimensions = tuple(
-        mesh_safety_factor
-        * 2.0
-        * alpha
-        * cell_length_a
-        / (3.0 * accuracy**0.2)
-        for cell_length_a in lengths
+    raw_mesh = tuple(
+        mesh_safety_factor * 2.0 * alpha * length / (3.0 * accuracy**0.2)
+        for length in lengths
     )
-    mesh_dimensions = tuple(
-        int(2 ** math.ceil(math.log2(raw_mesh_dimension)))
-        for raw_mesh_dimension in raw_mesh_dimensions
-    )
+    mesh = tuple(int(2 ** math.ceil(math.log2(dimension))) for dimension in raw_mesh)
     return {
         "real_space_cutoff_a": real_space_cutoff_a,
         "alpha_a_inverse": alpha,
-        "mesh_dimensions": list(mesh_dimensions),
+        "mesh_dimensions": list(mesh),
         "mesh_spacing_a": [
-            cell_length_a / mesh_dimension
-            for cell_length_a, mesh_dimension in zip(
-                lengths,
-                mesh_dimensions,
-                strict=True,
-            )
+            length / dimension for length, dimension in zip(lengths, mesh, strict=True)
         ],
         "accuracy": accuracy,
         "mesh_safety_factor": mesh_safety_factor,
         "parameter_rule": (
-            "estimate_pme_parameters(accuracy, real_space_cutoff, "
-            "mesh_safety_factor)"
+            "estimate_pme_parameters(accuracy, real_space_cutoff, mesh_safety_factor)"
         ),
     }
 
@@ -643,8 +495,6 @@ def expected_ewald_reference_setup(
     volume_a3: float,
     accuracy: float,
 ) -> dict[str, Any]:
-    """Mirror the pinned Toolkit-Ops direct Ewald estimator from cell volume."""
-
     if atom_count <= 0:
         raise ValueError("atom_count must be positive")
     if (
@@ -654,9 +504,7 @@ def expected_ewald_reference_setup(
         or not 0.0 < accuracy < 1.0
     ):
         raise ValueError("Ewald estimator inputs are invalid")
-    eta = (volume_a3**2 / atom_count) ** (1.0 / 6.0) / math.sqrt(
-        2.0 * math.pi
-    )
+    eta = (volume_a3**2 / atom_count) ** (1.0 / 6.0) / math.sqrt(2.0 * math.pi)
     error_factor = math.sqrt(-2.0 * math.log(accuracy))
     return {
         "real_space_cutoff_a": error_factor * eta,
@@ -667,91 +515,11 @@ def expected_ewald_reference_setup(
     }
 
 
-def capacity_case_id(pair_count: int, world_size: int) -> str:
-    return f"capacity-pairs-{pair_count:06d}-gpus-{world_size:02d}"
-
-
-def validation_case_id(pair_count: int) -> str:
-    return f"electrostatics-validation-pairs-{pair_count:06d}-gpus-01"
-
-
-def parity_case_id(pair_count: int, world_size: int) -> str:
-    return f"parity-pairs-{pair_count:06d}-gpus-{world_size:02d}"
-
-
-def steady_timing_case_id(pair_count: int, world_size: int) -> str:
-    return f"steady-timing-pairs-{pair_count:06d}-gpus-{world_size:02d}"
-
-
-def speed_case_id(pair_count: int, world_size: int) -> str:
-    """Return the steady-timing ID for callers of the former helper name."""
-
-    return steady_timing_case_id(pair_count, world_size)
-
-
-def rescue_case_id(pair_count: int, world_size: int) -> str:
-    return f"rescue-pairs-{pair_count:06d}-gpus-{world_size:02d}"
-
-
-def measurement_role_for_mode(mode: str) -> str:
-    """Return the explicit campaign role represented by a runner mode."""
-
-    try:
-        return {
-            "capacity": "capacity",
-            "parity": "parity",
-            "distributed": "rescue",
-            "steady-timing": "steady_timing",
-            "electrostatics-validation": "electrostatics_validation",
-        }[mode]
-    except KeyError as exc:
-        raise ValueError(f"unknown domain campaign mode: {mode}") from exc
-
-
-def _require_complete_distributed_outcomes(
-    selection: dict[str, Any],
-    rows_by_case: dict[str, dict[str, Any]],
-) -> tuple[int, ...]:
-    """Require complete steady timings and a successful OOM retry."""
-
-    largest_success_count = int(selection["largest_success"]["input"]["pair_count"])
-    first_oom_count = int(selection["first_cuda_oom"]["input"]["pair_count"])
-
-    for world_size in DOMAIN_METHODOLOGY.steady_timing_world_sizes:
-        case_id = steady_timing_case_id(largest_success_count, world_size)
-        row = rows_by_case.get(case_id)
-        if row is None:
-            raise ValueError(f"missing {world_size}-GPU steady-timing case: {case_id}")
-        if not bool(row.get("success")):
-            raise ValueError(
-                f"{world_size}-GPU steady-timing case did not complete: {case_id}"
-            )
-        if row.get("measurement_role") != "steady_timing":
-            raise ValueError(f"steady-timing case has the wrong role: {case_id}")
-
-    successful_rescue_world_sizes: list[int] = []
-    for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES:
-        case_id = rescue_case_id(first_oom_count, world_size)
-        row = rows_by_case.get(case_id)
-        if row is None:
-            raise ValueError(f"missing {world_size}-GPU OOM retry: {case_id}")
-        if bool(row.get("success")):
-            successful_rescue_world_sizes.append(world_size)
-    if not successful_rescue_world_sizes:
-        raise ValueError(
-            "the first one-GPU CUDA OOM input did not succeed on any declared "
-            "multi-GPU size"
-        )
-    return tuple(successful_rescue_world_sizes)
-
-
 def validate_recorded_rank_layout(
-    distributed: dict[str, Any],
+    distributed: Mapping[str, Any],
     *,
     world_size: int,
 ) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    """Validate a layout recorded by Toolkit for the case's actual cell."""
-
     try:
         cells_per_dim = tuple(int(value) for value in distributed["cells_per_dim"])
         rank_grid = tuple(int(value) for value in distributed["rank_grid"])
@@ -762,16 +530,14 @@ def validate_recorded_rank_layout(
         or len(rank_grid) != 3
         or any(value <= 0 for value in (*cells_per_dim, *rank_grid))
         or math.prod(rank_grid) != world_size
-        or any(ranks > cells for ranks, cells in zip(
-            rank_grid,
-            cells_per_dim,
-            strict=True,
-        ))
-        or any(cells % ranks for ranks, cells in zip(
-            rank_grid,
-            cells_per_dim,
-            strict=True,
-        ))
+        or any(
+            ranks > cells or cells % ranks
+            for ranks, cells in zip(
+                rank_grid,
+                cells_per_dim,
+                strict=True,
+            )
+        )
     ):
         raise ValueError(
             "recorded cells_per_dim and rank_grid do not match the world size"
@@ -783,6 +549,14 @@ def input_directory_name(pair_count: int) -> str:
     return f"phenol-nma-pairs-{pair_count:06d}"
 
 
+def fixed_case_id(pair_count: int, world_size: int) -> str:
+    return f"fixed-evaluation-pairs-{pair_count:06d}-gpus-{world_size:02d}"
+
+
+def validation_case_id(pair_count: int) -> str:
+    return f"electrostatics-validation-pairs-{pair_count:06d}-gpus-01"
+
+
 def result_filename(case_id: str) -> str:
     return f"{case_id}.json"
 
@@ -790,151 +564,86 @@ def result_filename(case_id: str) -> str:
 def build_plan(
     *,
     run_id: str,
-    world_sizes: tuple[int, ...],
-    capacity_pair_counts: tuple[int, ...],
-    validation_pairs: int,
-    density_g_cm3: float,
-    pme_cutoff_a: float,
-    pme_mesh_safety_factor: float,
-    pme_spline_order: int,
-    pme_accuracy: float,
-    ewald_reference_accuracy: float,
-    d3_cutoff_a: float,
-    d3_smoothing_fraction: float,
-    domain_skin_a: float,
-    packmol_tolerance_a: float,
-    packmol_precision_a: float,
-    packmol_seed: int,
-    steady_timing_warmup_count: int = DEFAULT_STEADY_TIMING_WARMUP_COUNT,
-    steady_timing_sample_count: int = DEFAULT_STEADY_TIMING_SAMPLE_COUNT,
+    tutorial_commit: str,
+    world_size: int,
 ) -> dict[str, Any]:
     if not run_id or not run_id.replace("-", "").replace("_", "").isalnum():
         raise ValueError("run_id may contain only letters, numbers, '-' and '_'")
-    unsupported = set(world_sizes) - set(DEFAULT_WORLD_SIZES)
-    if unsupported:
+    if not (
+        len(tutorial_commit) == 40
+        and all(character in "0123456789abcdef" for character in tutorial_commit)
+    ):
+        raise ValueError("tutorial_commit must be a full lowercase Git SHA")
+    if world_size not in DEFAULT_WORLD_SIZES:
         raise ValueError(
-            f"world sizes must be selected from {DEFAULT_WORLD_SIZES}; "
-            f"got {sorted(unsupported)}"
+            f"world_size must be one of {DEFAULT_WORLD_SIZES}; got {world_size}"
         )
-    if tuple(sorted(capacity_pair_counts)) != capacity_pair_counts:
-        raise ValueError("capacity pair counts must be strictly increasing")
-    for pair_count in (*capacity_pair_counts, validation_pairs):
-        balanced_repeat_factors(pair_count)
-    positive_floats = {
-        "density_g_cm3": density_g_cm3,
-        "pme_cutoff_a": pme_cutoff_a,
-        "pme_mesh_safety_factor": pme_mesh_safety_factor,
-        "pme_accuracy": pme_accuracy,
-        "ewald_reference_accuracy": ewald_reference_accuracy,
-        "d3_cutoff_a": d3_cutoff_a,
-        "domain_skin_a": domain_skin_a,
-        "packmol_tolerance_a": packmol_tolerance_a,
-        "packmol_precision_a": packmol_precision_a,
+
+    pair_count = DEFAULT_FIXED_PAIR_COUNT
+    geometry = planned_supercell_geometry(
+        pair_count,
+        DEFAULT_DENSITY_G_CM3,
+    )
+    case_id = fixed_case_id(pair_count, world_size)
+    fixed_case = {
+        "case_id": case_id,
+        "mode": "distributed",
+        "measurement_role": "fixed_evaluation",
+        "world_size": world_size,
+        "pair_count": pair_count,
+        "molecules_per_species": pair_count,
+        "atom_count": pair_count * ATOMS_PER_PAIR,
+        **geometry,
+        "repeat_factors_xyz": list(balanced_repeat_factors(pair_count)),
+        "input_directory": input_directory_name(pair_count),
+        "result_file": result_filename(case_id),
     }
-    for name, value in positive_floats.items():
-        if not math.isfinite(value) or value <= 0.0:
-            raise ValueError(f"{name} must be positive and finite")
-    if pme_spline_order <= 0:
-        raise ValueError("pme_spline_order must be positive")
-    if steady_timing_warmup_count < 1:
-        raise ValueError("steady_timing_warmup_count must be at least 1")
-    if steady_timing_sample_count < 5:
-        raise ValueError("steady_timing_sample_count must be at least 5")
-    if not 0.0 <= d3_smoothing_fraction < 1.0:
-        raise ValueError("d3_smoothing_fraction must be in [0, 1)")
-    if packmol_precision_a >= packmol_tolerance_a:
-        raise ValueError("packmol_precision_a must be smaller than tolerance")
-
-    capacity_cases = []
-    for world_size in world_sizes:
-        for pair_count in capacity_pair_counts:
-            case_id = capacity_case_id(pair_count, world_size)
-            geometry = planned_supercell_geometry(pair_count, density_g_cm3)
-            capacity_cases.append(
-                {
-                    "case_id": case_id,
-                    "mode": "capacity",
-                    "measurement_role": "capacity",
-                    "world_size": world_size,
-                    "pair_count": pair_count,
-                    "molecules_per_species": pair_count,
-                    "atom_count": pair_count * ATOMS_PER_PAIR,
-                    **geometry,
-                    "repeat_factors_xyz": list(
-                        balanced_repeat_factors(pair_count)
-                    ),
-                    "rank_grid_policy": "automatic_from_actual_cell",
-                    "input_directory": input_directory_name(pair_count),
-                    "result_file": result_filename(case_id),
-                    "fresh_process_required": True,
-                }
-            )
-
     validation_cases: list[dict[str, Any]] = []
-    if 1 in world_sizes:
-        case_id = validation_case_id(validation_pairs)
-        geometry = planned_supercell_geometry(validation_pairs, density_g_cm3)
+    if world_size == 1:
+        validation_pairs = DEFAULT_VALIDATION_PAIRS
+        validation_id = validation_case_id(validation_pairs)
         validation_cases.append(
             {
-                "case_id": case_id,
+                "case_id": validation_id,
                 "mode": "electrostatics-validation",
                 "measurement_role": "electrostatics_validation",
                 "world_size": 1,
                 "pair_count": validation_pairs,
                 "molecules_per_species": validation_pairs,
                 "atom_count": validation_pairs * ATOMS_PER_PAIR,
-                **geometry,
-                "repeat_factors_xyz": list(
-                    balanced_repeat_factors(validation_pairs)
+                **planned_supercell_geometry(
+                    validation_pairs,
+                    DEFAULT_DENSITY_G_CM3,
                 ),
+                "repeat_factors_xyz": list(balanced_repeat_factors(validation_pairs)),
                 "input_directory": input_directory_name(validation_pairs),
-                "result_file": result_filename(case_id),
-                "fresh_process_required": True,
+                "result_file": result_filename(validation_id),
                 "comparison": (
-                    "PME and Ewald on the same geometry and AIMNet2-predicted charges"
+                    "PME and direct Ewald on the same geometry and "
+                    "AIMNet2-predicted charges"
                 ),
             }
         )
 
+    methodology_identity = methodology_source_identity()
     return {
         "schema": PLAN_SCHEMA,
         "created_utc": utc_now(),
         "run_id": run_id,
-        "description": (
-            "One periodic 1:1 phenol and N-methylacetamide box. The main "
-            "calculation is AIMNet2 checkpoint base plus PME electrostatics plus "
-            "D3(BJ) dispersion through DomainParallel."
-        ),
         "source": {
+            "tutorial_commit": tutorial_commit,
             "toolkit_core_commit": CORE_COMMIT,
             "toolkit_ops_commit": OPS_COMMIT,
             "nci_subset_sha256": NCI_SUBSET_SHA256,
             "aimnet_checkpoint": AIMNET_CHECKPOINT,
             "aimnet_checkpoint_sha256": AIMNET_CHECKPOINT_SHA256,
             "d3_parameter_sha256": D3_PARAMETER_SHA256,
-            "domain_methodology_config": methodology_source_identity(),
+            "domain_methodology_config": methodology_identity,
         },
         "methodology": {
             "source": DOMAIN_METHODOLOGY.as_record(),
-            "source_identity": methodology_source_identity(),
-            "resolved_values": resolved_methodology_values(
-                capacity_pair_counts=capacity_pair_counts,
-                validation_pairs=validation_pairs,
-                density_g_cm3=density_g_cm3,
-                pme_cutoff_a=pme_cutoff_a,
-                pme_mesh_safety_factor=pme_mesh_safety_factor,
-                pme_spline_order=pme_spline_order,
-                pme_accuracy=pme_accuracy,
-                ewald_reference_accuracy=ewald_reference_accuracy,
-                d3_cutoff_a=d3_cutoff_a,
-                d3_smoothing_fraction=d3_smoothing_fraction,
-                domain_skin_a=domain_skin_a,
-                packmol_tolerance_a=packmol_tolerance_a,
-                packmol_precision_a=packmol_precision_a,
-                packmol_seed=packmol_seed,
-                steady_timing_warmup_count=steady_timing_warmup_count,
-                steady_timing_sample_count=steady_timing_sample_count,
-            ),
+            "source_identity": methodology_identity,
+            "resolved_values": resolved_methodology_values(),
         },
         "input": {
             "molecules": ["phenol", "N-methylacetamide"],
@@ -943,41 +652,28 @@ def build_plan(
             "stoichiometry": "1:1",
             "count_definition": MOLECULE_COUNT_DEFINITION,
             "atoms_per_pair": ATOMS_PER_PAIR,
-            "pair_mass_u_from_formulas": PAIR_MASS_U_FROM_FORMULAS,
-            "construction_density_g_cm3": density_g_cm3,
-            "packmol_tolerance_a": packmol_tolerance_a,
-            "packmol_precision_a": packmol_precision_a,
-            "packmol_base_seed": packmol_seed,
-            "packmol_version": EXPECTED_PACKMOL_VERSION,
-            "packmol_periodic_boundary_check": True,
+            "construction_density_g_cm3": DEFAULT_DENSITY_G_CM3,
             "construction_method": "balanced_integer_supercell_repeat",
             "base_box_schema": BASE_BOX_SCHEMA,
             "base_pair_count": BASE_PAIR_COUNT,
             "base_atom_count": BASE_ATOM_COUNT,
-            "interpretation": (
-                "Packmol created one checked 128-pair starting geometry. "
-                "Larger inputs are balanced integer supercells of that box, "
-                "which preserves its composition and construction density. "
-                "The geometry is not equilibrated and the density is not a "
-                "material prediction."
-            ),
         },
         "model": {
             "aimnet_checkpoint": AIMNET_CHECKPOINT,
             "aimnet_compile_model": False,
-            "pme_cutoff_a": pme_cutoff_a,
-            "pme_mesh_safety_factor": pme_mesh_safety_factor,
-            "pme_parameter_rule": (
-                "estimate_pme_parameters(accuracy, real_space_cutoff, "
-                "mesh_safety_factor)"
-            ),
-            "pme_spline_order": pme_spline_order,
-            "pme_accuracy": pme_accuracy,
-            "ewald_reference_accuracy": ewald_reference_accuracy,
-            "d3_cutoff_a": d3_cutoff_a,
-            "d3_smoothing_fraction": d3_smoothing_fraction,
+            "pme_cutoff_a": DEFAULT_PME_CUTOFF_A,
+            "pme_mesh_safety_factor": DEFAULT_PME_MESH_SAFETY_FACTOR,
+            "pme_spline_order": DEFAULT_PME_SPLINE_ORDER,
+            "pme_accuracy": DEFAULT_PME_ACCURACY,
+            "ewald_reference_accuracy": DEFAULT_EWALD_REFERENCE_ACCURACY,
+            "d3_cutoff_a": DEFAULT_D3_CUTOFF_A,
+            "d3_smoothing_fraction": DEFAULT_D3_SMOOTHING_FRACTION,
             "d3_parameters": "read from AIMNet2 checkpoint metadata",
             "neighbor_adaptation": "never",
+            "position_invariance": {
+                "method": "maximum_minimum_image_displacement",
+                "tolerance_a": (DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A),
+            },
             "pipeline_groups": [
                 {
                     "steps": ["AIMNet2Wrapper", "PMEModelWrapper"],
@@ -991,116 +687,71 @@ def build_plan(
         },
         "distributed": {
             "api": "DomainParallel",
+            "world_size": world_size,
             "mesh_dim_names": ["domain"],
             "grid_dims": DOMAIN_METHODOLOGY.domain_grid_dims,
-            "rank_grid_policy": (
-                "Toolkit SpatialPartitioner derives cells_per_dim and rank_grid "
-                "from each input's actual cell shape and the domain cutoff"
-            ),
-            "recorded_layout_fields": ["cells_per_dim", "rank_grid"],
             "domain_cutoff_a": max(
-                pme_cutoff_a,
-                d3_cutoff_a,
-                AIMNET_NEIGHBOR_CUTOFF_A,
+                DEFAULT_PME_CUTOFF_A,
+                DEFAULT_D3_CUTOFF_A,
+                DOMAIN_METHODOLOGY.aimnet_neighbor_cutoff_a,
             ),
-            "domain_skin_a": domain_skin_a,
+            "domain_skin_a": DEFAULT_DOMAIN_SKIN_A,
             "compile": False,
-            "require_nondegenerate_for_world_size_gt_1": True,
-            "pme_reciprocal_mesh": (
-                "replicated on every rank in the Toolkit 0.2 version used here"
-            ),
+            "require_nondegenerate": world_size > 1,
         },
         "timing": {
-            "cold": {
-                "measurement_kind": "cold_one_shot_partition_run_gather",
-                "measurement_roles": ["capacity", "parity", "rescue"],
-                "boundary": (
-                    "After fresh DomainParallel construction and context entry: "
-                    "rank barrier and CUDA synchronization; one public partition, "
-                    "run, and gather workflow; final CUDA synchronization. Model "
-                    "loading the checked base box, constructing its supercell, "
-                    "model loading, Batch construction, host-to-device transfer, "
-                    "file writes, output checks, context cleanup, and process "
-                    "launch are outside this time."
-                ),
-                "warmup_count": 0,
-                "sample_count": 1,
-                "work_note": (
-                    "These rows answer fit and correctness questions and are not "
-                    "used for speedup. Toolkit's multi-rank path performs an "
-                    "automatic initial force evaluation."
-                ),
-            },
-            "steady": {
-                "measurement_kind": "steady_partition_run_gather",
-                "measurement_role": "steady_timing",
-                "world_sizes": list(DOMAIN_METHODOLOGY.steady_timing_world_sizes),
-                "boundary": (
-                    "Each warmup and measured sample creates and enters a fresh "
-                    "DomainParallel context outside the timer. After a rank barrier "
-                    "and CUDA synchronization, the timer covers exactly one public "
-                    "partition, run, and gather workflow plus final CUDA "
-                    "synchronization. The elapsed value is reduced with the maximum "
-                    "across ranks. Output and unchanged-input checks, statistics, "
-                    "context exit, and file writes are outside the timer. One rank "
-                    "requests two BaseDynamics steps; several ranks request one "
-                    "step after DomainParallel's automatic initial force "
-                    "evaluation."
-                ),
-                "warmup_count": steady_timing_warmup_count,
-                "sample_count": steady_timing_sample_count,
-                "model_evaluations_per_workflow": (
-                    DOMAIN_METHODOLOGY.steady_timing_model_evaluations_per_workflow
-                ),
-                "one_rank_run_steps": DOMAIN_METHODOLOGY.steady_timing_run_steps(1),
-                "multi_rank_run_steps": (
-                    DOMAIN_METHODOLOGY.steady_timing_run_steps(
-                        DOMAIN_METHODOLOGY.distributed_world_sizes[0]
-                    )
-                ),
-                "summary": "median, Q1, Q3, and IQR of max-rank sample seconds",
-                "quartile_method": "inclusive linear interpolation",
-                "max_relative_iqr": (
-                    DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr
-                ),
-            },
+            "measurement_kind": "fixed_structure_energy_force_pass",
+            "warmup_count": DEFAULT_WARMUP_COUNT,
+            "pass_count": DEFAULT_PASS_COUNT,
+            "measured_model_evaluations_per_pass": (
+                DOMAIN_METHODOLOGY.measured_model_evaluations_per_pass
+            ),
+            "multi_rank_warmup_force_prime_evaluations": (
+                DOMAIN_METHODOLOGY.domain_parallel_multi_rank_warmup_force_prime_evaluations
+                if world_size > 1
+                else 0
+            ),
+            "timed_work": (
+                "Create one DomainParallel context and partition once. Run one "
+                "untimed initialization pass. For each of three measured passes, "
+                "synchronize ranks and CUDA, time one public run(n_steps=1), then "
+                "synchronize CUDA. Gather once after the measured passes."
+            ),
             "publishable_benchmark": False,
             "interpretation": (
-                "Only complete dedicated steady_timing rows on the identical "
-                "selected input are used for speedup and parallel efficiency. "
-                "Cold capacity, parity, and rescue observations are excluded."
-            ),
-            "memory_boundary": (
-                "For successful cases, per-rank CUDA peaks are reset after model "
-                "setup and input transfer, immediately before each public workflow. "
-                "The reported peak is the maximum over all workflows and ranks. "
-                "Failed cases retain the peak reached before the failure."
+                "The three raw pass times and their median describe this short "
+                "fixed-input example. They are not a general scaling benchmark."
             ),
         },
-        "validation_cases": validation_cases,
         "validation_acceptance": {
-            "declared_before_measurement": True,
-            "absolute_energy_difference_ev_per_atom_max": (
+            "pme_ewald_energy_difference_ev_per_atom_max": (
                 DEFAULT_PME_EWAL_ENERGY_TOL_EV_PER_ATOM
             ),
-            "force_difference_max_norm_ev_a_max": (DEFAULT_PME_EWAL_FORCE_MAX_TOL_EV_A),
+            "pme_ewald_force_difference_max_norm_ev_a_max": (
+                DEFAULT_PME_EWAL_FORCE_MAX_TOL_EV_A
+            ),
             "absolute_charge_sum_e_max": DEFAULT_CHARGE_SUM_TOL_E,
+            "distributed_energy_repeatability_span_ev_per_atom_max": (
+                DEFAULT_DISTRIBUTED_ENERGY_REPEATABILITY_TOL_EV_PER_ATOM
+            ),
+            "distributed_energy_agreement_abs_difference_ev_per_atom_max": (
+                DEFAULT_EVALUATION_ENERGY_TOL_EV_PER_ATOM
+            ),
+            "evaluation_force_atol_ev_a": (DEFAULT_EVALUATION_FORCE_ATOL_EV_A),
+            "evaluation_force_rtol": DEFAULT_EVALUATION_FORCE_RTOL,
+            "evaluation_position_mic_tolerance_a": (
+                DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+            ),
         },
-        "capacity_cases": capacity_cases,
-        "capacity_policy": (
-            "Run the declared one-GPU ladder in fresh processes and stop after "
-            "the first genuine CUDA OOM, retaining that failed attempt. Retry "
-            "that exact input on the declared multi-GPU grids. Do not lower "
-            "cutoffs, change precision, skip an attempted row, or create an "
-            "artificial OOM."
-        ),
+        "fixed_case": fixed_case,
+        "validation_cases": validation_cases,
+        "planned_case_count": 1 + len(validation_cases),
     }
 
 
 def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
-    """Build one campaign input from the checked 3,200-atom base box."""
+    """Build one deterministic integer supercell from the checked base box."""
 
-    # Heavy, optional imports live only in the command that needs them.
     import numpy as np
     from ase.io import read as ase_read
     from ase.io import write as ase_write
@@ -1124,9 +775,8 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
             raise ValueError("existing input manifest has an unknown schema")
         if manifest["structure"]["sha256"] != sha256_file(extxyz_path):
             raise ValueError("existing structure checksum does not match its manifest")
-        geometry = validated_manifest_cell_geometry(manifest)
         require_planned_supercell_geometry(
-            geometry,
+            validated_manifest_cell_geometry(manifest),
             pair_count=args.pair_count,
             density_g_cm3=args.density_g_cm3,
         )
@@ -1151,51 +801,40 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
         )
     if not base_manifest_path.is_file() or not base_structure_path.is_file():
         raise FileNotFoundError(
-            "checked base box needs manifest.json and structure.extxyz: "
-            f"{base_dir}"
+            f"checked base box needs manifest.json and structure.extxyz: {base_dir}"
         )
 
     base_manifest = json.loads(base_manifest_path.read_text(encoding="utf-8"))
     if base_manifest.get("schema") != BASE_BOX_SCHEMA:
         raise ValueError("base box manifest has an unknown schema")
-    base_structure_record = base_manifest.get("structure", {})
-    base_source_record = base_manifest.get("source", {})
-    base_packmol_record = base_source_record.get("packmol", {})
-    base_methodology_record = base_manifest.get("methodology", {})
+    structure_record = base_manifest.get("structure", {})
+    source_record = base_manifest.get("source", {})
+    packmol_record = source_record.get("packmol", {})
+    methodology_record = base_manifest.get("methodology", {})
     if (
-        int(base_structure_record.get("molecules_per_species", -1))
-        != BASE_PAIR_COUNT
-        or int(base_structure_record.get("atom_count", -1)) != BASE_ATOM_COUNT
-        or int(base_structure_record.get("molecule_count", -1))
-        != 2 * BASE_PAIR_COUNT
-        or base_source_record.get("molecule_counts")
-        != {"phenol": BASE_PAIR_COUNT, "N-methylacetamide": BASE_PAIR_COUNT}
+        int(structure_record.get("molecules_per_species", -1)) != BASE_PAIR_COUNT
+        or int(structure_record.get("atom_count", -1)) != BASE_ATOM_COUNT
+        or structure_record.get("sha256") != sha256_file(base_structure_path)
+        or source_record.get("molecule_counts")
+        != {
+            "phenol": BASE_PAIR_COUNT,
+            "N-methylacetamide": BASE_PAIR_COUNT,
+        }
     ):
-        raise ValueError("base box does not match the declared 128-pair system")
-    if base_structure_record["sha256"] != sha256_file(base_structure_path):
-        raise ValueError("base box structure checksum does not match its manifest")
+        raise ValueError("base box does not match the declared input")
     if (
-        float(base_structure_record["construction_density_g_cm3"])
+        float(structure_record["construction_density_g_cm3"])
         != float(args.density_g_cm3)
-        or float(base_packmol_record["tolerance_a"])
-        != float(args.tolerance_a)
-        or float(base_packmol_record.get("precision_a", math.nan))
-        != float(args.precision_a)
-        or int(base_packmol_record["seed"]) != int(args.seed)
-        or base_packmol_record.get("version") != EXPECTED_PACKMOL_VERSION
-        or base_source_record["nci_subset_sha256"] != NCI_SUBSET_SHA256
-        or str(base_source_record.get("nci_system_id")) != str(NCI_SYSTEM_ID)
-        or float(base_source_record.get("nci_scale", math.nan)) != float(NCI_SCALE)
+        or float(packmol_record["tolerance_a"]) != float(args.tolerance_a)
+        or float(packmol_record["precision_a"]) != float(args.precision_a)
+        or int(packmol_record["seed"]) != int(args.seed)
+        or packmol_record.get("version") != EXPECTED_PACKMOL_VERSION
+        or source_record["nci_subset_sha256"] != NCI_SUBSET_SHA256
+        or str(source_record.get("nci_system_id")) != str(NCI_SYSTEM_ID)
+        or float(source_record.get("nci_scale")) != float(NCI_SCALE)
+        or methodology_record != BASE_BOX_METHODOLOGY
     ):
         raise ValueError("base box was built with different construction settings")
-    if (
-        base_methodology_record.get("schema") != DOMAIN_METHODOLOGY.schema
-        or base_methodology_record.get("name")
-        != DOMAIN_METHODOLOGY.name
-        or base_methodology_record.get("version")
-        != DOMAIN_METHODOLOGY.version
-    ):
-        raise ValueError("base box was built with a different domain methodology")
     if args.nci_data is not None:
         nci_data = args.nci_data.resolve()
         if not nci_data.is_file() or sha256_file(nci_data) != NCI_SUBSET_SHA256:
@@ -1204,7 +843,7 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
     base_atoms = ase_read(base_structure_path, format="extxyz")
     if len(base_atoms) != BASE_ATOM_COUNT:
         raise ValueError("base box structure has the wrong atom count")
-    for name, expected in base_structure_record.get("arrays", {}).items():
+    for name, expected in structure_record.get("arrays", {}).items():
         if name not in base_atoms.arrays:
             raise ValueError(f"base box structure is missing array {name}")
         values = np.asarray(base_atoms.arrays[name])
@@ -1220,6 +859,7 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
         or base_atoms.info.get("count_definition") != MOLECULE_COUNT_DEFINITION
     ):
         raise ValueError("base box structure metadata does not match the lesson")
+
     packed, repeat_factors = build_molecular_supercell(
         base_atoms,
         base_pair_count=BASE_PAIR_COUNT,
@@ -1229,25 +869,44 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
         raise RuntimeError("expanded structure has the wrong atom count")
     if int(packed.info.get("charge", 0)) != 0:
         raise ValueError("expanded molecular box must be neutral")
-
-    density_from_mass_and_cell = (
-        float(np.sum(packed.get_masses()))
-        * 1.66053906660
-        / float(packed.get_volume())
+    fractional_before = np.asarray(
+        packed.get_scaled_positions(wrap=False),
+        dtype=float,
+    )
+    outside_before = int(
+        np.any(
+            (fractional_before < 0.0) | (fractional_before >= 1.0),
+            axis=1,
+        ).sum()
+    )
+    packed.wrap(eps=0.0)
+    fractional_after = np.asarray(
+        packed.get_scaled_positions(wrap=False),
+        dtype=float,
+    )
+    outside_after = int(
+        np.any(
+            (fractional_after < 0.0) | (fractional_after >= 1.0),
+            axis=1,
+        ).sum()
+    )
+    if outside_after != 0:
+        raise RuntimeError(
+            "expanded structure was not wrapped into the primary periodic cell"
+        )
+    density = (
+        float(np.sum(packed.get_masses())) * 1.66053906660 / float(packed.get_volume())
     )
     if not math.isclose(
-        density_from_mass_and_cell,
+        density,
         args.density_g_cm3,
         rel_tol=1.0e-10,
         abs_tol=1.0e-12,
     ):
         raise ValueError("expanded box density does not match the checked base box")
-    pair_mass_u_ase = float(np.sum(packed.get_masses())) / args.pair_count
-    if abs(pair_mass_u_ase - PAIR_MASS_U_FROM_FORMULAS) > 0.1:
-        raise ValueError(
-            "ASE structure mass does not match the mass derived from formulas: "
-            f"{pair_mass_u_ase} versus {PAIR_MASS_U_FROM_FORMULAS}"
-        )
+    pair_mass_u = float(np.sum(packed.get_masses())) / args.pair_count
+    if abs(pair_mass_u - PAIR_MASS_U_FROM_FORMULAS) > 0.1:
+        raise ValueError("ASE structure mass does not match the molecular formulas")
 
     packed.info.update(
         {
@@ -1267,17 +926,13 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
     output_dir.mkdir(parents=True, exist_ok=True)
     ase_write(extxyz_path, packed, format="extxyz")
 
-    packing_helper_path = (PART_DIR / "aux" / "domain" / "packing.py").resolve()
-    base_manifest_sha256 = sha256_file(base_manifest_path)
-    base_structure_sha256 = sha256_file(base_structure_path)
     cell_a = np.asarray(packed.cell, dtype=float).tolist()
-    cell_lengths_a, volume_a3 = _cell_geometry_from_matrix(cell_a)
-    equivalent_cubic_length_a = volume_a3 ** (1.0 / 3.0)
+    lengths, volume_a3 = _cell_geometry_from_matrix(cell_a)
     geometry = {
         "cell_geometry": "orthorhombic",
-        "cell_lengths_a": list(cell_lengths_a),
-        "minimum_cell_length_a": min(cell_lengths_a),
-        "equivalent_cubic_length_a": equivalent_cubic_length_a,
+        "cell_lengths_a": list(lengths),
+        "minimum_cell_length_a": min(lengths),
+        "equivalent_cubic_length_a": volume_a3 ** (1.0 / 3.0),
         "volume_a3": volume_a3,
     }
     require_planned_supercell_geometry(
@@ -1285,6 +940,7 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
         pair_count=args.pair_count,
         density_g_cm3=args.density_g_cm3,
     )
+    packing_helper = PART_DIR / "aux" / "domain" / "packing.py"
     manifest = {
         "schema": INPUT_SCHEMA,
         "created_utc": utc_now(),
@@ -1300,39 +956,41 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
         "equivalent_cubic_length_a": geometry["equivalent_cubic_length_a"],
         "volume_a3": geometry["volume_a3"],
         "construction_density_g_cm3": args.density_g_cm3,
-        "density_from_mass_and_cell_g_cm3": density_from_mass_and_cell,
-        "pair_mass_u": pair_mass_u_ase,
+        "density_from_mass_and_cell_g_cm3": density,
+        "pair_mass_u": pair_mass_u,
         "construction": {
             "method": "balanced_integer_supercell_repeat",
             "base_pair_count": BASE_PAIR_COUNT,
             "repeat_multiplier": args.pair_count // BASE_PAIR_COUNT,
             "repeat_factors_xyz": list(repeat_factors),
+            "periodic_coordinate_canonicalization": {
+                "method": "ase.Atoms.wrap",
+                "eps": 0.0,
+                "fractional_interval": "[0, 1)",
+                "atoms_outside_before": outside_before,
+                "atoms_outside_after": outside_after,
+            },
             "base_box_manifest": str(base_manifest_path),
             "base_box_manifest_schema": BASE_BOX_SCHEMA,
-            "base_box_manifest_sha256": base_manifest_sha256,
+            "base_box_manifest_sha256": sha256_file(base_manifest_path),
             "base_box_structure": str(base_structure_path),
-            "base_box_structure_sha256": base_structure_sha256,
+            "base_box_structure_sha256": sha256_file(base_structure_path),
             "packmol_rerun": False,
         },
         "packmol": {
             "applied_to": "checked_base_box_only",
-            "version": base_packmol_record["version"],
-            "seed": base_packmol_record["seed"],
-            "tolerance_a": base_packmol_record["tolerance_a"],
-            "precision_a": base_packmol_record["precision_a"],
+            "version": packmol_record["version"],
+            "seed": packmol_record["seed"],
+            "tolerance_a": packmol_record["tolerance_a"],
+            "precision_a": packmol_record["precision_a"],
             "periodic_boundary_check": True,
-            "periodic_min_distance_a": base_structure_record.get(
-                "periodic_min_distance_a"
-            ),
-            "periodic_min_distance_lower_bound_a": base_structure_record.get(
-                "periodic_min_distance_a"
-            ),
-            "periodic_min_distance_required_a": base_structure_record.get(
+            "periodic_min_distance_a": structure_record.get("periodic_min_distance_a"),
+            "periodic_min_distance_required_a": structure_record.get(
                 "min_distance_required_a"
             ),
         },
         "source": {
-            "nci_subset": base_source_record.get("nci_subset_file"),
+            "nci_subset": source_record.get("nci_subset_file"),
             "nci_subset_sha256": NCI_SUBSET_SHA256,
             "nci_system_id": NCI_SYSTEM_ID,
             "nci_scale": NCI_SCALE,
@@ -1340,14 +998,15 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
                 "A": "phenol",
                 "B": "N-methylacetamide",
             },
-            "packing_helper": str(packing_helper_path),
-            "packing_helper_sha256": sha256_file(packing_helper_path),
-            "domain_methodology_config": str(DOMAIN_METHODOLOGY_CONFIG_PATH),
+            "packing_helper": str(packing_helper.resolve()),
+            "packing_helper_sha256": sha256_file(packing_helper),
+            "domain_methodology_config": str(DOMAIN_METHODOLOGY_CONFIG_PATH.resolve()),
             "domain_methodology_config_sha256": sha256_file(
                 DOMAIN_METHODOLOGY_CONFIG_PATH
             ),
             "domain_methodology_name": DOMAIN_METHODOLOGY.name,
             "domain_methodology_version": DOMAIN_METHODOLOGY.version,
+            "base_box_methodology": BASE_BOX_METHODOLOGY,
         },
         "structure": {
             "path": str(extxyz_path),
@@ -1356,7 +1015,10 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
             "pbc": [True, True, True],
             "source_atom_id": "0-based stable atom identity",
             "molecule_id": "0-based stable molecule identity",
-            "molecule_kind": {"0": "phenol", "1": "N-methylacetamide"},
+            "molecule_kind": {
+                "0": "phenol",
+                "1": "N-methylacetamide",
+            },
         },
         "interpretation": (
             "This is an integer supercell of the checked Packmol starting "
@@ -1368,2787 +1030,1447 @@ def prepare_input(args: argparse.Namespace) -> dict[str, Any]:
     return manifest
 
 
-def _load_rank_records(directory: Path) -> list[dict[str, Any]]:
-    records = []
-    if directory.is_dir():
-        for path in sorted(directory.glob("rank-*.json")):
-            try:
-                row = json.loads(path.read_text(encoding="utf-8"))
-            except (OSError, json.JSONDecodeError):
-                continue
-            row["rank_record_file"] = str(path)
-            row["rank_record_sha256"] = sha256_file(path)
-            records.append(row)
-    return records
+def _load_json(path: Path) -> dict[str, Any]:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except FileNotFoundError:
+        raise
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError(f"cannot read JSON file: {path}") from exc
+    if not isinstance(value, dict):
+        raise ValueError(f"expected one JSON object: {path}")
+    return value
 
 
-def _read_case_result(path: Path, case: dict[str, Any]) -> dict[str, Any]:
-    if not path.is_file():
-        raise FileNotFoundError(
-            f"planned case has no result row: {case['case_id']} at {path}"
-        )
-    row = json.loads(path.read_text(encoding="utf-8"))
+def _read_case_result(
+    path: Path,
+    case: Mapping[str, Any],
+) -> dict[str, Any]:
+    row = _load_json(path)
     if row.get("schema") != RESULT_SCHEMA:
         raise ValueError(f"{path} has an unknown result schema")
-    if row.get("case_id") != case["case_id"]:
-        raise ValueError(f"{path} does not match its planned case")
-    if row.get("mode") != case.get("mode"):
-        raise ValueError(f"{path} has the wrong planned mode")
-    if row.get("measurement_role") != case.get("measurement_role"):
-        raise ValueError(f"{path} has the wrong planned measurement role")
+    for key in ("case_id", "mode", "measurement_role"):
+        if row.get(key) != case.get(key):
+            raise ValueError(f"{path} has the wrong planned {key}")
     row["result_file"] = str(path)
     row["result_file_sha256"] = sha256_file(path)
     return row
 
 
-def _capacity_prefix(
-    plan: dict[str, Any],
-    result_dir: Path,
-) -> list[dict[str, Any]]:
-    cases = [case for case in plan["capacity_cases"] if int(case["world_size"]) == 1]
-    if not cases:
-        raise ValueError("capacity selection requires a one-GPU ladder")
-    rows: list[dict[str, Any]] = []
-    saw_oom = False
-    for case in cases:
-        path = result_dir / case["result_file"]
-        if saw_oom:
-            if path.exists():
-                raise ValueError(
-                    "a measured capacity row exists after the first CUDA OOM: "
-                    f"{case['case_id']}"
-                )
-            continue
-        row = _read_case_result(path, case)
-        rows.append(row)
-        if not bool(row["success"]):
-            if row.get("failure", {}).get("is_cuda_oom") is not True:
-                raise ValueError(
-                    "capacity sweep failed before a genuine CUDA OOM: "
-                    f"{case['case_id']}"
-                )
-            saw_oom = True
-    return rows
+def _planned_cases(plan: Mapping[str, Any]) -> list[dict[str, Any]]:
+    return [plan["fixed_case"], *plan.get("validation_cases", [])]
 
 
-def _finite_charge_value(
-    record: dict[str, Any],
-    name: str,
+def _validate_fixed_result(
+    row: Mapping[str, Any],
     *,
-    context: str,
-) -> float:
-    value = record.get(name)
-    if isinstance(value, bool):
-        raise ValueError(f"{context} has an invalid {name}")
+    plan: Mapping[str, Any],
+) -> None:
+    case = plan["fixed_case"]
+    if not bool(row.get("success")):
+        raise ValueError(
+            f"{case['case_id']} failed: {row.get('error', 'unknown error')}"
+        )
+    if int(row["world_size"]) != int(case["world_size"]):
+        raise ValueError("fixed result has the wrong world size")
+    if int(row["atom_count"]) != int(case["atom_count"]):
+        raise ValueError("fixed result has the wrong atom count")
+    timing = row.get("timing", {})
+    warmup_count = int(timing.get("warmup_count", -1))
+    pass_count = int(timing.get("measured_pass_count", -1))
+    samples = timing.get("pass_times_s", [])
+    if (
+        warmup_count != DEFAULT_WARMUP_COUNT
+        or pass_count != DEFAULT_PASS_COUNT
+        or timing.get("partition_count") != 1
+        or timing.get("gather_count") != 1
+        or timing.get("requested_steps_per_pass") != 1
+        or timing.get("measured_model_evaluations_per_pass") != 1
+        or not isinstance(samples, list)
+        or len(samples) != DEFAULT_PASS_COUNT
+        or any(
+            not math.isfinite(float(value)) or float(value) <= 0.0 for value in samples
+        )
+    ):
+        raise ValueError(
+            "fixed result does not contain one warmup and three measured passes"
+        )
+    validate_recorded_rank_layout(
+        row["distributed"],
+        world_size=int(case["world_size"]),
+    )
+    distributed = row["distributed"]
+    owned_counts = distributed.get("owned_atom_counts", [])
+    if (
+        distributed.get("partition_count") != 1
+        or distributed.get("gather_count") != 1
+        or len(owned_counts) != int(case["world_size"])
+        or sum(int(value) for value in owned_counts) != int(case["atom_count"])
+    ):
+        raise ValueError(
+            "fixed result does not record one partition, one gather, and "
+            "complete atom ownership"
+        )
+    if timing.get("source_input_sha256") != row.get("input", {}).get("tensor_sha256"):
+        raise ValueError("fixed evaluation changed the source input tensor")
+    output = row.get("output", {})
+    position_invariance = output.get("position_invariance", {})
+    pass_displacements = position_invariance.get(
+        "measured_pass_maximum_minimum_image_displacements_a"
+    )
     try:
-        number = float(value)
-    except (TypeError, ValueError) as error:
-        raise ValueError(f"{context} has an invalid {name}") from error
-    if not math.isfinite(number):
-        raise ValueError(f"{context} has a non-finite {name}")
-    return number
-
-
-def validated_charge_diagnostics(
-    record: Any,
-    *,
-    atom_count: int,
-    target_sum_e: float = 0.0,
-    context: str = "charge diagnostics",
-) -> dict[str, Any]:
-    """Validate finite charge metadata without limiting its residual size."""
-
-    if not isinstance(record, dict):
-        raise ValueError(f"{context} are missing")
-    if atom_count <= 0:
-        raise ValueError(f"{context} have an invalid atom count")
-    if record.get("available") is not True:
-        raise ValueError(f"{context} are unavailable")
-    if record.get("finite") is not True:
-        raise ValueError(f"{context} report non-finite predicted charges")
-    if record.get("dtype") != "float32":
-        raise ValueError(f"{context} must describe the float32 PME charge tensor")
-
-    expected_target = float(target_sum_e)
-    if not math.isfinite(expected_target):
-        raise ValueError(f"{context} have a non-finite expected target")
-    observed_target = _finite_charge_value(
-        record,
-        "target_sum_e",
-        context=context,
-    )
-    if observed_target != expected_target:
-        raise ValueError(f"{context} do not match the input total-charge target")
-
-    shape = record.get("shape")
+        position_tolerance = float(position_invariance["tolerance_a"])
+        warmup_displacement = float(
+            position_invariance["warmup_maximum_minimum_image_displacement_a"]
+        )
+        final_displacement = float(
+            position_invariance["final_gather_maximum_minimum_image_displacement_a"]
+        )
+        maximum_displacement = float(
+            position_invariance["maximum_minimum_image_displacement_a"]
+        )
+        measured_displacements = [float(value) for value in pass_displacements]
+    except (KeyError, TypeError, ValueError):
+        raise ValueError(
+            "fixed evaluation is missing its minimum-image position check"
+        ) from None
+    displacement_values = [
+        warmup_displacement,
+        *measured_displacements,
+        final_displacement,
+    ]
     if (
-        not isinstance(shape, list)
-        or not shape
+        position_invariance.get("method") != "maximum_minimum_image_displacement"
+        or not math.isclose(
+            position_tolerance,
+            DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A,
+            rel_tol=0.0,
+            abs_tol=0.0,
+        )
+        or len(measured_displacements) != DEFAULT_PASS_COUNT
         or any(
-            isinstance(value, bool) or not isinstance(value, int) or value <= 0
-            for value in shape
-        )
-        or math.prod(shape) != atom_count
-    ):
-        raise ValueError(f"{context} have an inconsistent tensor shape")
-    checksum = record.get("sha256")
-    if not isinstance(checksum, str) or re.fullmatch(r"[0-9a-f]{64}", checksum) is None:
-        raise ValueError(f"{context} have an invalid tensor SHA-256")
-
-    charge_sum = _finite_charge_value(record, "sum_e", context=context)
-    residual = _finite_charge_value(record, "residual_e", context=context)
-    residual_per_atom = _finite_charge_value(
-        record,
-        "abs_residual_per_atom",
-        context=context,
-    )
-    sum_abs = _finite_charge_value(record, "sum_abs_e", context=context)
-    max_abs = _finite_charge_value(record, "max_abs_e", context=context)
-    if not math.isclose(
-        residual,
-        charge_sum - observed_target,
-        rel_tol=1.0e-12,
-        abs_tol=1.0e-15,
-    ):
-        raise ValueError(f"{context} have an inconsistent charge residual")
-    if not math.isclose(
-        residual_per_atom,
-        abs(residual) / atom_count,
-        rel_tol=1.0e-12,
-        abs_tol=1.0e-18,
-    ):
-        raise ValueError(f"{context} have an inconsistent residual per atom")
-    magnitude_slack = 1.0e-12 * max(1.0, sum_abs)
-    if (
-        residual_per_atom < 0.0
-        or sum_abs < 0.0
-        or max_abs < 0.0
-        or sum_abs + magnitude_slack < abs(charge_sum)
-        or max_abs > sum_abs + magnitude_slack
-    ):
-        raise ValueError(f"{context} have inconsistent charge magnitudes")
-
-    return {
-        "available": True,
-        "finite": True,
-        "dtype": "float32",
-        "target_sum_e": observed_target,
-        "sum_e": charge_sum,
-        "residual_e": residual,
-        "abs_residual_per_atom": residual_per_atom,
-        "sum_abs_e": sum_abs,
-        "max_abs_e": max_abs,
-        "shape": list(shape),
-        "sha256": checksum,
-    }
-
-
-def require_fixed_charge_validation_residual(
-    diagnostics: dict[str, Any],
-    *,
-    atom_count: int,
-    max_abs_residual_e: float,
-) -> None:
-    """Apply the strict charge limit only to the 3,200-atom solver check."""
-
-    if atom_count != BASE_ATOM_COUNT:
-        raise ValueError(
-            "the strict charge-residual limit is reserved for the checked "
-            f"{BASE_ATOM_COUNT:,}-atom PME-versus-Ewald validation"
-        )
-    limit = float(max_abs_residual_e)
-    if not math.isfinite(limit) or limit < 0.0:
-        raise ValueError("fixed-charge validation has an invalid residual limit")
-    if abs(float(diagnostics["residual_e"])) > limit:
-        raise ValueError(
-            "PME-versus-Ewald fixed-charge validation exceeds the declared "
-            "charge-residual limit"
-        )
-
-
-def capacity_charge_diagnostic_records(
-    rows: Iterable[dict[str, Any]],
-) -> list[dict[str, Any]]:
-    """Normalize the one-GPU charge diagnostics saved with successful cases."""
-
-    records = []
-    for row in rows:
-        if not bool(row.get("success")):
-            continue
-        atom_count = int(row["atom_count"])
-        records.append(
-            {
-                "case_id": str(row["case_id"]),
-                "pair_count": int(row["pair_count"]),
-                "atom_count": atom_count,
-                "charge_diagnostics": validated_charge_diagnostics(
-                    row.get("charges"),
-                    atom_count=atom_count,
-                    target_sum_e=0.0,
-                    context=f"{row['case_id']} charge diagnostics",
-                ),
-            }
-        )
-    return records
-
-
-def _selected_input(
-    *,
-    input_root: Path,
-    pair_count: int,
-    expected_input: dict[str, Any],
-) -> dict[str, Any]:
-    directory = input_root / input_directory_name(pair_count)
-    structure = directory / "structure.extxyz"
-    manifest_path = directory / "manifest.json"
-    if not structure.is_file() or not manifest_path.is_file():
-        raise FileNotFoundError(f"selected input is incomplete: {directory}")
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    if manifest.get("schema") != INPUT_SCHEMA:
-        raise ValueError(f"selected input has unknown schema: {directory}")
-    geometry = validated_manifest_cell_geometry(manifest)
-    require_planned_supercell_geometry(
-        geometry,
-        pair_count=pair_count,
-        density_g_cm3=float(expected_input["construction_density_g_cm3"]),
-    )
-    if int(manifest["pair_count"]) != pair_count:
-        raise ValueError(f"selected input has wrong pair count: {directory}")
-    if (
-        int(manifest["molecules_per_species"]) != pair_count
-        or manifest["count_definition"] != MOLECULE_COUNT_DEFINITION
-        or int(manifest["atom_count"]) != pair_count * ATOMS_PER_PAIR
-        or float(manifest["construction_density_g_cm3"])
-        != float(expected_input["construction_density_g_cm3"])
-        or float(manifest["packmol"]["tolerance_a"])
-        != float(expected_input["packmol_tolerance_a"])
-        or float(manifest["packmol"].get("precision_a", math.nan))
-        != float(expected_input["packmol_precision_a"])
-        or int(manifest["packmol"]["seed"]) != int(expected_input["packmol_base_seed"])
-        or manifest["packmol"].get("version") != expected_input["packmol_version"]
-        or manifest["source"]["nci_subset_sha256"] != NCI_SUBSET_SHA256
-        or manifest["construction"].get("method")
-        != expected_input["construction_method"]
-        or int(manifest["construction"].get("base_pair_count", -1))
-        != int(expected_input["base_pair_count"])
-        or manifest["construction"].get("base_box_manifest_schema")
-        != expected_input["base_box_schema"]
-        or manifest["construction"].get("repeat_factors_xyz")
-        != list(balanced_repeat_factors(pair_count))
-    ):
-        raise ValueError(f"selected input settings do not match plan: {directory}")
-    if manifest["structure"]["sha256"] != sha256_file(structure):
-        raise ValueError(f"selected input checksum mismatch: {directory}")
-    return {
-        "pair_count": pair_count,
-        "molecules_per_species": pair_count,
-        "atom_count": pair_count * ATOMS_PER_PAIR,
-        "directory": str(directory.resolve()),
-        "structure": {
-            "path": str(structure.resolve()),
-            "sha256": sha256_file(structure),
-        },
-        "manifest": {
-            "path": str(manifest_path.resolve()),
-            "sha256": sha256_file(manifest_path),
-        },
-        **geometry,
-    }
-
-
-def select_capacity(args: argparse.Namespace) -> dict[str, Any]:
-    plan_path = args.plan.resolve()
-    result_dir = args.result_dir.resolve()
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    if plan.get("schema") != PLAN_SCHEMA:
-        raise ValueError("capacity plan has an unknown schema")
-    if {int(case["world_size"]) for case in plan["capacity_cases"]} != {1}:
-        raise ValueError("capacity plan must contain only one-GPU cases")
-
-    rows = _capacity_prefix(plan, result_dir)
-    if not rows or rows[-1].get("failure", {}).get("is_cuda_oom") is not True:
-        raise ValueError(
-            "capacity ladder must reach and retain its first genuine CUDA OOM"
-        )
-    successful = [row for row in rows if bool(row["success"])]
-    if not successful:
-        raise ValueError("capacity ladder has no successful case before the OOM")
-
-    validation_cases = plan["validation_cases"]
-    if len(validation_cases) != 1:
-        raise ValueError("capacity plan must contain one electrostatics validation")
-    validation = _read_case_result(
-        result_dir / validation_cases[0]["result_file"],
-        validation_cases[0],
-    )
-    if validation.get("mode") != "electrostatics-validation":
-        raise ValueError("validation result has the wrong mode")
-    measured_acceptance = validation["comparison"]["acceptance"]
-    if measured_acceptance != plan["validation_acceptance"]:
-        raise ValueError(
-            "PME-versus-Ewald acceptance limits differ from the predeclared plan"
-        )
-    if validation["comparison"].get("passed") is not True:
-        raise ValueError("PME-versus-Ewald fixed-charge validation did not pass")
-    validation_atom_count = int(validation["atom_count"])
-    validation_charge_diagnostics = validated_charge_diagnostics(
-        validation.get("charges"),
-        atom_count=validation_atom_count,
-        target_sum_e=0.0,
-        context="PME-versus-Ewald charge diagnostics",
-    )
-    require_fixed_charge_validation_residual(
-        validation_charge_diagnostics,
-        atom_count=validation_atom_count,
-        max_abs_residual_e=float(
-            measured_acceptance["absolute_charge_sum_e_max"]
-        ),
-    )
-    validation_settings = validation["settings"]
-    validation_geometry = validated_manifest_cell_geometry(
-        validation["input"]["manifest"]
-    )
-    require_planned_supercell_geometry(
-        validation_geometry,
-        pair_count=int(validation["pair_count"]),
-        density_g_cm3=float(plan["input"]["construction_density_g_cm3"]),
-    )
-    expected_pme = expected_pme_setup(
-        cell_lengths_a=validation_geometry["cell_lengths_a"],
-        real_space_cutoff_a=float(plan["model"]["pme_cutoff_a"]),
-        accuracy=float(plan["model"]["pme_accuracy"]),
-        mesh_safety_factor=float(plan["model"]["pme_mesh_safety_factor"]),
-    )
-    expected_ewald = expected_ewald_reference_setup(
-        atom_count=int(validation["atom_count"]),
-        volume_a3=float(validation_geometry["volume_a3"]),
-        accuracy=float(plan["model"]["ewald_reference_accuracy"]),
-    )
-    observed_pme = validation_settings["pme"]
-    observed_ewald = validation_settings["ewald_reference"]
-    if (
-        not math.isclose(
-            float(observed_pme["real_space_cutoff_a"]),
-            expected_pme["real_space_cutoff_a"],
-            rel_tol=1.0e-6,
+            not math.isfinite(value) or value < 0.0 or value > position_tolerance
+            for value in displacement_values
         )
         or not math.isclose(
-            float(observed_pme["alpha_a_inverse"]),
-            expected_pme["alpha_a_inverse"],
-            rel_tol=1.0e-6,
+            maximum_displacement,
+            max(displacement_values),
+            rel_tol=0.0,
+            abs_tol=1.0e-12,
         )
-        or list(observed_pme["mesh_dimensions"])
-        != expected_pme["mesh_dimensions"]
-        or any(
-            not math.isclose(float(observed), expected, rel_tol=1.0e-6)
-            for observed, expected in zip(
-                observed_pme["mesh_spacing_a"],
-                expected_pme["mesh_spacing_a"],
-                strict=True,
-            )
-        )
-        or float(observed_pme["mesh_safety_factor"])
-        != float(plan["model"]["pme_mesh_safety_factor"])
-        or observed_pme.get("parameter_rule")
-        != plan["model"]["pme_parameter_rule"]
-        or int(observed_pme["spline_order"])
-        != int(plan["model"]["pme_spline_order"])
-        or float(observed_pme["accuracy"])
-        != float(plan["model"]["pme_accuracy"])
-        or any(
-            not math.isclose(
-                float(observed_ewald[name]),
-                expected_ewald[name],
-                rel_tol=1.0e-6,
-            )
-            for name in (
-                "real_space_cutoff_a",
-                "reciprocal_space_cutoff_a_inverse",
-                "alpha_a_inverse",
-                "accuracy",
-            )
-        )
-        or observed_ewald.get("parameter_rule")
-        != expected_ewald["parameter_rule"]
-        or not math.isclose(
-            float(validation_settings["minimum_cell_length_a"]),
-            float(validation_geometry["minimum_cell_length_a"]),
-            rel_tol=1.0e-6,
-        )
-        or 2.0 * float(observed_ewald["real_space_cutoff_a"])
-        >= float(validation_geometry["minimum_cell_length_a"])
-        or validation_settings["compile_model"] is not False
+        or position_invariance.get("all_within_tolerance") is not True
     ):
-        raise ValueError("electrostatics solver settings differ from the plan")
-
-    capacity_charge_diagnostics = capacity_charge_diagnostic_records(successful)
-    parity_pair_count = int(args.parity_pairs)
-    parity_rows = [
-        row for row in successful if int(row["pair_count"]) == parity_pair_count
-    ]
-    if len(parity_rows) != 1:
         raise ValueError(
-            f"declared parity input {parity_pair_count} pairs did not complete "
-            "on one GPU"
+            "fixed evaluation is not PBC-equivalent to its source positions"
         )
-    parity_charge_diagnostics = next(
-        record["charge_diagnostics"]
-        for record in capacity_charge_diagnostics
-        if record["case_id"] == parity_rows[0]["case_id"]
-    )
-    input_root = args.input_root.resolve()
-    parity_reference_input = _selected_input(
-        input_root=input_root,
-        pair_count=parity_pair_count,
-        expected_input=plan["input"],
-    )
-    ghost_width_a = float(plan["distributed"]["domain_cutoff_a"]) + float(
-        plan["distributed"]["domain_skin_a"]
-    )
-    parity_partition_check = domain_partition_check(
-        cell_lengths_a=parity_reference_input["cell_lengths_a"],
-        ghost_width_a=ghost_width_a,
-    )
-
-    largest_success = max(successful, key=lambda row: int(row["pair_count"]))
-    first_oom = rows[-1]
-    largest_success_input = _selected_input(
-        input_root=input_root,
-        pair_count=int(largest_success["pair_count"]),
-        expected_input=plan["input"],
-    )
-    steady_case_id = steady_timing_case_id(
-        int(largest_success["pair_count"]),
-        1,
-    )
-    selection = {
-        "schema": SELECTION_SCHEMA,
-        "created_utc": utc_now(),
-        "run_id": plan["run_id"],
-        "capacity_plan": {
-            "path": str(plan_path),
-            "sha256": sha256_file(plan_path),
-        },
-        "capacity_result_dir": str(result_dir),
-        "capacity_attempted_case_ids": [row["case_id"] for row in rows],
-        "capacity_attempted_pair_counts": [int(row["pair_count"]) for row in rows],
-        "capacity_charge_diagnostics": capacity_charge_diagnostics,
-        "largest_success": {
-            "case_id": largest_success["case_id"],
-            "result_file": largest_success["result_file"],
-            "result_file_sha256": largest_success["result_file_sha256"],
-            "input": largest_success_input,
-        },
-        "steady_timing_case": {
-            "case_id": steady_case_id,
-            "result_file": result_filename(steady_case_id),
-            "mode": "steady-timing",
-            "series": "steady_timing",
-            "measurement_role": "steady_timing",
-            "world_size": 1,
-            "pair_count": int(largest_success["pair_count"]),
-            "molecules_per_species": int(largest_success["pair_count"]),
-            "atom_count": int(largest_success["atom_count"]),
-            "rank_grid_policy": "automatic_from_actual_cell",
-            "input": largest_success_input,
-            "fresh_process_required": True,
-            "warmup_count": int(plan["timing"]["steady"]["warmup_count"]),
-            "sample_count": int(plan["timing"]["steady"]["sample_count"]),
-        },
-        "first_cuda_oom": {
-            "case_id": first_oom["case_id"],
-            "result_file": first_oom["result_file"],
-            "result_file_sha256": first_oom["result_file_sha256"],
-            "failure_stage": first_oom["failure"]["stage"],
-            "input": _selected_input(
-                input_root=input_root,
-                pair_count=int(first_oom["pair_count"]),
-                expected_input=plan["input"],
-            ),
-        },
-        "parity_reference": {
-            "case_id": parity_rows[0]["case_id"],
-            "result_file": parity_rows[0]["result_file"],
-            "result_file_sha256": parity_rows[0]["result_file_sha256"],
-            "input": parity_reference_input,
-            "acceptance": {
-                "declared_before_measurement": True,
-                "energy_reference_world_size": (
-                    DOMAIN_METHODOLOGY.energy_reference_world_size
-                ),
-                "energy_comparison_world_sizes": list(
-                    DOMAIN_METHODOLOGY.energy_comparison_world_sizes
-                ),
-                "energy_one_gpu_comparison": (
-                    "diagnostic_only_due_different_reduction_path"
-                ),
-                "energy_rule": (
-                    "abs(delta_energy_eV) / atom_count <= "
-                    "tolerance_eV_per_atom"
-                ),
-                "energy_tolerance_ev_per_atom": (
-                    DEFAULT_PARITY_ENERGY_TOL_EV_PER_ATOM
-                ),
-                "force_rule": (
-                    "componentwise abs(delta) <= atol_eV_A + "
-                    "rtol * abs(reference_component_eV_A)"
-                ),
-                "force_reference_world_size": (
-                    DOMAIN_METHODOLOGY.force_reference_world_size
-                ),
-                "force_comparison_world_sizes": list(
-                    DOMAIN_METHODOLOGY.force_comparison_world_sizes
-                ),
-                "force_atol_ev_a": DEFAULT_PARITY_FORCE_ATOL_EV_A,
-                "force_rtol": DEFAULT_PARITY_FORCE_RTOL,
-            },
-            "charge_diagnostics": parity_charge_diagnostics,
-            "partition_check": parity_partition_check,
-        },
-        "electrostatics_validation": {
-            "case_id": validation["case_id"],
-            "result_file": validation["result_file"],
-            "result_file_sha256": validation["result_file_sha256"],
-            "input_file_sha256": validation["input"]["file_sha256"],
-            "charge_diagnostics": validation_charge_diagnostics,
-            "charge_sha256": validation["charges"]["sha256"],
-            "charge_sum_e": validation["charges"]["sum_e"],
-            "pme_energy_ev": validation["pme"]["energy_ev"],
-            "pme_force_sha256": validation["pme"]["forces"]["sha256"],
-            "ewald_energy_ev": validation["ewald"]["energy_ev"],
-            "ewald_force_sha256": validation["ewald"]["forces"]["sha256"],
-            "comparison": validation["comparison"],
-            "settings": validation["settings"],
-        },
-        "settings": {
-            "model": plan["model"],
-            "distributed": plan["distributed"],
-            "input": plan["input"],
-            "timing": plan["timing"],
-            "validation_acceptance": plan["validation_acceptance"],
-        },
-        "methodology": {
-            **plan["methodology"],
-            "resolved_values": {
-                **plan["methodology"]["resolved_values"],
-                "parity_molecules_per_species": parity_pair_count,
-            },
-        },
-        "source": plan["source"],
-    }
-    atomic_write_json(args.output.resolve(), selection)
-    return selection
-
-
-def derive_distributed_plan(args: argparse.Namespace) -> dict[str, Any]:
-    selection_path = args.selection.resolve()
-    selection = json.loads(selection_path.read_text(encoding="utf-8"))
-    if selection.get("schema") != SELECTION_SCHEMA:
-        raise ValueError("selection has an unknown schema")
-    world_size = int(args.world_size)
-    if world_size not in DEFAULT_DISTRIBUTED_WORLD_SIZES:
-        raise ValueError(
-            "distributed world size must be selected from "
-            f"{DEFAULT_DISTRIBUTED_WORLD_SIZES}"
-        )
-
-    cases: list[dict[str, Any]] = []
-    source = selection["parity_reference"]["input"]
-    cases.append(
-        {
-            "case_id": parity_case_id(source["pair_count"], world_size),
-            "mode": "parity",
-            "series": "parity",
-            "measurement_role": "parity",
-            "world_size": world_size,
-            "pair_count": source["pair_count"],
-            "molecules_per_species": source["pair_count"],
-            "atom_count": source["atom_count"],
-            "rank_grid_policy": "automatic_from_actual_cell",
-            "input": source,
-            "fresh_process_required": True,
-            "warmup_count": 0,
-            "sample_count": 1,
-        }
-    )
-    for series, key, id_builder in (
-        ("steady_timing", "largest_success", steady_timing_case_id),
-        ("rescue", "first_cuda_oom", rescue_case_id),
+    measured_passes = output.get("measured_passes")
+    if not isinstance(measured_passes, list) or len(measured_passes) != (
+        DEFAULT_PASS_COUNT
     ):
-        source = selection[key]["input"]
-        steady_timing = series == "steady_timing"
-        cases.append(
-            {
-                "case_id": id_builder(source["pair_count"], world_size),
-                "mode": "steady-timing" if steady_timing else "distributed",
-                "series": series,
-                "measurement_role": series,
-                "world_size": world_size,
-                "pair_count": source["pair_count"],
-                "molecules_per_species": source["pair_count"],
-                "atom_count": source["atom_count"],
-                "rank_grid_policy": "automatic_from_actual_cell",
-                "input": source,
-                "fresh_process_required": True,
-                "warmup_count": (
-                    int(selection["settings"]["timing"]["steady"]["warmup_count"])
-                    if steady_timing
-                    else 0
-                ),
-                "sample_count": (
-                    int(selection["settings"]["timing"]["steady"]["sample_count"])
-                    if steady_timing
-                    else 1
-                ),
-            }
+        raise ValueError("fixed result does not record all three measured outputs")
+    expected_energy_dtype = DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(
+        int(case["world_size"])
+    )
+    for expected_index, measured in enumerate(measured_passes, start=1):
+        forces = measured.get("forces", {})
+        measured_displacement = float(
+            measured.get(
+                "maximum_minimum_image_displacement_a",
+                math.nan,
+            )
         )
-    plan = {
-        "schema": DISTRIBUTED_PLAN_SCHEMA,
-        "created_utc": utc_now(),
-        "run_id": f"{selection['run_id']}-gpus-{world_size:02d}",
-        "world_size": world_size,
-        "selection": {
-            "path": str(selection_path),
-            "sha256": sha256_file(selection_path),
-        },
-        "cases": cases,
-        "parity_acceptance": selection["parity_reference"]["acceptance"],
-        "settings": selection["settings"],
-        "methodology": selection["methodology"],
-        "source": selection["source"],
-    }
-    atomic_write_json(args.output.resolve(), plan)
-    return plan
-
-
-def canonical_json_sha256(value: Any) -> str:
-    payload = json.dumps(
-        value,
-        allow_nan=False,
-        ensure_ascii=True,
-        separators=(",", ":"),
-        sort_keys=True,
-    ).encode("utf-8")
-    return sha256(payload).hexdigest()
-
-
-def _write_csv(
-    path: Path,
-    columns: tuple[str, ...],
-    rows: list[dict[str, Any]],
-) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
-    with temporary.open("w", encoding="utf-8", newline="") as stream:
-        writer = csv.DictWriter(stream, fieldnames=columns, extrasaction="raise")
-        writer.writeheader()
-        for row in rows:
-            writer.writerow({column: row.get(column, "") for column in columns})
-    temporary.replace(path)
-
-
-def _failure_csv_fields(row: dict[str, Any]) -> dict[str, Any]:
-    failure = row.get("failure", {})
-    return {
-        "failure_type": str(failure.get("type") or "LaunchFailure"),
-        "failure_stage": str(failure.get("stage") or "launcher"),
-        "error": str(failure.get("message") or "case process failed"),
-    }
-
-
-def _peak_memory_from_failed_row(row: dict[str, Any]) -> int | str:
-    values = [
-        int(record["memory"]["max_allocated_bytes"])
-        for record in row.get("rank_records", [])
-        if isinstance(record.get("memory"), dict)
-        and record["memory"].get("max_allocated_bytes") is not None
-    ]
-    return max(values) if values else ""
-
-
-def _result_metrics(row: dict[str, Any]) -> dict[str, Any]:
-    if not bool(row["success"]):
-        return {
-            **_failure_csv_fields(row),
-            "elapsed_s": "",
-            "warmup_count": "",
-            "sample_count": "",
-            "elapsed_samples_s": "",
-            "elapsed_median_s": "",
-            "elapsed_q1_s": "",
-            "elapsed_q3_s": "",
-            "elapsed_iqr_s": "",
-            "peak_memory_bytes_max_rank": _peak_memory_from_failed_row(row),
-            "energy_ev": "",
-            "force_rms_ev_per_a": "",
-            "force_max_ev_per_a": "",
-        }
-    timing = row["timing"]
-    elapsed_samples = [float(value) for value in timing["samples_s_max_rank"]]
-    forces = row["output"]["forces_source_atom_order"]
-    return {
-        "failure_type": "",
-        "failure_stage": "",
-        "error": "",
-        "elapsed_s": float(timing["median_s"]),
-        "warmup_count": int(timing["warmup_count"]),
-        "sample_count": int(timing["sample_count"]),
-        "elapsed_samples_s": json.dumps(elapsed_samples, separators=(",", ":")),
-        "elapsed_median_s": float(timing["median_s"]),
-        "elapsed_q1_s": float(timing["q1_s"]),
-        "elapsed_q3_s": float(timing["q3_s"]),
-        "elapsed_iqr_s": float(timing["iqr_s"]),
-        "peak_memory_bytes_max_rank": int(row["memory"]["max_allocated_bytes"]),
-        "energy_ev": float(row["output"]["energy_ev"]),
-        "force_rms_ev_per_a": float(forces["rms_ev_a"]),
-        "force_max_ev_per_a": float(forces["max_norm_ev_a"]),
-    }
-
-
-def _load_force_array(row: dict[str, Any]) -> Any:
-    import numpy as np
-
-    if not bool(row["success"]):
-        raise ValueError(f"failed case has no force array: {row['case_id']}")
-    record = row["output"]["forces_source_atom_order_npy"]
-    path = Path(record["path"])
-    if not path.is_file() or sha256_file(path) != record["sha256"]:
-        raise ValueError(f"force artifact checksum failed: {row['case_id']}")
-    array = np.load(path, allow_pickle=False)
-    if list(array.shape) != list(record["shape"]) or not np.isfinite(array).all():
-        raise ValueError(f"force artifact is invalid: {row['case_id']}")
-    return array
-
-
-def _read_derived_results(
-    directory: Path,
-    selection_sha256: str,
-) -> tuple[dict[str, Any], list[dict[str, Any]]]:
-    plan_path = directory / "derived-plan.json"
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    if plan.get("schema") != DISTRIBUTED_PLAN_SCHEMA:
-        raise ValueError(f"unknown derived plan schema: {plan_path}")
-    if plan["selection"]["sha256"] != selection_sha256:
-        raise ValueError(f"derived job used a different selection: {plan_path}")
-    result_dir = directory / "results"
-    rows = []
-    for case in plan["cases"]:
-        path = result_dir / result_filename(case["case_id"])
-        row = _read_case_result(path, case)
-        if row["mode"] != case["mode"]:
-            raise ValueError(f"result mode mismatch: {path}")
-        if row["input"]["file_sha256"] != case["input"]["structure"]["sha256"]:
+        if (
+            measured.get("pass_index") != expected_index
+            or not math.isfinite(float(measured.get("energy_ev", math.nan)))
+            or measured.get("energy_dtype") != expected_energy_dtype
+            or forces.get("finite") is not True
+            or forces.get("shape") != [int(case["atom_count"]), 3]
+            or not math.isclose(
+                measured_displacement,
+                measured_displacements[expected_index - 1],
+                rel_tol=0.0,
+                abs_tol=1.0e-12,
+            )
+        ):
             raise ValueError(
-                f"distributed case did not reuse the selected input: {path}"
+                "one measured pass has an invalid energy, force summary, "
+                "or position check"
             )
-        rows.append(row)
-    return plan, rows
-
-
-def _output_comparison(
-    reference: dict[str, Any],
-    row: dict[str, Any],
-    acceptance: dict[str, Any],
-    *,
-    require_energy: bool = True,
-    require_forces: bool = True,
-) -> dict[str, Any]:
-    """Compare energy and forces for two runs of the identical structure."""
-
-    import numpy as np
-
-    if not bool(reference.get("success")) or not bool(row.get("success")):
-        raise ValueError("output comparison requires two successful runs")
-    if row["input"]["file_sha256"] != reference["input"]["file_sha256"]:
-        raise ValueError("output comparison used different input structures")
-    reference_forces = _load_force_array(reference).astype(np.float64)
-    observed_forces = _load_force_array(row).astype(np.float64)
-    if observed_forces.shape != reference_forces.shape:
-        raise ValueError("output comparison force arrays have different shapes")
-
-    atom_count = int(reference_forces.shape[0])
-    if atom_count <= 0:
-        raise ValueError("output comparison needs at least one atom")
-    difference = observed_forces - reference_forces
-    energy_difference = abs(
-        float(row["output"]["energy_ev"]) - float(reference["output"]["energy_ev"])
+    energy_values = [float(measured["energy_ev"]) for measured in measured_passes]
+    energy_span_per_atom = (max(energy_values) - min(energy_values)) / int(
+        case["atom_count"]
     )
-    energy_difference_per_atom = energy_difference / atom_count
-    energy_tolerance_per_atom = float(
-        acceptance["energy_tolerance_ev_per_atom"]
-    )
-    component_tolerances = float(acceptance["force_atol_ev_a"]) + float(
-        acceptance["force_rtol"]
-    ) * np.abs(reference_forces)
-    force_rms = float(np.sqrt(np.mean(difference * difference)))
-    force_max = float(np.abs(difference).max())
-    force_tolerance = float(component_tolerances.max())
-    force_passed = bool(np.less_equal(np.abs(difference), component_tolerances).all())
-    energy_passed = energy_difference_per_atom <= energy_tolerance_per_atom
-    passed = (
-        (energy_passed or not require_energy)
-        and (force_passed or not require_forces)
-    )
-    return {
-        "passed": passed,
-        "energy_required": require_energy,
-        "energy_passed": energy_passed,
-        "forces_required": require_forces,
-        "forces_passed": force_passed,
-        "energy_difference_ev": energy_difference,
-        "energy_difference_ev_per_atom": energy_difference_per_atom,
-        "energy_tolerance_ev_per_atom": energy_tolerance_per_atom,
-        "force_rms_difference_ev_per_a": force_rms,
-        "force_max_difference_ev_per_a": force_max,
-        "force_tolerance_ev_per_a": force_tolerance,
-    }
+    if (
+        int(case["world_size"]) > 1
+        and energy_span_per_atom
+        > DEFAULT_DISTRIBUTED_ENERGY_REPEATABILITY_TOL_EV_PER_ATOM
+    ):
+        raise ValueError("measured-pass energies are not mutually consistent")
+
+    last_pass = measured_passes[-1]
+    last_forces = last_pass["forces"]
+    atom_count = int(case["atom_count"])
+    saved_output = row["output"]
+    saved_forces = saved_output["forces_source_atom_order"]
+    if (
+        not math.isfinite(float(saved_output["energy_ev"]))
+        or saved_output.get("energy_dtype") != last_pass["energy_dtype"]
+        or saved_forces.get("finite") is not True
+        or saved_forces.get("shape") != [atom_count, 3]
+    ):
+        raise ValueError("saved energy or force output is invalid")
+    if not math.isclose(
+        float(saved_output["energy_ev"]),
+        float(last_pass["energy_ev"]),
+        rel_tol=0.0,
+        abs_tol=0.0,
+    ):
+        raise ValueError("saved energy does not match the last measured pass")
+    for name in ("rms_ev_a", "max_norm_ev_a"):
+        observed = float(saved_forces[name])
+        reference = float(last_forces[name])
+        if not math.isclose(
+            observed,
+            reference,
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise ValueError(
+                "saved force summary does not match the last measured pass"
+            )
+    charges = row.get("charges", {})
+    if int(case["world_size"]) == 1:
+        try:
+            charge_residual = float(charges["residual_e"])
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("one-GPU fixed result has no charge diagnostic") from exc
+        if (
+            charges.get("available") is not True
+            or charges.get("finite") is not True
+            or not math.isfinite(charge_residual)
+        ):
+            raise ValueError("one-GPU fixed result has an invalid charge diagnostic")
+    elif charges.get("available") is not False or not charges.get("reason"):
+        raise ValueError("multi-GPU fixed result does not explain unavailable charges")
 
 
-def _parity_comparison(
-    selection: dict[str, Any],
-    row: dict[str, Any],
-) -> dict[str, Any]:
-    """Compare distributed forces with the selected one-GPU reference."""
-
-    reference_path = Path(selection["parity_reference"]["result_file"])
-    reference = json.loads(reference_path.read_text(encoding="utf-8"))
-    if reference.get("schema") != RESULT_SCHEMA or not bool(reference.get("success")):
-        raise ValueError("the selected one-GPU parity reference is not usable")
-    return _output_comparison(
-        reference,
-        row,
-        selection["parity_reference"]["acceptance"],
-        require_energy=False,
-        require_forces=True,
-    )
-
-
-def _distributed_energy_comparison(
-    reference: dict[str, Any],
-    row: dict[str, Any],
-    selection: dict[str, Any],
-) -> dict[str, Any]:
-    """Compare energies produced by the same distributed reduction path."""
-
-    return _output_comparison(
-        reference,
-        row,
-        selection["parity_reference"]["acceptance"],
-        require_energy=True,
-        require_forces=False,
-    )
-
-
-def _steady_timing_output_comparison(
-    selection: dict[str, Any],
-    row: dict[str, Any],
-) -> dict[str, Any]:
-    """Compare a timed multi-GPU output with the timed one-GPU output."""
-
-    reference_path = (
-        Path(selection["capacity_result_dir"])
-        / selection["steady_timing_case"]["result_file"]
-    )
-    reference = json.loads(reference_path.read_text(encoding="utf-8"))
-    if reference.get("schema") != RESULT_SCHEMA or not bool(reference.get("success")):
-        raise ValueError("the one-GPU steady-timing reference is not usable")
-    return _output_comparison(
-        reference,
-        row,
-        selection["parity_reference"]["acceptance"],
-        require_energy=False,
-        require_forces=True,
-    )
-
-
-def _electrostatics_phase_summary(phase_dir: Path) -> dict[str, Any]:
-    plan_path = phase_dir / "plan.json"
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    validation_cases = plan.get("validation_cases", [])
-    if len(validation_cases) != 1:
-        raise ValueError("the capacity plan must contain one validation case")
-    case = validation_cases[0]
-    row = _read_case_result(phase_dir / "results" / case["result_file"], case)
-    acceptance_matches = row.get("comparison", {}).get("acceptance") == plan.get(
-        "validation_acceptance"
-    )
-    accepted = (
-        bool(row.get("success"))
-        and acceptance_matches
-        and (row.get("comparison", {}).get("passed") is True)
-    )
-    return {
-        "schema": PHASE_SUMMARY_SCHEMA,
-        "created_utc": utc_now(),
-        "phase": "electrostatics-validation",
-        "status": "accepted" if accepted else "failed",
-        "passed": accepted,
-        "publishable": False,
-        "checks": {
-            "case_succeeded": bool(row.get("success")),
-            "acceptance_matches_plan": acceptance_matches,
-            "pme_ewald_and_charge_limits_passed": (
-                row.get("comparison", {}).get("passed") is True
-            ),
-        },
-        "case_id": row["case_id"],
-        "message": (
-            "Electrostatics validation passed; the capacity ladder may start."
-            if accepted
-            else "Electrostatics validation failed; the capacity ladder must not run."
-        ),
-    }
-
-
-def _capacity_phase_summary(phase_dir: Path) -> dict[str, Any]:
-    plan_path = phase_dir / "plan.json"
-    selection_path = phase_dir / "selection.json"
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    selection = json.loads(selection_path.read_text(encoding="utf-8"))
-    rows = _capacity_prefix(plan, phase_dir / "results")
-    successful = [row for row in rows if bool(row["success"])]
-    reached_oom = bool(rows) and (
-        rows[-1].get("failure", {}).get("is_cuda_oom") is True
-    )
-    accepted_validation = _electrostatics_phase_summary(phase_dir)["passed"]
-    selection_matches = (
-        selection.get("schema") == SELECTION_SCHEMA
-        and selection.get("capacity_plan", {}).get("sha256") == sha256_file(plan_path)
-        and selection.get("capacity_attempted_case_ids")
-        == [row["case_id"] for row in rows]
-    )
-    steady_case = selection.get("steady_timing_case", {})
-    steady_succeeded = False
-    if steady_case:
-        steady_row = _read_case_result(
-            phase_dir / "results" / str(steady_case["result_file"]),
-            steady_case,
+def _validation_passed(row: Mapping[str, Any]) -> bool:
+    if not bool(row.get("success")):
+        return False
+    comparison = row.get("comparison", {})
+    charges = row.get("charges", {})
+    pme = row.get("pme", {})
+    ewald = row.get("ewald", {})
+    timing = row.get("timing", {})
+    try:
+        values = (
+            float(charges["residual_e"]),
+            float(pme["energy_ev"]),
+            float(ewald["energy_ev"]),
+            float(comparison["absolute_energy_difference_ev_per_atom"]),
+            float(comparison["force_difference_max_norm_ev_a"]),
+            float(timing["wall_s"]),
         )
-        steady_succeeded = bool(steady_row.get("success"))
-    passed = (
-        bool(successful)
-        and reached_oom
-        and accepted_validation
-        and selection_matches
-        and steady_succeeded
+    except (KeyError, TypeError, ValueError):
+        return False
+    return (
+        comparison.get("passed") is True
+        and charges.get("available") is True
+        and charges.get("finite") is True
+        and pme.get("forces", {}).get("finite") is True
+        and ewald.get("forces", {}).get("finite") is True
+        and all(math.isfinite(value) for value in values)
+        and abs(values[0]) <= DEFAULT_CHARGE_SUM_TOL_E
+        and values[-1] > 0.0
+        and bool(timing.get("timed_work"))
     )
-    return {
-        "schema": PHASE_SUMMARY_SCHEMA,
-        "created_utc": utc_now(),
-        "phase": "capacity",
-        "status": "complete" if passed else "failed",
-        "passed": passed,
-        "publishable": False,
-        "checks": {
-            "electrostatics_validation_accepted": accepted_validation,
-            "successful_capacity_case_found": bool(successful),
-            "first_natural_cuda_oom_reached": reached_oom,
-            "selection_matches_measured_prefix": selection_matches,
-            "one_gpu_steady_timing_succeeded": steady_succeeded,
-        },
-        "attempted_case_ids": [row["case_id"] for row in rows],
-        "largest_success_pair_count": (
-            max(int(row["pair_count"]) for row in successful) if successful else None
-        ),
-        "first_cuda_oom_pair_count": (
-            int(rows[-1]["pair_count"]) if reached_oom else None
-        ),
-        "message": (
-            "The capacity phase completed, selected exact inputs, and recorded "
-            "the dedicated one-GPU steady timing."
-            if passed
-            else "The capacity phase is incomplete or failed a required check."
-        ),
-    }
-
-
-def _distributed_phase_summary(phase_dir: Path) -> dict[str, Any]:
-    plan_path = phase_dir / "derived-plan.json"
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
-    selection_path = Path(plan["selection"]["path"])
-    if sha256_file(selection_path) != plan["selection"]["sha256"]:
-        raise ValueError("the capacity selection changed after this job was planned")
-    selection = json.loads(selection_path.read_text(encoding="utf-8"))
-    checked_plan, rows = _read_derived_results(
-        phase_dir,
-        plan["selection"]["sha256"],
-    )
-    rows_by_series = {
-        str(case["series"]): row
-        for case, row in zip(checked_plan["cases"], rows, strict=True)
-    }
-    parity_row = rows_by_series["parity"]
-    steady_row = rows_by_series["steady_timing"]
-    rescue_row = rows_by_series["rescue"]
-    parity_execution_succeeded = bool(parity_row.get("success"))
-    parity_comparison: dict[str, Any] | None = None
-    if parity_execution_succeeded:
-        parity_comparison = _parity_comparison(selection, parity_row)
-    parity_passed = bool(
-        parity_execution_succeeded
-        and parity_comparison is not None
-        and parity_comparison["passed"]
-    )
-    steady_execution_succeeded = bool(steady_row.get("success"))
-    steady_output_comparison: dict[str, Any] | None = None
-    if steady_execution_succeeded:
-        steady_output_comparison = _steady_timing_output_comparison(
-            selection,
-            steady_row,
-        )
-    steady_passed = bool(
-        steady_execution_succeeded
-        and steady_output_comparison is not None
-        and steady_output_comparison["passed"]
-    )
-    rescue_succeeded = bool(rescue_row.get("success"))
-    passed = parity_passed and steady_passed
-    return {
-        "schema": PHASE_SUMMARY_SCHEMA,
-        "created_utc": utc_now(),
-        "phase": "distributed",
-        "world_size": int(plan["world_size"]),
-        "status": "complete" if passed else "failed",
-        "passed": passed,
-        "publishable": False,
-        "checks": {
-            "parity_execution_succeeded": parity_execution_succeeded,
-            "one_gpu_force_agreement_passed": parity_passed,
-            "steady_timing_case_succeeded": steady_execution_succeeded,
-            "steady_timing_force_agreement_passed": steady_passed,
-            "distributed_energy_agreement_deferred_to_bundle": True,
-            "exact_oom_input_rescued": rescue_succeeded,
-        },
-        "parity_comparison": parity_comparison,
-        "steady_timing_output_comparison": steady_output_comparison,
-        "case_ids": {series: row["case_id"] for series, row in rows_by_series.items()},
-        "message": (
-            "One-GPU force checks passed for the agreement and timing inputs. "
-            "Distributed-energy agreement is checked after all GPU counts finish. "
-            "The exact OOM retry "
-            + (
-                "also succeeded."
-                if rescue_succeeded
-                else "did not fit on this GPU count."
-            )
-            if passed
-            else (
-                "The distributed phase failed a required one-GPU force check."
-            )
-        ),
-    }
 
 
 def write_phase_summary(args: argparse.Namespace) -> dict[str, Any]:
-    """Write one phase result even when a required check fails."""
-
     phase_dir = args.phase_dir.resolve()
+    plan = _load_json(phase_dir / "plan.json")
+    if plan.get("schema") != PLAN_SCHEMA:
+        raise ValueError("job plan has an unknown schema")
+    rows = [
+        _read_case_result(
+            phase_dir / "results" / case["result_file"],
+            case,
+        )
+        for case in _planned_cases(plan)
+    ]
+    fixed = rows[0]
+    errors: list[str] = []
     try:
-        if args.phase == "electrostatics":
-            summary = _electrostatics_phase_summary(phase_dir)
-        elif args.phase == "capacity":
-            summary = _capacity_phase_summary(phase_dir)
-        elif args.phase == "distributed":
-            summary = _distributed_phase_summary(phase_dir)
-        else:
-            raise AssertionError(f"unhandled phase {args.phase}")
-    except Exception as exc:
-        summary = {
-            "schema": PHASE_SUMMARY_SCHEMA,
-            "created_utc": utc_now(),
-            "phase": args.phase,
-            "status": "failed",
-            "passed": False,
-            "publishable": False,
-            "checks": {},
-            "error": f"{type(exc).__name__}: {exc}",
-            "message": "The phase could not be accepted.",
-        }
+        _validate_fixed_result(fixed, plan=plan)
+    except (KeyError, TypeError, ValueError) as exc:
+        errors.append(str(exc))
+    if int(plan["fixed_case"]["world_size"]) == 1:
+        if len(rows) != 2 or not _validation_passed(rows[1]):
+            errors.append("the 3,200-atom PME-versus-Ewald check failed")
+    elif len(rows) != 1:
+        errors.append("only the fixed evaluation is allowed above one GPU")
+
+    fixed_input = fixed.get("input", {})
+    input_structure_sha256 = (
+        fixed_input.get("file_sha256") if isinstance(fixed_input, Mapping) else None
+    )
+    if input_structure_sha256 is None and isinstance(fixed_input, Mapping):
+        legacy_structure = fixed_input.get("structure")
+        if isinstance(legacy_structure, Mapping):
+            input_structure_sha256 = legacy_structure.get("sha256")
+    if (
+        not isinstance(input_structure_sha256, str)
+        or len(input_structure_sha256) != 64
+        or any(
+            character not in "0123456789abcdef" for character in input_structure_sha256
+        )
+    ):
+        errors.append("fixed result does not record a valid input structure SHA-256")
+        input_structure_sha256 = None
+
+    summary = {
+        "schema": PHASE_SUMMARY_SCHEMA,
+        "created_utc": utc_now(),
+        "run_id": plan["run_id"],
+        "world_size": plan["fixed_case"]["world_size"],
+        "passed": not errors,
+        "status": "passed" if not errors else "failed",
+        "errors": errors,
+        "planned_case_count": plan["planned_case_count"],
+        "completed_case_count": sum(bool(row.get("success")) for row in rows),
+        "fixed_case_id": plan["fixed_case"]["case_id"],
+        "fixed_result_sha256": fixed["result_file_sha256"],
+        "input_structure_sha256": input_structure_sha256,
+        "methodology": methodology_source_identity(),
+        "electrostatics_validation": (
+            {
+                "case_id": rows[1]["case_id"],
+                "passed": _validation_passed(rows[1]),
+                "result_sha256": rows[1]["result_file_sha256"],
+            }
+            if len(rows) == 2
+            else None
+        ),
+    }
     atomic_write_json(args.output.resolve(), summary)
+    if errors:
+        raise ValueError("; ".join(errors))
     return summary
 
 
-def read_verified_sha256sums(path: Path) -> dict[Path, str]:
-    """Read a GNU SHA256SUMS file and verify every referenced file now."""
-
-    manifest_path = path.resolve()
-    if not manifest_path.is_file():
-        raise FileNotFoundError(f"checksum file is missing: {manifest_path}")
-    records: dict[Path, str] = {}
-    for line_number, raw_line in enumerate(
-        manifest_path.read_text(encoding="utf-8").splitlines(),
-        start=1,
-    ):
-        if not raw_line:
-            continue
-        match = re.fullmatch(r"([0-9a-f]{64})  ([^\0]+)", raw_line)
-        if match is None:
-            raise ValueError(
-                f"invalid SHA256SUMS line {line_number} in {manifest_path}"
-            )
-        digest, path_text = match.groups()
-        source = Path(path_text)
-        if not source.is_absolute():
-            source = manifest_path.parent / source
-        source = source.resolve()
-        if source in records:
-            raise ValueError(f"duplicate checksum entry for {source}")
-        if not source.is_file():
-            raise FileNotFoundError(f"checksummed file is missing: {source}")
-        if sha256_file(source) != digest:
-            raise ValueError(f"checksummed file changed after the job: {source}")
-        records[source] = digest
-    if not records:
-        raise ValueError(f"checksum file is empty: {manifest_path}")
+def _rank_records(directory: Path) -> list[dict[str, Any]]:
+    records = []
+    for path in sorted(directory.glob("rank-*.json")):
+        row = _load_json(path)
+        row["record_sha256"] = sha256_file(path)
+        records.append(row)
     return records
 
 
-def _producer_digest_by_name(records: dict[Path, str]) -> dict[str, str]:
-    by_name: dict[str, str] = {}
-    for path, digest in records.items():
-        if path.name in by_name:
-            raise ValueError(f"producer file name is not unique: {path.name}")
-        by_name[path.name] = digest
-    return by_name
-
-
-def _copy_checked_file(
-    source: Path,
-    destination: Path,
-    *,
-    expected_sha256: str,
-) -> None:
-    destination.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(source, destination)
-    if sha256_file(destination) != expected_sha256:
-        raise RuntimeError(f"copied file checksum changed: {destination}")
-
-
-def _portable_reference(path: Path, output_dir: Path) -> str:
-    return path.relative_to(output_dir).as_posix()
-
-
-def _rewrite_bundle_references(
-    value: Any,
-    *,
-    copied_paths: dict[str, str],
-    external_paths: dict[str, str],
-) -> Any:
-    """Replace host paths in copied JSON records with portable references."""
-
-    if isinstance(value, dict):
-        return {
-            key: _rewrite_bundle_references(
-                item,
-                copied_paths=copied_paths,
-                external_paths=external_paths,
-            )
-            for key, item in value.items()
-        }
-    if isinstance(value, list):
-        return [
-            _rewrite_bundle_references(
-                item,
-                copied_paths=copied_paths,
-                external_paths=external_paths,
-            )
-            for item in value
-        ]
-    if isinstance(value, str):
-        if value in copied_paths:
-            return copied_paths[value]
-        if value in external_paths:
-            return external_paths[value]
-        is_windows_path = re.match(r"^[A-Za-z]:[\\/]", value) is not None
-        if Path(value).is_absolute() or is_windows_path:
-            raise ValueError(f"bundle JSON still references a host path: {value}")
-    return value
-
-
-def _copy_job_records(
-    *,
-    job_directories: dict[str, Path],
-    artifact_records: dict[str, dict[Path, str]],
-    producer_manifest_paths: dict[str, Path],
-    artifact_manifest_paths: dict[str, Path],
-    output_dir: Path,
-) -> tuple[list[dict[str, Any]], dict[str, str], list[Path]]:
-    """Copy all job-time campaign files and both checksum lists."""
-
-    copied_records: list[dict[str, Any]] = []
-    copied_paths: dict[str, str] = {}
-    output_paths: list[Path] = []
-    for label, job_dir in job_directories.items():
-        destination_root = output_dir / "job-records" / label
-        for source, digest in artifact_records[label].items():
-            try:
-                relative = source.relative_to(job_dir)
-            except ValueError as exc:
-                raise ValueError(
-                    f"job artifact is outside its result directory: {source}"
-                ) from exc
-            destination = destination_root / relative
-            _copy_checked_file(source, destination, expected_sha256=digest)
-            portable = _portable_reference(destination, output_dir)
-            copied_paths[str(source)] = portable
-            source_parent = source.parent
-            destination_parent = destination.parent
-            while source_parent != job_dir.parent:
-                copied_paths.setdefault(
-                    str(source_parent),
-                    _portable_reference(destination_parent, output_dir),
-                )
-                if source_parent == job_dir:
-                    break
-                source_parent = source_parent.parent
-                destination_parent = destination_parent.parent
-            output_paths.append(destination)
-            copied_records.append(
-                {
-                    "role": "job-file",
-                    "job": label,
-                    "file": portable,
-                    "sha256": digest,
-                    "source_sha256": digest,
-                }
-            )
-        for role, source in (
-            ("producer-checksums", producer_manifest_paths[label]),
-            ("job-file-checksums", artifact_manifest_paths[label]),
-        ):
-            digest = sha256_file(source)
-            destination = destination_root / source.name
-            _copy_checked_file(source, destination, expected_sha256=digest)
-            portable = _portable_reference(destination, output_dir)
-            copied_paths[str(source.resolve())] = portable
-            output_paths.append(destination)
-            copied_records.append(
-                {
-                    "role": role,
-                    "job": label,
-                    "file": portable,
-                    "sha256": digest,
-                    "source_sha256": digest,
-                }
-            )
-    return copied_records, copied_paths, output_paths
-
-
-def build_bundle(args: argparse.Namespace) -> dict[str, Any]:
-    capacity_dir = args.capacity_dir.resolve()
-    selection_path = capacity_dir / "selection.json"
-    selection = json.loads(selection_path.read_text(encoding="utf-8"))
-    if selection.get("schema") != SELECTION_SCHEMA:
-        raise ValueError("capacity selection has an unknown schema")
-    selection_sha = sha256_file(selection_path)
-
-    capacity_plan_path = capacity_dir / "plan.json"
-    capacity_plan = json.loads(capacity_plan_path.read_text(encoding="utf-8"))
-    capacity_rows = _capacity_prefix(capacity_plan, capacity_dir / "results")
-    if capacity_rows[-1].get("failure", {}).get("is_cuda_oom") is not True:
-        raise ValueError("capacity phase did not end at its first natural CUDA OOM")
-    validation_case = capacity_plan["validation_cases"][0]
-    validation_row = _read_case_result(
-        capacity_dir / "results" / validation_case["result_file"],
-        validation_case,
-    )
-    if validation_row["comparison"].get("passed") is not True:
-        raise ValueError("PME-versus-Ewald validation did not pass")
-    expected_capacity_charge_diagnostics = capacity_charge_diagnostic_records(
-        capacity_rows
-    )
-    if (
-        selection.get("capacity_charge_diagnostics")
-        != expected_capacity_charge_diagnostics
-    ):
-        raise ValueError(
-            "capacity charge diagnostics differ from the selected result rows"
-        )
-    selected_parity_case_id = str(selection["parity_reference"]["case_id"])
-    try:
-        expected_parity_charge_diagnostics = next(
-            record["charge_diagnostics"]
-            for record in expected_capacity_charge_diagnostics
-            if record["case_id"] == selected_parity_case_id
-        )
-    except StopIteration as error:
-        raise ValueError(
-            "the selected parity case has no capacity charge diagnostics"
-        ) from error
-    if (
-        selection["parity_reference"].get("charge_diagnostics")
-        != expected_parity_charge_diagnostics
-    ):
-        raise ValueError(
-            "parity charge diagnostics differ from the selected capacity row"
-        )
-    validation_charge_diagnostics = validated_charge_diagnostics(
-        validation_row.get("charges"),
-        atom_count=int(validation_row["atom_count"]),
-        target_sum_e=0.0,
-        context="PME-versus-Ewald charge diagnostics",
-    )
-    require_fixed_charge_validation_residual(
-        validation_charge_diagnostics,
-        atom_count=int(validation_row["atom_count"]),
-        max_abs_residual_e=float(
-            validation_row["comparison"]["acceptance"][
-                "absolute_charge_sum_e_max"
-            ]
-        ),
-    )
-    if (
-        selection["electrostatics_validation"].get("charge_diagnostics")
-        != validation_charge_diagnostics
-    ):
-        raise ValueError(
-            "electrostatics charge diagnostics differ from the selected result"
-        )
-    steady_timing_case = selection["steady_timing_case"]
-    steady_timing_one_gpu = _read_case_result(
-        capacity_dir / "results" / steady_timing_case["result_file"],
-        steady_timing_case,
-    )
-    if not bool(steady_timing_one_gpu.get("success")):
-        raise ValueError("dedicated one-GPU steady-timing case did not complete")
-
-    derived_by_world: dict[int, tuple[dict[str, Any], list[dict[str, Any]]]] = {}
-    distributed_directory_by_world: dict[int, Path] = {}
-    for raw_directory in args.distributed_dir:
-        directory = raw_directory.resolve()
-        plan, rows = _read_derived_results(directory, selection_sha)
-        world_size = int(plan["world_size"])
-        if world_size in derived_by_world:
-            raise ValueError(f"duplicate distributed world size {world_size}")
-        derived_by_world[world_size] = (plan, rows)
-        distributed_directory_by_world[world_size] = directory
-    if set(derived_by_world) != set(DEFAULT_DISTRIBUTED_WORLD_SIZES):
-        raise ValueError(
-            "final bundle requires every declared multi-GPU job: "
-            f"{DEFAULT_DISTRIBUTED_WORLD_SIZES}"
-        )
-
-    job_directories = {
-        "capacity": capacity_dir,
-        **{
-            f"distributed-{world_size:02d}": distributed_directory_by_world[world_size]
-            for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES
-        },
-    }
-    producer_manifest_paths = {
-        label: directory / "producer-SHA256SUMS"
-        for label, directory in job_directories.items()
-    }
-    artifact_manifest_paths = {
-        label: directory / "artifact-SHA256SUMS"
-        for label, directory in job_directories.items()
-    }
-    producer_records = {
-        label: read_verified_sha256sums(path)
-        for label, path in producer_manifest_paths.items()
-    }
-    artifact_records = {
-        label: read_verified_sha256sums(path)
-        for label, path in artifact_manifest_paths.items()
-    }
-    producer_digest_maps = {
-        label: _producer_digest_by_name(records)
-        for label, records in producer_records.items()
-    }
-    capacity_producers = producer_digest_maps["capacity"]
-    for label, records in producer_digest_maps.items():
-        if records != capacity_producers:
-            raise ValueError(f"producer files changed between jobs: {label}")
-    for path in (
-        Path(__file__),
-        DOMAIN_METHODOLOGY_CONFIG_PATH,
-        *args.producer_file,
-    ):
-        resolved = path.resolve()
-        expected = capacity_producers.get(resolved.name)
-        if expected is None or sha256_file(resolved) != expected:
-            raise ValueError(
-                f"current producer does not match job-time checksums: {resolved}"
-            )
-
-    phase_summaries: dict[str, dict[str, Any]] = {}
-    for label, directory in job_directories.items():
-        summary_path = directory / "phase-summary.json"
-        summary = json.loads(summary_path.read_text(encoding="utf-8"))
-        if (
-            summary.get("schema") != PHASE_SUMMARY_SCHEMA
-            or summary.get("passed") is not True
-        ):
-            raise ValueError(f"campaign phase did not pass: {label}")
-        phase_summaries[label] = summary
-        checkpoint_report = json.loads(
-            (directory / "aimnet-checkpoint-preflight.json").read_text(encoding="utf-8")
-        )
-        if (
-            checkpoint_report.get("schema") != CHECKPOINT_PREFLIGHT_SCHEMA
-            or checkpoint_report.get("alias") != AIMNET_CHECKPOINT
-            or checkpoint_report.get("sha256") != AIMNET_CHECKPOINT_SHA256
-        ):
-            raise ValueError(f"AIMNet2 checkpoint preflight changed: {label}")
-
-    distributed_rows = [
-        row for _plan, rows in derived_by_world.values() for row in rows
-    ]
-    distributed_rows_by_case = {
-        steady_timing_one_gpu["case_id"]: steady_timing_one_gpu,
-        **{row["case_id"]: row for row in distributed_rows},
-    }
-    if len(distributed_rows_by_case) != len(distributed_rows) + 1:
-        raise ValueError("distributed jobs produced duplicate case IDs")
-    successful_rescue_world_sizes = _require_complete_distributed_outcomes(
-        selection,
-        distributed_rows_by_case,
-    )
-    acceptance = selection["parity_reference"]["acceptance"]
-    parity_pair_count = int(selection["parity_reference"]["input"]["pair_count"])
-    parity_rows_by_world = {
-        world_size: distributed_rows_by_case[
-            parity_case_id(parity_pair_count, world_size)
-        ]
-        for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES
-    }
-    parity_force_comparisons = {
-        world_size: _parity_comparison(selection, row)
-        for world_size, row in parity_rows_by_world.items()
-    }
-    energy_reference_world_size = int(acceptance["energy_reference_world_size"])
-    energy_comparison_world_sizes = tuple(
-        int(value) for value in acceptance["energy_comparison_world_sizes"]
-    )
-    parity_energy_reference = parity_rows_by_world[energy_reference_world_size]
-    parity_energy_comparisons = {
-        world_size: _distributed_energy_comparison(
-            parity_energy_reference,
-            parity_rows_by_world[world_size],
-            selection,
-        )
-        for world_size in energy_comparison_world_sizes
-    }
-    if not all(
-        comparison["forces_passed"]
-        for comparison in parity_force_comparisons.values()
-    ):
-        raise ValueError(
-            "the agreement input fails the declared one- versus multi-GPU "
-            "force limits"
-        )
-    if not all(
-        comparison["energy_passed"]
-        for comparison in parity_energy_comparisons.values()
-    ):
-        raise ValueError(
-            "the agreement input fails the declared distributed energy limits"
-        )
-
-    steady_pair_count = int(selection["largest_success"]["input"]["pair_count"])
-    steady_rows_by_world = {
-        world_size: distributed_rows_by_case[
-            steady_timing_case_id(steady_pair_count, world_size)
-        ]
-        for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES
-    }
-    steady_force_comparisons = {
-        world_size: _steady_timing_output_comparison(selection, row)
-        for world_size, row in steady_rows_by_world.items()
-    }
-    steady_energy_reference = steady_rows_by_world[energy_reference_world_size]
-    steady_energy_comparisons = {
-        world_size: _distributed_energy_comparison(
-            steady_energy_reference,
-            steady_rows_by_world[world_size],
-            selection,
-        )
-        for world_size in energy_comparison_world_sizes
-    }
-    if not all(
-        comparison["forces_passed"]
-        for comparison in steady_force_comparisons.values()
-    ):
-        raise ValueError(
-            "the timed input fails the declared one- versus multi-GPU force limits"
-        )
-    if not all(
-        comparison["energy_passed"]
-        for comparison in steady_energy_comparisons.values()
-    ):
-        raise ValueError(
-            "the timed input fails the declared distributed energy limits"
-        )
-
-    successful_rescue_rows = sorted(
-        (
-            row
-            for row in distributed_rows_by_case.values()
-            if row.get("measurement_role") == "rescue" and bool(row.get("success"))
-        ),
-        key=lambda row: int(row["world_size"]),
-    )
-    rescue_output_comparisons = [
-        {
-            "reference_world_size": int(successful_rescue_rows[0]["world_size"]),
-            "observed_world_size": int(row["world_size"]),
-            **_output_comparison(
-                successful_rescue_rows[0],
-                row,
-                acceptance,
-            ),
-        }
-        for row in successful_rescue_rows[1:]
-    ]
-    if not all(item["passed"] for item in rescue_output_comparisons):
-        raise ValueError(
-            "successful retries of the one-GPU OOM input disagree in energy or forces"
-        )
-    successful_rows = [
-        row
-        for row in [*capacity_rows, *distributed_rows_by_case.values()]
-        if bool(row["success"])
-    ]
-    source_reference = successful_rows[0]["source"]
-    if (
-        source_reference.get("toolkit_core_commit") != CORE_COMMIT
-        or source_reference.get("toolkit_ops_commit") != OPS_COMMIT
-        or source_reference.get("toolkit_version") != "0.2.0"
-        or source_reference.get("aimnet_checkpoint_sha256") != AIMNET_CHECKPOINT_SHA256
-    ):
-        raise ValueError("measured source does not match the required versions")
-    if bool(source_reference.get("repository_dirty")):
-        raise ValueError("publishable results require a clean tutorial checkout")
-    planned_methodology = selection["methodology"]
-    planned_methodology_identity = planned_methodology["source_identity"]
-    if (
-        source_reference.get("domain_methodology_name")
-        != planned_methodology_identity["name"]
-        or source_reference.get("domain_methodology_version")
-        != planned_methodology_identity["version"]
-        or source_reference.get("domain_methodology_config_sha256")
-        != planned_methodology_identity["sha256"]
-        or source_reference.get("domain_methodology_record")
-        != planned_methodology["source"]
-    ):
-        raise ValueError("runner methodology source differs from the campaign plan")
-    source_keys = (
-        "toolkit_core_commit",
-        "toolkit_core_source_root",
-        "toolkit_core_source_file",
-        "toolkit_core_source_file_sha256",
-        "toolkit_ops_commit",
-        "toolkit_ops_source_root",
-        "toolkit_ops_source_file",
-        "toolkit_ops_source_file_sha256",
-        "toolkit_version",
-        "toolkit_ops_version",
-        "repository_commit",
-        "repository_tree",
-        "repository_branch",
-        "repository_required_paths",
-        "repository_dirty",
-        "runtime_software",
-        "runner_sha256",
-        "aimnet_checkpoint_sha256",
-        "domain_methodology_name",
-        "domain_methodology_version",
-        "domain_methodology_config_file",
-        "domain_methodology_config_sha256",
-        "domain_methodology_record",
-    )
-    if any(
-        validation_row["source"].get(key) != source_reference.get(key)
-        for key in source_keys
-    ):
-        raise ValueError("electrostatics validation used a different source")
-    for row in successful_rows:
-        if any(
-            row["source"].get(key) != source_reference.get(key) for key in source_keys
-        ):
-            raise ValueError(f"source identity changed between jobs: {row['case_id']}")
-        expected_model = selection["settings"]["model"]
-        observed_model = row["model"]
-        observed_pme = observed_model["pme"]
-        observed_d3 = observed_model["d3"]
-        input_geometry = validated_manifest_cell_geometry(
-            row["input"]["manifest"]
-        )
-        require_planned_supercell_geometry(
-            input_geometry,
-            pair_count=int(row["pair_count"]),
-            density_g_cm3=float(
-                selection["settings"]["input"]["construction_density_g_cm3"]
-            ),
-        )
-        expected_pme = expected_pme_setup(
-            cell_lengths_a=input_geometry["cell_lengths_a"],
-            real_space_cutoff_a=float(expected_model["pme_cutoff_a"]),
-            accuracy=float(expected_model["pme_accuracy"]),
-            mesh_safety_factor=float(expected_model["pme_mesh_safety_factor"]),
-        )
-        if (
-            float(observed_pme["cutoff_a"]) != float(expected_model["pme_cutoff_a"])
-            or not math.isclose(
-                float(observed_pme["alpha_a_inverse"]),
-                expected_pme["alpha_a_inverse"],
-                rel_tol=1.0e-6,
-            )
-            or list(observed_pme["mesh_dimensions"])
-            != expected_pme["mesh_dimensions"]
-            or any(
-                not math.isclose(float(observed), expected, rel_tol=1.0e-6)
-                for observed, expected in zip(
-                    observed_pme["mesh_spacing_a"],
-                    expected_pme["mesh_spacing_a"],
-                    strict=True,
-                )
-            )
-            or float(observed_pme["mesh_safety_factor"])
-            != float(expected_model["pme_mesh_safety_factor"])
-            or observed_pme.get("parameter_rule")
-            != expected_model["pme_parameter_rule"]
-            or int(observed_pme["spline_order"])
-            != int(expected_model["pme_spline_order"])
-            or float(observed_pme["accuracy"])
-            != float(expected_model["pme_accuracy"])
-            or float(observed_d3["cutoff_a"]) != float(expected_model["d3_cutoff_a"])
-            or float(observed_d3["smoothing_fraction"])
-            != float(expected_model["d3_smoothing_fraction"])
-            or observed_d3["parameter_file_sha256"] != D3_PARAMETER_SHA256
-            or observed_model.get("neighbor_adaptation")
-            != expected_model["neighbor_adaptation"]
-        ):
-            raise ValueError(f"model settings changed: {row['case_id']}")
-        distributed = row["distributed"]
-        world_size = int(row["world_size"])
-        validate_recorded_rank_layout(distributed, world_size=world_size)
-        if (
-            float(distributed["domain_cutoff_a"])
-            != float(selection["settings"]["distributed"]["domain_cutoff_a"])
-            or float(distributed["domain_skin_a"])
-            != float(selection["settings"]["distributed"]["domain_skin_a"])
-            or distributed["compile"] is not False
-            or distributed.get("grid_dims") is not None
-            or (world_size > 1 and distributed["require_nondegenerate"] is not True)
-        ):
-            raise ValueError(f"domain-decomposition settings changed: {row['case_id']}")
-
-    settings_record = {
-        "domain_methodology": {
-            "name": selection["methodology"]["source_identity"]["name"],
-            "version": selection["methodology"]["source_identity"]["version"],
-            "config_sha256": selection["methodology"]["source_identity"]["sha256"],
-            "resolved_values": selection["methodology"]["resolved_values"],
-        },
-        "model_components": [
-            "AIMNet2 checkpoint base and predicted charges",
-            "PME electrostatics",
-            "D3(BJ) dispersion",
-        ],
-        "precision": "float32",
-        "aimnet_checkpoint_sha256": AIMNET_CHECKPOINT_SHA256,
-        "d3_parameters_sha256": D3_PARAMETER_SHA256,
-        "neighbor_adaptation": selection["settings"]["model"]["neighbor_adaptation"],
-        "pme": {
-            "cutoff_a": selection["settings"]["model"]["pme_cutoff_a"],
-            "mesh_safety_factor": selection["settings"]["model"][
-                "pme_mesh_safety_factor"
-            ],
-            "parameter_rule": selection["settings"]["model"]["pme_parameter_rule"],
-            "spline_order": selection["settings"]["model"]["pme_spline_order"],
-            "accuracy": selection["settings"]["model"]["pme_accuracy"],
-            "hybrid_forces": True,
-            "reciprocal_mesh_distribution": "replicated_per_rank",
-        },
-        "ewald_reference": {
-            "accuracy": selection["settings"]["model"][
-                "ewald_reference_accuracy"
-            ],
-            "parameter_rule": "estimate_ewald_parameters(accuracy)",
-            "scope": "fixed-charge electrostatics validation only",
-        },
-        "domain": {
-            "api": "DomainParallel",
-            "skin_a": selection["settings"]["distributed"]["domain_skin_a"],
-            "cutoff_a": selection["settings"]["distributed"]["domain_cutoff_a"],
-            "compile": False,
-            "require_nondegenerate": True,
-            "grid_dims": None,
-            "rank_grid_policy": (
-                "Toolkit SpatialPartitioner derives cells_per_dim and "
-                "rank_grid from each input's actual cell shape and the "
-                "domain cutoff"
-            ),
-            "recorded_layout_fields": ["cells_per_dim", "rank_grid"],
-            "halo_counts": "not_exposed_by_public_api",
-        },
-        "packmol": {
-            "version": selection["settings"]["input"]["packmol_version"],
-            "construction_density_g_cm3": selection["settings"]["input"][
-                "construction_density_g_cm3"
-            ],
-            "tolerance_a": selection["settings"]["input"]["packmol_tolerance_a"],
-            "precision_a": selection["settings"]["input"]["packmol_precision_a"],
-            "base_seed": selection["settings"]["input"]["packmol_base_seed"],
-            "periodic_boundary_check": True,
-        },
-        "timing_boundary": selection["settings"]["timing"]["steady"]["boundary"],
-        "timing_measurement_kind": selection["settings"]["timing"]["steady"][
-            "measurement_kind"
-        ],
-        "timing_measurement_role": "steady_timing",
-        "timing_world_sizes": selection["settings"]["timing"]["steady"]["world_sizes"],
-        "timing_warmup_count": selection["settings"]["timing"]["steady"][
-            "warmup_count"
-        ],
-        "timing_sample_count": selection["settings"]["timing"]["steady"][
-            "sample_count"
-        ],
-        "timing_model_evaluations_per_workflow": selection["settings"]["timing"][
-            "steady"
-        ]["model_evaluations_per_workflow"],
-        "timing_one_rank_run_steps": selection["settings"]["timing"]["steady"][
-            "one_rank_run_steps"
-        ],
-        "timing_multi_rank_run_steps": selection["settings"]["timing"]["steady"][
-            "multi_rank_run_steps"
-        ],
-        "timing_summary": selection["settings"]["timing"]["steady"]["summary"],
-        "timing_quartile_method": selection["settings"]["timing"]["steady"][
-            "quartile_method"
-        ],
-        "timing_max_relative_iqr": selection["settings"]["timing"]["steady"][
-            "max_relative_iqr"
-        ],
-        "publishable_benchmark": selection["settings"]["timing"][
-            "publishable_benchmark"
-        ],
-        "timing_interpretation": selection["settings"]["timing"]["interpretation"],
-        "parity_acceptance": selection["parity_reference"]["acceptance"],
-        "force_difference_definition": (
-            "RMS and maximum absolute difference over Cartesian components"
-        ),
-    }
-    settings_sha = canonical_json_sha256(settings_record)
-
-    capacity_csv_rows: list[dict[str, Any]] = []
-    structure_hashes: dict[int, str] = {}
-    for row in capacity_rows:
-        atom_count = int(row["atom_count"])
-        structure_hash = str(row["input"]["file_sha256"])
-        structure_hashes[atom_count] = structure_hash
-        capacity_csv_rows.append(
-            {
-                "case_id": row["case_id"],
-                "atom_count": atom_count,
-                "molecules_per_species": int(row["pair_count"]),
-                "gpus": 1,
-                "success": bool(row["success"]),
-                "status": row["status"],
-                **_result_metrics(row),
-                "structure_sha256": structure_hash,
-                "settings_sha256": settings_sha,
-                "measurement_role": "capacity",
-                "measurement_kind": "cold_one_shot_partition_run_gather",
-            }
-        )
-
-    parity_csv_rows: list[dict[str, Any]] = []
-    for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES:
-        row = parity_rows_by_world[world_size]
-        case_id = str(row["case_id"])
-        force_comparison = parity_force_comparisons[world_size]
-        energy_comparison = parity_energy_comparisons.get(world_size)
-        if energy_comparison is None:
-            energy_comparison = _distributed_energy_comparison(
-                parity_energy_reference,
-                parity_energy_reference,
-                selection,
-            )
-        parity_csv_rows.append(
-            {
-                "case_id": case_id,
-                "atom_count": int(row["atom_count"]),
-                "force_reference_gpus": (
-                    DOMAIN_METHODOLOGY.force_reference_world_size
-                ),
-                "energy_reference_gpus": energy_reference_world_size,
-                "gpus": world_size,
-                "success": True,
-                "status": "complete",
-                "failure_type": "",
-                "failure_stage": "",
-                "error": "",
-                "one_gpu_energy_abs_offset_ev": force_comparison[
-                    "energy_difference_ev"
-                ],
-                "one_gpu_energy_abs_offset_ev_per_atom": force_comparison[
-                    "energy_difference_ev_per_atom"
-                ],
-                "distributed_energy_difference_ev": energy_comparison[
-                    "energy_difference_ev"
-                ],
-                "distributed_energy_difference_ev_per_atom": energy_comparison[
-                    "energy_difference_ev_per_atom"
-                ],
-                "force_rms_difference_ev_per_a": force_comparison[
-                    "force_rms_difference_ev_per_a"
-                ],
-                "force_max_difference_ev_per_a": force_comparison[
-                    "force_max_difference_ev_per_a"
-                ],
-                "energy_tolerance_ev_per_atom": energy_comparison[
-                    "energy_tolerance_ev_per_atom"
-                ],
-                "force_tolerance_ev_per_a": force_comparison[
-                    "force_tolerance_ev_per_a"
-                ],
-                "distributed_energy_passed": bool(
-                    energy_comparison["energy_passed"]
-                ),
-                "force_passed": bool(force_comparison["forces_passed"]),
-                "parity_passed": True,
-                "structure_sha256": row["input"]["file_sha256"],
-                "settings_sha256": settings_sha,
-                "measurement_role": "parity",
-                "measurement_kind": "cold_one_shot_partition_run_gather",
-            }
-        )
-
-    def distributed_csv_row(
-        row: dict[str, Any],
-        *,
-        case_id: str | None = None,
-        world_size: int,
-    ) -> dict[str, Any]:
-        atom_count = int(row["atom_count"])
-        structure_hash = str(row["input"]["file_sha256"])
-        structure_hashes[atom_count] = structure_hash
-        metrics = _result_metrics(row)
-        owned_counts = (
-            [int(value) for value in row["distributed"]["owned_atom_counts"]]
-            if bool(row["success"])
-            else [
-                int(record["owned_atom_count"])
-                for record in row.get("rank_records", [])
-                if record.get("owned_atom_count") is not None
-            ]
-        )
-        distributed_record = row.get("distributed", {})
-        if (
-            isinstance(distributed_record, dict)
-            and distributed_record.get("cells_per_dim")
-            and distributed_record.get("rank_grid")
-        ):
-            _cells_per_dim, rank_grid = validate_recorded_rank_layout(
-                distributed_record,
-                world_size=world_size,
-            )
-            spatial_grid = "x".join(str(value) for value in rank_grid)
-        elif bool(row["success"]):
-            raise ValueError(
-                f"successful distributed row has no recorded layout: "
-                f"{row['case_id']}"
-            )
-        else:
-            spatial_grid = ""
-        return {
-            "case_id": case_id or row["case_id"],
-            "atom_count": atom_count,
-            "molecules_per_species": int(row["pair_count"]),
-            "nodes": world_size,
-            "gpus": world_size,
-            "ranks": world_size,
-            "success": bool(row["success"]),
-            "status": row["status"],
-            **metrics,
-            "owned_atoms_min_rank": min(owned_counts) if owned_counts else "",
-            "owned_atoms_max_rank": max(owned_counts) if owned_counts else "",
-            "spatial_grid": spatial_grid,
-            "structure_sha256": structure_hash,
-            "settings_sha256": settings_sha,
-            "measurement_role": row["measurement_role"],
-            "measurement_kind": (
-                "steady_partition_run_gather"
-                if row["measurement_role"] == "steady_timing"
-                else "cold_one_shot_partition_run_gather"
-            ),
-        }
-
-    distributed_csv_rows = [
-        distributed_csv_row(
-            steady_timing_one_gpu,
-            world_size=1,
-        )
-    ]
-    for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES:
-        for id_builder in (steady_timing_case_id, rescue_case_id):
-            pair_count = (
-                int(selection["largest_success"]["input"]["pair_count"])
-                if id_builder is steady_timing_case_id
-                else int(selection["first_cuda_oom"]["input"]["pair_count"])
-            )
-            row = distributed_rows_by_case[id_builder(pair_count, world_size)]
-            distributed_csv_rows.append(distributed_csv_row(row, world_size=world_size))
-
-    steady_timing_rows = [
-        row
-        for row in distributed_csv_rows
-        if row["measurement_role"] == "steady_timing"
-    ]
-    unstable_timing_rows = [
-        row
-        for row in steady_timing_rows
-        if (
-            float(row["elapsed_iqr_s"]) / float(row["elapsed_median_s"])
-            > DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr + 1.0e-12
-        )
-    ]
-    if unstable_timing_rows:
-        details = ", ".join(
-            f"{int(row['gpus'])} GPU: "
-            f"{float(row['elapsed_iqr_s']) / float(row['elapsed_median_s']):.1%}"
-            for row in unstable_timing_rows
-        )
-        raise ValueError(
-            "steady timing is too variable to report; relative IQR exceeds "
-            f"{DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr:.1%} "
-            f"for {details}"
-        )
-
-    successful_case_rows = [
-        row
-        for row in [
-            *capacity_rows,
-            *distributed_rows_by_case.values(),
-        ]
-        if bool(row["success"])
-    ]
-    successful_runtime_rows = [
-        runtime
-        for row in successful_case_rows
-        for runtime in row.get("runtime", [])
-        if runtime
-    ]
-    gpu_names = {str(row["gpu_name"]) for row in successful_runtime_rows}
-    gpu_memory = {int(row["gpu_total_memory_bytes"]) for row in successful_runtime_rows}
-    cuda_versions = {str(row["torch_cuda_version"]) for row in successful_runtime_rows}
-    driver_versions = {
-        str(row["driver_version"])
-        for row in successful_runtime_rows
-        if row.get("driver_version")
-    }
-    if (
-        len(gpu_names) != 1
-        or not all("H100" in value for value in gpu_names)
-        or len(gpu_memory) != 1
-        or len(cuda_versions) != 1
-        or len(driver_versions) != 1
-    ):
-        raise ValueError("H100 hardware identity is missing or inconsistent")
-    max_observed_gpus = max(
-        len([runtime for runtime in row.get("runtime", []) if runtime])
-        for row in successful_case_rows
-    )
-    max_observed_nodes = max(
-        len(
-            {
-                str(runtime["host"])
-                for runtime in row.get("runtime", [])
-                if runtime and str(runtime.get("host", "")).strip()
-            }
-        )
-        for row in successful_case_rows
-    )
-    if max_observed_gpus <= 0 or max_observed_nodes <= 0:
-        raise ValueError("successful cases do not contain observed GPU and node counts")
-
-    source_record = source_reference
-    producer_files = dict(sorted(capacity_producers.items()))
-    runner_name = Path(source_record["runner"]).name
-    if producer_files.get(runner_name) != source_record["runner_sha256"]:
-        raise ValueError("runner identity does not match job-time producer checksums")
-    methodology_config_name = Path(
-        source_record["domain_methodology_config_file"]
-    ).name
-    if (
-        producer_files.get(methodology_config_name)
-        != source_record["domain_methodology_config_sha256"]
-    ):
-        raise ValueError(
-            "methodology config identity does not match job-time producer checksums"
-        )
-    runtime_software_record = dict(source_record["runtime_software"])
-    python_version = runtime_software_record["python_version"]
-    runtime_software_record["python_executable"] = f"external:python@{python_version}"
-    runtime_software_record["python_prefix"] = (
-        f"external:python-prefix@{python_version}"
-    )
-    source_identity = {
-        "repository_commit": source_record["repository_commit"],
-        "repository_tree": source_record["repository_tree"],
-        "repository_branch": source_record["repository_branch"],
-        "repository_dirty": False,
-        "toolkit_commit": source_record["toolkit_core_commit"],
-        "toolkit_ops_commit": source_record["toolkit_ops_commit"],
-        "toolkit_version": source_record["toolkit_version"],
-        "toolkit_ops_version": source_record["toolkit_ops_version"],
-        "runtime_software": runtime_software_record,
-        "aimnet_checkpoint_sha256": source_record["aimnet_checkpoint_sha256"],
-        "domain_methodology": {
-            "name": source_record["domain_methodology_name"],
-            "version": source_record["domain_methodology_version"],
-            "config_sha256": source_record["domain_methodology_config_sha256"],
-            "record": source_record["domain_methodology_record"],
-            "resolved_values": selection["methodology"]["resolved_values"],
-        },
-        "producer_files_sha256": producer_files,
-    }
-    hardware_identity = {
-        "site": args.site,
-        "site_source": "operator-declared",
-        "gpu_model": next(iter(gpu_names)),
-        "gpu_memory_bytes": next(iter(gpu_memory)),
-        "gpus_available": max_observed_gpus,
-        "nodes_available": max_observed_nodes,
-        "resource_count_source": "derived from successful per-rank runtime records",
-        "driver_version": next(iter(driver_versions)),
-        "cuda_version": next(iter(cuda_versions)),
-        "interconnect": args.interconnect,
-        "interconnect_source": "operator-declared; raw GPU topology is retained",
-    }
-    input_identity = {
-        "structures_sha256_by_atom_count": {
-            str(atom_count): digest
-            for atom_count, digest in sorted(structure_hashes.items())
-        },
-        "nci_subset_sha256": NCI_SUBSET_SHA256,
-        "molecule_pair": "phenol + N-methylacetamide",
-        "construction_density_g_cm3": selection["settings"]["input"][
-            "construction_density_g_cm3"
-        ],
-    }
-    identity = {
-        "source": source_identity,
-        "hardware": hardware_identity,
-        "settings": settings_record,
-        "inputs": input_identity,
-    }
-    identity_sha = {
-        name: canonical_json_sha256(record) for name, record in identity.items()
-    }
-
-    output_dir = args.output_dir.resolve()
-    if output_dir.exists() and any(output_dir.iterdir()):
-        raise FileExistsError(f"bundle output directory is not empty: {output_dir}")
-    output_dir.mkdir(parents=True, exist_ok=True)
-
-    generic_records, copied_paths, generic_paths = _copy_job_records(
-        job_directories=job_directories,
-        artifact_records=artifact_records,
-        producer_manifest_paths=producer_manifest_paths,
-        artifact_manifest_paths=artifact_manifest_paths,
-        output_dir=output_dir,
-    )
-
-    # Copy report-producing source files and the packaged NCI input. Downloaded
-    # model and D3 cache files stay external because their redistribution is
-    # reviewed separately from this result bundle.
-    external_paths: dict[str, str] = {}
-    producer_paths_by_name = {
-        path.name: (path, digest)
-        for path, digest in producer_records["capacity"].items()
-    }
-    for name, (source, digest) in producer_paths_by_name.items():
-        if digest == D3_PARAMETER_SHA256:
-            external_paths[str(source)] = f"external:d3-parameter-cache@sha256:{digest}"
-            continue
-        if digest == NCI_SUBSET_SHA256:
-            destination = output_dir / "source-inputs" / source.name
-            role = "nci-input"
-        elif source.suffix in {".py", ".sh", ".sbatch"}:
-            destination = output_dir / "producers" / source.name
-            role = "producer"
-        else:
-            external_paths[str(source)] = f"external:{name}@sha256:{digest}"
-            continue
-        _copy_checked_file(source, destination, expected_sha256=digest)
-        portable = _portable_reference(destination, output_dir)
-        copied_paths[str(source)] = portable
-        generic_paths.append(destination)
-        generic_records.append(
-            {
-                "role": role,
-                "file": portable,
-                "sha256": digest,
-                "source_sha256": digest,
-            }
-        )
-
-    embedded_manifest = validation_row["input"].get("manifest")
-    if isinstance(embedded_manifest, dict):
-        packing_source = embedded_manifest.get("source", {})
-        packing_helper_text = packing_source.get("packing_helper")
-        packing_helper_sha = packing_source.get("packing_helper_sha256")
-        if (
-            packing_helper_text
-            and packing_helper_sha
-            and str(Path(str(packing_helper_text)).resolve()) not in copied_paths
-        ):
-            packing_helper = Path(str(packing_helper_text)).resolve()
-            destination = output_dir / "producers" / "domain-packing.py"
-            _copy_checked_file(
-                packing_helper,
-                destination,
-                expected_sha256=str(packing_helper_sha),
-            )
-            portable = _portable_reference(destination, output_dir)
-            copied_paths[str(packing_helper)] = portable
-            generic_paths.append(destination)
-            generic_records.append(
-                {
-                    "role": "producer",
-                    "file": portable,
-                    "sha256": str(packing_helper_sha),
-                    "source_sha256": str(packing_helper_sha),
-                }
-            )
-
-    all_result_rows = [
-        validation_row,
-        *capacity_rows,
-        *distributed_rows_by_case.values(),
-    ]
-    for row in all_result_rows:
-        source = row.get("source") or {}
-        external_values = {
-            source.get("repository_root"): (
-                f"external:tutorial-checkout@{source.get('repository_commit')}"
-            ),
-            source.get("toolkit_core_source_root"): (
-                f"external:toolkit-core@{source.get('toolkit_core_commit')}"
-            ),
-            source.get("toolkit_core_source_file"): (
-                f"external:toolkit-core-source@sha256:"
-                f"{source.get('toolkit_core_source_file_sha256')}"
-            ),
-            source.get("toolkit_ops_source_root"): (
-                f"external:toolkit-ops@{source.get('toolkit_ops_commit')}"
-            ),
-            source.get("toolkit_ops_source_file"): (
-                f"external:toolkit-ops-source@sha256:"
-                f"{source.get('toolkit_ops_source_file_sha256')}"
-            ),
-            source.get("aimnet_checkpoint"): (
-                f"external:{AIMNET_CHECKPOINT}@sha256:{AIMNET_CHECKPOINT_SHA256}"
-            ),
-        }
-        checkpoint_file = source.get("aimnet_checkpoint_file")
-        if isinstance(checkpoint_file, dict):
-            external_values[checkpoint_file.get("path")] = (
-                f"external:{AIMNET_CHECKPOINT}@sha256:{AIMNET_CHECKPOINT_SHA256}"
-            )
-        model = row.get("model") or {}
-        d3 = model.get("d3") or {}
-        external_values[d3.get("parameter_file")] = (
-            f"external:d3-parameter-cache@sha256:{D3_PARAMETER_SHA256}"
-        )
-        parameter_identity = d3.get("parameter_file_identity")
-        if isinstance(parameter_identity, dict):
-            external_values[parameter_identity.get("path")] = (
-                f"external:d3-parameter-cache@sha256:{D3_PARAMETER_SHA256}"
-            )
-        manifest_record = row.get("input", {}).get("manifest")
-        if isinstance(manifest_record, dict):
-            executable = manifest_record.get("packmol", {}).get("executable")
-            external_values[executable] = f"external:packmol@{EXPECTED_PACKMOL_VERSION}"
-        runtime_records = [source.get("runtime_software"), *(row.get("runtime") or [])]
-        for rank_record in row.get("rank_records", []):
-            rank_source = rank_record.get("source") or {}
-            external_values.update(
-                {
-                    rank_source.get("repository_root"): (
-                        f"external:tutorial-checkout@"
-                        f"{rank_source.get('repository_commit')}"
-                    ),
-                    rank_source.get("toolkit_core_source_root"): (
-                        f"external:toolkit-core@"
-                        f"{rank_source.get('toolkit_core_commit')}"
-                    ),
-                    rank_source.get("toolkit_core_source_file"): (
-                        f"external:toolkit-core-source@sha256:"
-                        f"{rank_source.get('toolkit_core_source_file_sha256')}"
-                    ),
-                    rank_source.get("toolkit_ops_source_root"): (
-                        f"external:toolkit-ops@{rank_source.get('toolkit_ops_commit')}"
-                    ),
-                    rank_source.get("toolkit_ops_source_file"): (
-                        f"external:toolkit-ops-source@sha256:"
-                        f"{rank_source.get('toolkit_ops_source_file_sha256')}"
-                    ),
-                    rank_source.get("aimnet_checkpoint"): (
-                        f"external:{AIMNET_CHECKPOINT}@sha256:"
-                        f"{AIMNET_CHECKPOINT_SHA256}"
-                    ),
-                }
-            )
-            rank_checkpoint = rank_source.get("aimnet_checkpoint_file")
-            if isinstance(rank_checkpoint, dict):
-                external_values[rank_checkpoint.get("path")] = (
-                    f"external:{AIMNET_CHECKPOINT}@sha256:{AIMNET_CHECKPOINT_SHA256}"
-                )
-            runtime_records.extend(
-                [rank_source.get("runtime_software"), rank_record.get("runtime")]
-            )
-        for runtime in runtime_records:
-            if not isinstance(runtime, dict):
-                continue
-            external_values[runtime.get("python_executable")] = (
-                f"external:python@{runtime.get('python_version')}"
-            )
-            external_values[runtime.get("python_prefix")] = (
-                f"external:python-prefix@{runtime.get('python_version')}"
-            )
-        external_paths.update(
-            {
-                str(path): replacement
-                for path, replacement in external_values.items()
-                if path
-            }
-        )
-
-    portable_plan_sources = {
-        "capacity-plan.json": capacity_plan,
-        "selection.json": selection,
-        **{
-            f"distributed-{world_size:02d}-plan.json": derived_by_world[world_size][0]
-            for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES
-        },
-    }
-    portable_plan_files: dict[str, str] = {}
-    portable_plan_digests: dict[str, str] = {}
-    for filename, value in portable_plan_sources.items():
-        portable_value = _rewrite_bundle_references(
-            value,
-            copied_paths=copied_paths,
-            external_paths=external_paths,
-        )
-        destination = output_dir / "plans" / filename
-        atomic_write_json(destination, portable_value)
-        digest = sha256_file(destination)
-        portable = _portable_reference(destination, output_dir)
-        portable_plan_files[filename] = portable
-        portable_plan_digests[filename] = digest
-        generic_paths.append(destination)
-        generic_records.append(
-            {
-                "role": "portable-plan",
-                "file": portable,
-                "sha256": digest,
-                "source_sha256": None,
-            }
-        )
-
-    structure_sources = (
-        (
-            "validation",
-            int(validation_row["pair_count"]),
-            Path(validation_row["input"]["path"]).resolve(),
-            str(validation_row["input"]["file_sha256"]),
-        ),
-        (
-            "parity",
-            int(selection["parity_reference"]["input"]["pair_count"]),
-            Path(selection["parity_reference"]["input"]["structure"]["path"]).resolve(),
-            str(selection["parity_reference"]["input"]["structure"]["sha256"]),
-        ),
-        (
-            "largest-success",
-            int(selection["largest_success"]["input"]["pair_count"]),
-            Path(selection["largest_success"]["input"]["structure"]["path"]).resolve(),
-            str(selection["largest_success"]["input"]["structure"]["sha256"]),
-        ),
-        (
-            "first-cuda-oom",
-            int(selection["first_cuda_oom"]["input"]["pair_count"]),
-            Path(selection["first_cuda_oom"]["input"]["structure"]["path"]).resolve(),
-            str(selection["first_cuda_oom"]["input"]["structure"]["sha256"]),
-        ),
-    )
-    for role, _pair_count, source_path, expected_sha in structure_sources:
-        if not source_path.is_file():
-            raise FileNotFoundError(
-                f"selected {role} structure is missing: {source_path}"
-            )
-        if sha256_file(source_path) != expected_sha:
-            raise ValueError(f"selected {role} structure checksum does not match")
-
-    log_sources: list[tuple[dict[str, Any], Path]] = [
-        (validation_row, capacity_dir),
-        *((row, capacity_dir) for row in capacity_rows),
-        (steady_timing_one_gpu, capacity_dir),
-    ]
-    for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES:
-        directory = distributed_directory_by_world[world_size]
-        plan, rows = derived_by_world[world_size]
-        if int(plan["world_size"]) != world_size:
-            raise ValueError("distributed result directory order changed")
-        log_sources.extend((row, directory) for row in rows)
-    log_sources_by_case: dict[str, Path] = {}
-    for row, directory in log_sources:
-        case_id = str(row["case_id"])
-        if case_id in log_sources_by_case:
-            raise ValueError(f"duplicate case log requested: {case_id}")
-        source_path = (directory / "logs" / f"{case_id}.log").resolve()
-        if not source_path.is_file():
-            raise FileNotFoundError(f"case log is missing: {source_path}")
-        case_log = row.get("case_log")
-        if (
-            isinstance(case_log, dict)
-            and case_log.get("sha256") is not None
-            and sha256_file(source_path) != case_log["sha256"]
-        ):
-            raise ValueError(f"failed-case log checksum changed: {case_id}")
-        log_sources_by_case[case_id] = source_path
-
-    table_rows = {
-        "capacity": (CAPACITY_COLUMNS, capacity_csv_rows),
-        "parity": (PARITY_COLUMNS, parity_csv_rows),
-        "distributed": (DISTRIBUTED_COLUMNS, distributed_csv_rows),
-    }
-    data_manifest: dict[str, Any] = {}
-    for name, (columns, rows) in table_rows.items():
-        filename = f"{name}.csv"
-        path = output_dir / filename
-        _write_csv(path, columns, rows)
-        data_manifest[name] = {
-            "file": filename,
-            "sha256": sha256_file(path),
-            "row_count": len(rows),
-            "columns": list(columns),
-            "planned_case_ids": [str(row["case_id"]) for row in rows],
-        }
-
-    raw_rows = [validation_row, *capacity_rows, steady_timing_one_gpu]
-    for world_size in DEFAULT_DISTRIBUTED_WORLD_SIZES:
-        raw_rows.extend(derived_by_world[world_size][1])
-    raw_rows = [
-        _rewrite_bundle_references(
-            row,
-            copied_paths=copied_paths,
-            external_paths=external_paths,
-        )
-        for row in raw_rows
-    ]
-    raw_path = output_dir / "raw-results.jsonl"
-    atomic_write_jsonl(raw_path, raw_rows)
-
-    structures_dir = output_dir / "structures"
-    structures_dir.mkdir()
-    structure_records: list[dict[str, Any]] = []
-    structure_paths: list[Path] = []
-    for role, pair_count, source_path, expected_sha in structure_sources:
-        destination = structures_dir / f"{role}-pairs-{pair_count:06d}.extxyz"
-        shutil.copy2(source_path, destination)
-        if sha256_file(destination) != expected_sha:
-            raise RuntimeError(f"copied {role} structure checksum changed")
-        structure_paths.append(destination)
-        structure_records.append(
-            {
-                "role": role,
-                "pair_count": pair_count,
-                "molecules_per_species": pair_count,
-                "file": destination.relative_to(output_dir).as_posix(),
-                "sha256": expected_sha,
-            }
-        )
-
-    logs_dir = output_dir / "logs"
-    logs_dir.mkdir()
-    log_records: list[dict[str, Any]] = []
-    log_paths: list[Path] = []
-    for case_id, source_path in sorted(log_sources_by_case.items()):
-        destination = logs_dir / f"{case_id}.log"
-        shutil.copy2(source_path, destination)
-        digest = sha256_file(destination)
-        log_paths.append(destination)
-        log_records.append(
-            {
-                "case_id": case_id,
-                "file": destination.relative_to(output_dir).as_posix(),
-                "sha256": digest,
-            }
-        )
-
-    campaign_summary_path = output_dir / "campaign-summary.json"
-    campaign_summary = {
-        "schema": PHASE_SUMMARY_SCHEMA,
-        "created_utc": utc_now(),
-        "phase": "campaign",
-        "status": "complete",
-        "passed": True,
-        "tutorial_result_set_ready": True,
-        "publishable_benchmark": False,
-        "checks": {
-            "capacity_phase_passed": True,
-            "distributed_phase_gpu_counts": list(DEFAULT_DISTRIBUTED_WORLD_SIZES),
-            "agreement_input_forces_match_one_gpu": True,
-            "agreement_input_distributed_energies_match_two_gpu": True,
-            "timed_input_forces_match_one_gpu": True,
-            "timed_input_distributed_energies_match_two_gpu": True,
-            "one_gpu_to_distributed_energy_offsets_recorded_as_diagnostics": True,
-            "exact_oom_input_rescued": True,
-            "successful_rescue_outputs_agree": (
-                all(item["passed"] for item in rescue_output_comparisons)
-                if rescue_output_comparisons
-                else None
-            ),
-            "rescue_output_comparison_count": len(rescue_output_comparisons),
-        },
-        "successful_rescue_gpu_counts": list(successful_rescue_world_sizes),
-        "rescue_output_comparisons": rescue_output_comparisons,
-        "message": (
-            "All required phases passed, and at least one multi-GPU job "
-            "completed the exact input that exhausted one GPU."
-        ),
-    }
-    atomic_write_json(campaign_summary_path, campaign_summary)
-    campaign_summary_digest = sha256_file(campaign_summary_path)
-    campaign_summary_portable = _portable_reference(
-        campaign_summary_path,
-        output_dir,
-    )
-    generic_paths.append(campaign_summary_path)
-    generic_records.append(
-        {
-            "role": "campaign-summary",
-            "file": campaign_summary_portable,
-            "sha256": campaign_summary_digest,
-            "source_sha256": None,
-        }
-    )
-
-    electrostatics = selection["electrostatics_validation"]
-    comparison = electrostatics["comparison"]
-    manifest = {
-        "schema": BUNDLE_SCHEMA,
-        "created_utc": utc_now(),
-        "status": "complete",
-        "failure_policy": {
-            "failed_rows_retained": True,
-            "estimates_allowed": False,
-            "capacity_stop_condition": "first_single_gpu_oom",
-        },
-        "identity": identity,
-        "identity_sha256": identity_sha,
-        "electrostatics_validation": {
-            "status": "passed",
-            "measurement_kind": "measured",
-            "fixed_charges": True,
-            "atom_count": int(validation_row["atom_count"]),
-            "structure_sha256": validation_row["input"]["file_sha256"],
-            "charge_diagnostics": validation_charge_diagnostics,
-            "charge_sum_e": electrostatics["charge_sum_e"],
-            "charge_sum_tolerance_e": DEFAULT_CHARGE_SUM_TOL_E,
-            "pme_energy_ev": electrostatics["pme_energy_ev"],
-            "ewald_energy_ev": electrostatics["ewald_energy_ev"],
-            "energy_abs_difference_ev_per_atom": comparison[
-                "absolute_energy_difference_ev_per_atom"
-            ],
-            "energy_tolerance_ev_per_atom": (DEFAULT_PME_EWAL_ENERGY_TOL_EV_PER_ATOM),
-            "force_rms_difference_ev_per_a": comparison["force_difference_rms_ev_a"],
-            "force_max_difference_ev_per_a": comparison[
-                "force_difference_max_norm_ev_a"
-            ],
-            "force_tolerance_ev_per_a": DEFAULT_PME_EWAL_FORCE_MAX_TOL_EV_A,
-            "charge_sha256": electrostatics["charge_sha256"],
-            "pme_force_sha256": electrostatics["pme_force_sha256"],
-            "ewald_force_sha256": electrostatics["ewald_force_sha256"],
-            "result_file_sha256": electrostatics["result_file_sha256"],
-        },
-        "selection": {
-            "file": portable_plan_files["selection.json"],
-            "sha256": portable_plan_digests["selection.json"],
-            "job_file_sha256": selection_sha,
-            "largest_success_pair_count": selection["largest_success"]["input"][
-                "pair_count"
-            ],
-            "first_cuda_oom_pair_count": selection["first_cuda_oom"]["input"][
-                "pair_count"
-            ],
-            "parity_pair_count": selection["parity_reference"]["input"]["pair_count"],
-            "capacity_charge_diagnostics": selection[
-                "capacity_charge_diagnostics"
-            ],
-            "parity_charge_diagnostics": selection["parity_reference"][
-                "charge_diagnostics"
-            ],
-            "successful_rescue_gpu_counts": list(successful_rescue_world_sizes),
-        },
-        "data": data_manifest,
-        "raw_results": {
-            "file": raw_path.name,
-            "sha256": sha256_file(raw_path),
-            "row_count": len(raw_rows),
-        },
-        "artifacts": {
-            "structures": structure_records,
-            "case_logs": log_records,
-            "files": generic_records,
-        },
-        "campaign_summary": {
-            "file": campaign_summary_portable,
-            "sha256": campaign_summary_digest,
-        },
-    }
-    manifest_path = output_dir / "manifest.json"
-    atomic_write_json(manifest_path, manifest)
-    checksum_paths = [
-        manifest_path,
-        raw_path,
-        *(output_dir / f"{name}.csv" for name in table_rows),
-        *structure_paths,
-        *log_paths,
-        *generic_paths,
-    ]
-    if len({path.resolve() for path in checksum_paths}) != len(checksum_paths):
-        raise RuntimeError("a bundle file was declared more than once")
-    checksum_path = output_dir / "SHA256SUMS"
-    checksum_path.write_text(
-        "".join(
-            f"{sha256_file(path)}  {path.relative_to(output_dir).as_posix()}\n"
-            for path in checksum_paths
-        ),
-        encoding="utf-8",
-    )
-    return manifest
+def _failure_type(log_text: str, exit_code: int) -> str:
+    lowered = log_text.lower()
+    if "out of memory" in lowered or "outofmemoryerror" in lowered:
+        return "CudaOutOfMemory"
+    if exit_code == 124:
+        return "TimeLimit"
+    return "ProcessFailure"
 
 
 def record_failure(args: argparse.Namespace) -> dict[str, Any]:
-    output = args.output.resolve()
-    if output.exists():
-        raise FileExistsError(f"result already exists: {output}")
+    input_path = args.input_extxyz.resolve()
     log_path = args.case_log.resolve()
     log_text = (
         log_path.read_text(encoding="utf-8", errors="replace")
         if log_path.is_file()
         else ""
     )
-    rank_records = _load_rank_records(args.rank_output_dir.resolve())
-    combined = (
-        log_text
-        + "\n"
-        + "\n".join(json.dumps(row, sort_keys=True) for row in rank_records)
-    )
-    is_cuda_oom = any(pattern.search(combined) for pattern in CUDA_OOM_PATTERNS)
-    stages = sorted(
-        {
-            str(row.get("failure", {}).get("stage"))
-            for row in rank_records
-            if row.get("failure", {}).get("stage")
-        }
-    )
-    input_path = args.input_extxyz.resolve()
-    input_sha = sha256_file(input_path) if input_path.is_file() else None
-    row = {
+    rank_records = _rank_records(args.rank_output_dir.resolve())
+    stages = [
+        str(record.get("stage")) for record in rank_records if record.get("stage")
+    ]
+    failure = {
         "schema": RESULT_SCHEMA,
         "created_utc": utc_now(),
         "run_id": args.run_id,
         "case_id": args.case_id,
         "mode": args.mode,
-        "measurement_role": measurement_role_for_mode(args.mode),
-        "status": "failed",
-        "success": False,
+        "measurement_role": (
+            "fixed_evaluation"
+            if args.mode == "distributed"
+            else "electrostatics_validation"
+        ),
         "world_size": args.world_size,
-        "pair_count": args.pair_count,
-        "molecules_per_species": args.pair_count,
-        "atom_count": args.pair_count * ATOMS_PER_PAIR,
+        "success": False,
+        "status": "failed",
+        "error": (
+            log_text.strip().splitlines()[-1]
+            if log_text.strip()
+            else f"runner exited with code {args.exit_code}"
+        ),
+        "failure": {
+            "type": _failure_type(log_text, args.exit_code),
+            "stage": stages[-1] if stages else "process",
+            "exit_code": args.exit_code,
+            "unexpected": True,
+        },
         "input": {
             "path": str(input_path),
-            "file_sha256": input_sha,
-        },
-        "failure": {
-            "type": "CUDAOutOfMemoryError" if is_cuda_oom else "LaunchFailure",
-            "is_cuda_oom": is_cuda_oom,
-            "stage": (
-                stages[0]
-                if len(stages) == 1
-                else "multiple_ranks"
-                if stages
-                else "launcher"
+            "file_sha256": sha256_file(input_path) if input_path.is_file() else None,
+            "file_size_bytes": (
+                input_path.stat().st_size if input_path.is_file() else None
             ),
-            "rank_stages": stages,
-            "exit_code": args.exit_code,
-            "message": (
-                "A genuine CUDA allocation failure was found in the case log "
-                "or rank records."
-                if is_cuda_oom
-                else "The fresh case process exited unsuccessfully; no CUDA "
-                "OOM signature was found."
+            "structure": (
+                {
+                    "path": str(input_path),
+                    "sha256": sha256_file(input_path),
+                }
+                if input_path.is_file()
+                else None
             ),
         },
-        "case_log": {
+        "rank_records": rank_records,
+        "log": {
             "path": str(log_path),
             "sha256": sha256_file(log_path) if log_path.is_file() else None,
         },
-        "rank_records": rank_records,
-        "charges": {
-            "available": False,
-            "reason": (
-                "This failed case returned no charge output. Successful one-GPU "
-                "capacity rows record the actual float32 charge diagnostics; "
-                "the strict residual limit applies only to the separate "
-                "3,200-atom PME-versus-Ewald validation."
-            ),
-        },
-        "halo_counts": {
-            "values": None,
-            "reason": "not_exposed_by_public_api",
+    }
+    atomic_write_json(args.output.resolve(), failure)
+    return failure
+
+
+def _force_record(row: Mapping[str, Any]) -> Mapping[str, Any]:
+    try:
+        record = row["output"]["forces_source_atom_order_npy"]
+    except (KeyError, TypeError) as exc:
+        raise ValueError("fixed result does not record its force array") from exc
+    if not isinstance(record, Mapping):
+        raise ValueError("fixed result force record is invalid")
+    return record
+
+
+def _load_force_array(row: Mapping[str, Any]) -> Any:
+    import numpy as np
+
+    record = _force_record(row)
+    path = Path(str(record["path"])).resolve()
+    if not path.is_file() or sha256_file(path) != record["sha256"]:
+        raise ValueError("fixed result force array is missing or changed")
+    values = np.load(path, allow_pickle=False)
+    if list(values.shape) != list(record["shape"]):
+        raise ValueError("fixed result force array has the wrong shape")
+    return values
+
+
+def _timing_samples(row: Mapping[str, Any]) -> list[float]:
+    timing = row["timing"]
+    raw = timing.get("pass_times_s")
+    if not isinstance(raw, list) or len(raw) != DEFAULT_PASS_COUNT:
+        raise ValueError("fixed result has the wrong measured-pass series")
+    return [float(value) for value in raw]
+
+
+def _timing_median(row: Mapping[str, Any]) -> float:
+    timing = row["timing"]
+    return float(timing["median_s"])
+
+
+def _output_metrics(row: Mapping[str, Any]) -> tuple[float, float, float]:
+    output = row["output"]
+    energy = float(output["energy_ev"])
+    summary = output["forces_source_atom_order"]
+    force_rms = float(summary["rms_ev_a"])
+    force_max = float(summary["max_norm_ev_a"])
+    return energy, force_rms, force_max
+
+
+def _measured_energy_values(row: Mapping[str, Any]) -> list[float]:
+    passes = row["output"]["measured_passes"]
+    if not isinstance(passes, list) or len(passes) != DEFAULT_PASS_COUNT:
+        raise ValueError("fixed result has the wrong measured-energy series")
+    values = [float(measured["energy_ev"]) for measured in passes]
+    if any(not math.isfinite(value) for value in values):
+        raise ValueError("fixed result has a non-finite measured energy")
+    return values
+
+
+def _measured_energy_median(row: Mapping[str, Any]) -> float:
+    return float(sorted(_measured_energy_values(row))[DEFAULT_PASS_COUNT // 2])
+
+
+def _measured_energy_span_per_atom(
+    row: Mapping[str, Any],
+    *,
+    atom_count: int,
+) -> float:
+    values = _measured_energy_values(row)
+    return (max(values) - min(values)) / atom_count
+
+
+def _methodology_identity_from_plan(
+    plan: Mapping[str, Any],
+) -> dict[str, Any]:
+    return dict(plan["methodology"]["source_identity"])
+
+
+def _copy_bundle_file(
+    source: Path,
+    destination: Path,
+) -> dict[str, Any]:
+    if not source.is_file():
+        raise FileNotFoundError(source)
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    shutil.copy2(source, destination)
+    if sha256_file(source) != sha256_file(destination):
+        raise RuntimeError(f"copied file checksum changed: {source}")
+    return {
+        "path": str(destination),
+        "sha256": sha256_file(destination),
+        "size_bytes": destination.stat().st_size,
+    }
+
+
+def _verify_checksum_file(path: Path) -> dict[str, str]:
+    """Verify and return one GNU sha256sum file."""
+
+    if not path.is_file():
+        raise FileNotFoundError(path)
+    records: dict[str, str] = {}
+    for line_number, raw_line in enumerate(
+        path.read_text(encoding="utf-8").splitlines(),
+        start=1,
+    ):
+        if not raw_line.strip():
+            continue
+        try:
+            digest, raw_name = raw_line.split(maxsplit=1)
+        except ValueError as exc:
+            raise ValueError(f"{path}:{line_number} is not a sha256sum record") from exc
+        name = raw_name.removeprefix("*").strip()
+        source = Path(name)
+        if not source.is_absolute():
+            source = path.parent / source
+        source = source.resolve()
+        if (
+            len(digest) != 64
+            or any(character not in "0123456789abcdef" for character in digest)
+            or not source.is_file()
+            or sha256_file(source) != digest
+        ):
+            raise ValueError(f"{path}:{line_number} does not match {source}")
+        records[str(source)] = digest
+    if not records:
+        raise ValueError(f"{path} contains no checksum records")
+    return records
+
+
+def _copy_job_records(
+    job_dir: Path,
+    *,
+    world_size: int,
+    output_dir: Path,
+) -> tuple[dict[str, str], dict[str, Any]]:
+    """Copy the complete checked job record and return path rewrites."""
+
+    required_top = (
+        "plan.json",
+        "phase-summary.json",
+        "collection-summary.json",
+        "results.jsonl",
+        "part1-runtime.json",
+        "d3-cache.json",
+        "aimnet-checkpoint-preflight.json",
+        "gpu-names.txt",
+        "gpu-topology.txt",
+        "network-interfaces.txt",
+        "producer-SHA256SUMS",
+        "artifact-SHA256SUMS",
+    )
+    for name in required_top:
+        if not (job_dir / name).is_file():
+            raise FileNotFoundError(f"{world_size}-GPU job is missing {name}")
+    producer_records = _verify_checksum_file(job_dir / "producer-SHA256SUMS")
+    artifact_records = _verify_checksum_file(job_dir / "artifact-SHA256SUMS")
+    producer_files: dict[str, str] = {}
+    producer_rewrites: dict[str, str] = {}
+    for raw_path, digest in producer_records.items():
+        name = Path(raw_path).name
+        if name in producer_files:
+            raise ValueError(f"producer checksum list repeats the file name {name}")
+        producer_files[name] = digest
+        producer_rewrites[raw_path] = (
+            f"manifest.json#job_records/{world_size}/producer_files/{name}"
+        )
+
+    files = [job_dir / name for name in required_top]
+    for name in ("inputs", "results", "ranks", "logs"):
+        directory = job_dir / name
+        if not directory.is_dir():
+            raise FileNotFoundError(f"{world_size}-GPU job is missing {name}/")
+        found = sorted(path for path in directory.rglob("*") if path.is_file())
+        if not found:
+            raise ValueError(f"{world_size}-GPU job has no files under {name}/")
+        files.extend(found)
+    expected_artifacts = {
+        str(path.resolve()) for path in files if path.name != "artifact-SHA256SUMS"
+    }
+    if set(artifact_records) != expected_artifacts:
+        missing = expected_artifacts - set(artifact_records)
+        extra = set(artifact_records) - expected_artifacts
+        raise ValueError(
+            f"{world_size}-GPU artifact checksum list is incomplete: "
+            f"missing={sorted(missing)}, extra={sorted(extra)}"
+        )
+
+    destination_root = output_dir / "job-records" / f"gpus-{world_size:02d}"
+    rewrites: dict[str, str] = dict(producer_rewrites)
+    index: dict[str, dict[str, Any]] = {}
+    for source in sorted(set(files)):
+        relative = source.relative_to(job_dir)
+        destination = destination_root / relative
+        copied = _copy_bundle_file(source, destination)
+        bundle_relative = str(destination.relative_to(output_dir))
+        rewrites[str(source.resolve())] = bundle_relative
+        index[str(relative)] = {
+            "path": bundle_relative,
+            "sha256": copied["sha256"],
+            "size_bytes": copied["size_bytes"],
+        }
+    return rewrites, {
+        "world_size": world_size,
+        "files": index,
+        "producer_checksum_file_sha256": sha256_file(job_dir / "producer-SHA256SUMS"),
+        "artifact_checksum_file_sha256": sha256_file(job_dir / "artifact-SHA256SUMS"),
+        "verified_producer_file_count": len(producer_records),
+        "verified_artifact_file_count": len(artifact_records),
+        "producer_files": dict(sorted(producer_files.items())),
+    }
+
+
+def _register_path_rewrite(
+    rewrites: dict[str, str],
+    raw_path: Any,
+    portable_reference: str,
+) -> None:
+    """Register one absolute host path without changing copied-file rewrites."""
+
+    if not isinstance(raw_path, str):
+        return
+    path = Path(raw_path)
+    if not path.is_absolute():
+        return
+    resolved = str(path.resolve())
+    rewrites.setdefault(resolved, portable_reference)
+
+
+def _git_source_reference(
+    *,
+    repository: str,
+    commit: Any,
+    root: Any,
+    path: Any | None = None,
+) -> str:
+    """Describe a checked Git source without retaining its host checkout path."""
+
+    reference = f"git:{repository}@{commit}"
+    if not isinstance(path, str) or not isinstance(root, str):
+        return reference
+    try:
+        relative = Path(path).resolve().relative_to(Path(root).resolve())
+    except (OSError, ValueError):
+        return reference
+    return f"{reference}#{relative.as_posix()}"
+
+
+def _register_runtime_path_rewrites(
+    value: Any,
+    *,
+    world_size: int,
+    rewrites: dict[str, str],
+) -> None:
+    """Replace Python installation locations with the checked runtime record."""
+
+    if not isinstance(value, Mapping):
+        return
+    runtime_reference = f"job-records/gpus-{world_size:02d}/part1-runtime.json"
+    _register_path_rewrite(
+        rewrites,
+        value.get("python_executable"),
+        f"{runtime_reference}#python_executable",
+    )
+    _register_path_rewrite(
+        rewrites,
+        value.get("python_prefix"),
+        f"{runtime_reference}#python_prefix",
+    )
+
+
+def _register_row_identity_rewrites(
+    row: Mapping[str, Any],
+    *,
+    world_size: int,
+    rewrites: dict[str, str],
+) -> None:
+    """Map external source locations to portable, checked identities."""
+
+    source = row.get("source")
+    tutorial_root: Any = None
+    tutorial_commit: Any = None
+    if isinstance(source, Mapping):
+        tutorial_root = source.get("repository_root")
+        tutorial_commit = source.get(
+            "repository_commit",
+            source.get("tutorial_commit"),
+        )
+        tutorial_reference = _git_source_reference(
+            repository="ALCHEMI-Bootcamp",
+            commit=tutorial_commit,
+            root=tutorial_root,
+        )
+        _register_path_rewrite(
+            rewrites,
+            tutorial_root,
+            tutorial_reference,
+        )
+        for key in (
+            "runner",
+            "domain_methodology_config_file",
+        ):
+            raw_path = source.get(key)
+            _register_path_rewrite(
+                rewrites,
+                raw_path,
+                _git_source_reference(
+                    repository="ALCHEMI-Bootcamp",
+                    commit=tutorial_commit,
+                    root=tutorial_root,
+                    path=raw_path,
+                ),
+            )
+        runner_file = source.get("runner_file")
+        if isinstance(runner_file, Mapping):
+            raw_path = runner_file.get("path")
+            _register_path_rewrite(
+                rewrites,
+                raw_path,
+                _git_source_reference(
+                    repository="ALCHEMI-Bootcamp",
+                    commit=tutorial_commit,
+                    root=tutorial_root,
+                    path=raw_path,
+                ),
+            )
+
+        for prefix, repository in (
+            ("toolkit_core", "NVIDIA/nvalchemi-toolkit"),
+            ("toolkit_ops", "NVIDIA/nvalchemi-toolkit-ops"),
+        ):
+            root = source.get(f"{prefix}_source_root")
+            commit = source.get(f"{prefix}_commit")
+            _register_path_rewrite(
+                rewrites,
+                root,
+                _git_source_reference(
+                    repository=repository,
+                    commit=commit,
+                    root=root,
+                ),
+            )
+            raw_path = source.get(f"{prefix}_source_file")
+            _register_path_rewrite(
+                rewrites,
+                raw_path,
+                _git_source_reference(
+                    repository=repository,
+                    commit=commit,
+                    root=root,
+                    path=raw_path,
+                ),
+            )
+
+        checkpoint_reference = (
+            "model:AIMNet2/"
+            f"{source.get('aimnet_checkpoint_name', AIMNET_CHECKPOINT)}"
+            f"@sha256:{source.get('aimnet_checkpoint_sha256')}"
+        )
+        _register_path_rewrite(
+            rewrites,
+            source.get("aimnet_checkpoint"),
+            checkpoint_reference,
+        )
+        checkpoint_file = source.get("aimnet_checkpoint_file")
+        if isinstance(checkpoint_file, Mapping):
+            _register_path_rewrite(
+                rewrites,
+                checkpoint_file.get("path"),
+                checkpoint_reference,
+            )
+        _register_runtime_path_rewrites(
+            source.get("runtime_software"),
+            world_size=world_size,
+            rewrites=rewrites,
+        )
+
+    input_record = row.get("input")
+    if isinstance(input_record, Mapping):
+        input_manifest = input_record.get("manifest")
+        if isinstance(input_manifest, Mapping):
+            construction = input_manifest.get("construction")
+            if isinstance(construction, Mapping):
+                for path_key, hash_key, label in (
+                    (
+                        "base_box_manifest",
+                        "base_box_manifest_sha256",
+                        "manifest",
+                    ),
+                    (
+                        "base_box_structure",
+                        "base_box_structure_sha256",
+                        "structure",
+                    ),
+                ):
+                    _register_path_rewrite(
+                        rewrites,
+                        construction.get(path_key),
+                        (
+                            f"input:prebuilt-base-box-{label}"
+                            f"@sha256:{construction.get(hash_key)}"
+                        ),
+                    )
+            input_source = input_manifest.get("source")
+            if isinstance(input_source, Mapping):
+                for path_key in (
+                    "packing_helper",
+                    "domain_methodology_config",
+                ):
+                    raw_path = input_source.get(path_key)
+                    _register_path_rewrite(
+                        rewrites,
+                        raw_path,
+                        _git_source_reference(
+                            repository="ALCHEMI-Bootcamp",
+                            commit=tutorial_commit,
+                            root=tutorial_root,
+                            path=raw_path,
+                        ),
+                    )
+                _register_path_rewrite(
+                    rewrites,
+                    input_source.get("nci_subset"),
+                    (
+                        "dataset:NCI-Atlas"
+                        f"@sha256:{input_source.get('nci_subset_sha256')}"
+                    ),
+                )
+
+    methodology = row.get("methodology")
+    if isinstance(methodology, Mapping):
+        source_file = methodology.get("source_file")
+        if isinstance(source_file, Mapping):
+            _register_path_rewrite(
+                rewrites,
+                source_file.get("path"),
+                (
+                    "manifest.json#job_records/"
+                    f"{world_size}/producer_files/{DOMAIN_METHODOLOGY_CONFIG_PATH.name}"
+                ),
+            )
+
+    runtime_rows = row.get("runtime")
+    if isinstance(runtime_rows, list):
+        for runtime in runtime_rows:
+            _register_runtime_path_rewrites(
+                runtime,
+                world_size=world_size,
+                rewrites=rewrites,
+            )
+
+    model = row.get("model")
+    if isinstance(model, Mapping):
+        d3 = model.get("d3")
+        if isinstance(d3, Mapping):
+            d3_reference = f"parameters:DFT-D3@sha256:{d3.get('parameter_file_sha256')}"
+            _register_path_rewrite(
+                rewrites,
+                d3.get("parameter_file"),
+                d3_reference,
+            )
+            identity = d3.get("parameter_file_identity")
+            if isinstance(identity, Mapping):
+                _register_path_rewrite(
+                    rewrites,
+                    identity.get("path"),
+                    d3_reference,
+                )
+
+
+def _rewrite_known_paths(
+    value: Any,
+    *,
+    rewrites: Mapping[str, str],
+    context: str = "raw result",
+) -> Any:
+    """Rewrite copied job paths while preserving the full result structure."""
+
+    if isinstance(value, dict):
+        return {
+            key: _rewrite_known_paths(
+                item,
+                rewrites=rewrites,
+                context=f"{context}.{key}",
+            )
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [
+            _rewrite_known_paths(
+                item,
+                rewrites=rewrites,
+                context=f"{context}[{index}]",
+            )
+            for index, item in enumerate(value)
+        ]
+    if isinstance(value, str):
+        try:
+            resolved = str(Path(value).resolve()) if Path(value).is_absolute() else None
+        except (OSError, ValueError):
+            resolved = None
+        if resolved is not None and resolved in rewrites:
+            return rewrites[resolved]
+        if resolved is not None:
+            raise ValueError(f"{context} contains an undeclared absolute path: {value}")
+    return value
+
+
+def build_bundle(args: argparse.Namespace) -> dict[str, Any]:
+    import numpy as np
+
+    job_dirs = [path.resolve() for path in args.job_dir]
+    if len(job_dirs) != len(DEFAULT_WORLD_SIZES):
+        raise ValueError(
+            "bundle requires one job directory for each of 1, 2, and 4 GPUs"
+        )
+
+    plans: dict[int, dict[str, Any]] = {}
+    rows: dict[int, dict[str, Any]] = {}
+    summaries: dict[int, dict[str, Any]] = {}
+    job_dirs_by_world: dict[int, Path] = {}
+    for job_dir in job_dirs:
+        plan = _load_json(job_dir / "plan.json")
+        if plan.get("schema") != PLAN_SCHEMA:
+            raise ValueError(f"{job_dir} has an unknown plan schema")
+        world_size = int(plan["fixed_case"]["world_size"])
+        if world_size in plans:
+            raise ValueError(f"duplicate {world_size}-GPU job")
+        if world_size not in DEFAULT_WORLD_SIZES:
+            raise ValueError(f"unexpected {world_size}-GPU job")
+        summary = _load_json(job_dir / "phase-summary.json")
+        if (
+            summary.get("schema") != PHASE_SUMMARY_SCHEMA
+            or summary.get("passed") is not True
+            or int(summary.get("world_size", -1)) != world_size
+        ):
+            raise ValueError(f"{world_size}-GPU job did not pass")
+        row = _read_case_result(
+            job_dir / "results" / plan["fixed_case"]["result_file"],
+            plan["fixed_case"],
+        )
+        _validate_fixed_result(row, plan=plan)
+        plans[world_size] = plan
+        rows[world_size] = row
+        summaries[world_size] = summary
+        job_dirs_by_world[world_size] = job_dir
+
+    if tuple(sorted(plans)) != tuple(sorted(DEFAULT_WORLD_SIZES)):
+        raise ValueError("bundle is missing a declared GPU count")
+
+    reference_plan = plans[1]
+    identity_fields = (
+        "tutorial_commit",
+        "toolkit_core_commit",
+        "toolkit_ops_commit",
+        "nci_subset_sha256",
+        "aimnet_checkpoint",
+        "aimnet_checkpoint_sha256",
+        "d3_parameter_sha256",
+    )
+    reference_source = reference_plan["source"]
+    reference_methodology = _methodology_identity_from_plan(reference_plan)
+    reference_input_sha = rows[1]["input"]["file_sha256"]
+    reference_atom_count = int(rows[1]["atom_count"])
+    settings_record = {
+        "methodology": reference_plan["methodology"]["resolved_values"],
+        "model": reference_plan["model"],
+        "input_structure_sha256": reference_input_sha,
+        "position_invariance": {
+            "method": "maximum_minimum_image_displacement",
+            "tolerance_a": (DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A),
         },
     }
-    atomic_write_json(output, row)
-    return row
+    settings_sha256 = canonical_json_sha256(settings_record)
+    for world_size in DEFAULT_WORLD_SIZES:
+        plan = plans[world_size]
+        if any(
+            plan["source"][name] != reference_source[name] for name in identity_fields
+        ):
+            raise ValueError("jobs were produced from different source inputs")
+        if _methodology_identity_from_plan(plan) != reference_methodology:
+            raise ValueError("jobs used different methodology files")
+        if rows[world_size]["input"]["file_sha256"] != reference_input_sha:
+            raise ValueError("jobs did not evaluate the same structure content")
+        if int(rows[world_size]["atom_count"]) != reference_atom_count:
+            raise ValueError("jobs report different atom counts")
+
+    reference_forces = _load_force_array(rows[1])
+    reference_forces_float64 = np.asarray(
+        reference_forces,
+        dtype=np.float64,
+    )
+    one_gpu_energy = _measured_energy_median(rows[1])
+    two_gpu_energy = _measured_energy_median(rows[2])
+    reference_median = _timing_median(rows[1])
+    output_comparisons: dict[int, dict[str, Any]] = {}
+    csv_rows: list[dict[str, Any]] = []
+    portable_rows: list[dict[str, Any]] = []
+    output_dir = args.output_dir.resolve()
+    if output_dir.exists() and any(output_dir.iterdir()):
+        raise FileExistsError(f"bundle output directory is not empty: {output_dir}")
+    output_dir.mkdir(parents=True, exist_ok=True)
+    path_rewrites: dict[int, dict[str, str]] = {}
+    job_record_indexes: dict[str, dict[str, Any]] = {}
+    for world_size in DEFAULT_WORLD_SIZES:
+        rewrites, record_index = _copy_job_records(
+            job_dirs_by_world[world_size],
+            world_size=world_size,
+            output_dir=output_dir,
+        )
+        path_rewrites[world_size] = rewrites
+        job_record_indexes[str(world_size)] = record_index
+    reference_producers = job_record_indexes["1"]["producer_files"]
+    if any(
+        job_record_indexes[str(world_size)]["producer_files"] != reference_producers
+        for world_size in DEFAULT_WORLD_SIZES[1:]
+    ):
+        raise ValueError("jobs used different producer source files")
+
+    observed_nodes_by_world: dict[int, int] = {}
+    observed_gpus_by_world: dict[int, int] = {}
+    for world_size in DEFAULT_WORLD_SIZES:
+        runtime_rows = rows[world_size].get("runtime")
+        if not isinstance(runtime_rows, list) or len(runtime_rows) != world_size:
+            raise ValueError(f"{world_size}-GPU result has incomplete runtime records")
+        hosts = {str(runtime["host"]) for runtime in runtime_rows}
+        gpu_ids = {
+            (
+                str(runtime["host"]),
+                str(runtime.get("gpu_uuid") or runtime["local_rank"]),
+            )
+            for runtime in runtime_rows
+        }
+        observed_nodes_by_world[world_size] = len(hosts)
+        observed_gpus_by_world[world_size] = len(gpu_ids)
+        if (
+            observed_nodes_by_world[world_size] != world_size
+            or observed_gpus_by_world[world_size] != world_size
+        ):
+            raise ValueError(
+                "the recorded job does not show one distinct H100 GPU per node"
+            )
+    max_observed_gpus = max(observed_gpus_by_world.values())
+    max_observed_nodes = max(observed_nodes_by_world.values())
+    raw_source = rows[1].get("source", {})
+    toolkit_version = raw_source.get("toolkit_version")
+    if (
+        not toolkit_version
+        or raw_source.get("repository_commit") != reference_source["tutorial_commit"]
+        or any(
+            rows[world_size].get("source", {}).get("toolkit_version") != toolkit_version
+            for world_size in DEFAULT_WORLD_SIZES
+        )
+    ):
+        raise ValueError(
+            "raw job source identity does not match the planned tutorial source"
+        )
+    hardware_reference = rows[1]["runtime"][0]
+    for world_size in DEFAULT_WORLD_SIZES:
+        for runtime in rows[world_size]["runtime"]:
+            if any(
+                runtime.get(name) != hardware_reference.get(name)
+                for name in (
+                    "gpu_name",
+                    "gpu_total_memory_bytes",
+                    "driver_version",
+                    "torch_cuda_version",
+                )
+            ):
+                raise ValueError("jobs used different GPU hardware or CUDA runtimes")
+
+    for world_size in DEFAULT_WORLD_SIZES:
+        row = rows[world_size]
+        forces = _load_force_array(row)
+        if forces.shape != reference_forces.shape:
+            raise ValueError("force arrays have different shapes")
+        force_difference = (
+            np.asarray(forces, dtype=np.float64) - reference_forces_float64
+        )
+        atom_norms = np.linalg.norm(force_difference, axis=1)
+        component_differences = np.abs(force_difference)
+        component_limits = (
+            DEFAULT_EVALUATION_FORCE_ATOL_EV_A
+            + DEFAULT_EVALUATION_FORCE_RTOL * np.abs(reference_forces_float64)
+        )
+        force_rms_difference = float(np.sqrt(np.mean(np.square(force_difference))))
+        force_max_difference = float(np.max(atom_norms))
+        force_max_component_difference = float(np.max(component_differences))
+        force_components_passed = bool(
+            np.all(component_differences <= component_limits)
+        )
+        saved_energy, force_rms, force_max = _output_metrics(row)
+        comparison_energy = _measured_energy_median(row)
+        energy_span_per_atom = _measured_energy_span_per_atom(
+            row,
+            atom_count=reference_atom_count,
+        )
+        energy_repeatability_required = world_size > 1
+        energy_repeatability_passed = (
+            energy_span_per_atom
+            <= DEFAULT_DISTRIBUTED_ENERGY_REPEATABILITY_TOL_EV_PER_ATOM
+        )
+        one_gpu_energy_offset = comparison_energy - one_gpu_energy
+        one_gpu_energy_abs_offset_per_atom = (
+            abs(one_gpu_energy_offset) / reference_atom_count
+        )
+        distributed_energy_difference = comparison_energy - two_gpu_energy
+        distributed_energy_difference_per_atom = (
+            abs(distributed_energy_difference) / reference_atom_count
+        )
+        distributed_energy_required = world_size == 4
+        distributed_energy_passed = (
+            distributed_energy_difference_per_atom
+            <= DEFAULT_EVALUATION_ENERGY_TOL_EV_PER_ATOM
+        )
+        position_invariance = row["output"]["position_invariance"]
+        maximum_position_displacement_a = float(
+            position_invariance["maximum_minimum_image_displacement_a"]
+        )
+        positions_pbc_equivalent = bool(
+            position_invariance["all_within_tolerance"]
+            and maximum_position_displacement_a
+            <= DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+        )
+        required_checks_passed = (
+            force_components_passed
+            and (not energy_repeatability_required or energy_repeatability_passed)
+            and (not distributed_energy_required or distributed_energy_passed)
+            and positions_pbc_equivalent
+        )
+        if not required_checks_passed:
+            raise ValueError(
+                f"{world_size}-GPU output fails the declared force or "
+                "distributed-energy comparison, or the position check"
+            )
+        output_comparisons[world_size] = {
+            "one_gpu_energy_offset_ev": one_gpu_energy_offset,
+            "one_gpu_energy_abs_offset_ev_per_atom": (
+                one_gpu_energy_abs_offset_per_atom
+            ),
+            "one_gpu_energy_offset_is_diagnostic_only": True,
+            "energy_statistic": "median_of_three_measured_passes",
+            "energy_dtype": str(row["output"]["energy_dtype"]),
+            "energy_repeatability_span_ev_per_atom": energy_span_per_atom,
+            "energy_repeatability_tolerance_ev_per_atom": (
+                DEFAULT_DISTRIBUTED_ENERGY_REPEATABILITY_TOL_EV_PER_ATOM
+            ),
+            "energy_repeatability_check_required": energy_repeatability_required,
+            "energy_repeatability_passed": (
+                energy_repeatability_passed if energy_repeatability_required else None
+            ),
+            "distributed_energy_reference_gpus": 2,
+            "distributed_energy_difference_ev": (distributed_energy_difference),
+            "distributed_energy_abs_difference_ev_per_atom": (
+                distributed_energy_difference_per_atom
+            ),
+            "distributed_energy_check_required": (distributed_energy_required),
+            "distributed_energy_passed": (
+                distributed_energy_passed if distributed_energy_required else None
+            ),
+            "force_rms_difference_ev_per_a_vs_1gpu": (force_rms_difference),
+            "force_max_difference_ev_per_a_vs_1gpu": (force_max_difference),
+            "force_max_component_difference_ev_per_a_vs_1gpu": (
+                force_max_component_difference
+            ),
+            "distributed_energy_agreement_tolerance_ev_per_atom": (
+                DEFAULT_EVALUATION_ENERGY_TOL_EV_PER_ATOM
+            ),
+            "force_acceptance": (
+                "abs(delta_component) <= atol + rtol * abs(one_gpu_component)"
+            ),
+            "force_atol_ev_per_a": DEFAULT_EVALUATION_FORCE_ATOL_EV_A,
+            "force_rtol": DEFAULT_EVALUATION_FORCE_RTOL,
+            "force_passed": force_components_passed,
+            "position_check": "maximum_minimum_image_displacement",
+            "position_tolerance_a": (DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A),
+            "maximum_minimum_image_displacement_a": (maximum_position_displacement_a),
+            "positions_pbc_equivalent": positions_pbc_equivalent,
+            "required_checks_passed": True,
+        }
+        timing_samples = _timing_samples(row)
+        median = _timing_median(row)
+        distributed = row["distributed"]
+        _, rank_grid = validate_recorded_rank_layout(
+            distributed,
+            world_size=world_size,
+        )
+        owned_counts = [int(value) for value in distributed["owned_atom_counts"]]
+        peak_memory = row.get("memory", {}).get(
+            "max_allocated_bytes",
+            "",
+        )
+        timing = row["timing"]
+        csv_rows.append(
+            {
+                "case_id": row["case_id"],
+                "atom_count": reference_atom_count,
+                "molecules_per_species": DEFAULT_FIXED_PAIR_COUNT,
+                "nodes": world_size,
+                "gpus": world_size,
+                "ranks": world_size,
+                "success": True,
+                "status": "complete",
+                "failure_type": "",
+                "failure_stage": "",
+                "error": "",
+                "warmup_count": DEFAULT_WARMUP_COUNT,
+                "measured_pass_count": DEFAULT_PASS_COUNT,
+                "pass_times_s": json.dumps(timing_samples),
+                "median_s": median,
+                "min_s": float(timing["min_s"]),
+                "max_s": float(timing["max_s"]),
+                "peak_memory_bytes_max_rank": peak_memory,
+                "owned_atoms_min_rank": min(owned_counts),
+                "owned_atoms_max_rank": max(owned_counts),
+                "spatial_grid": "x".join(str(value) for value in rank_grid),
+                "energy_ev": saved_energy,
+                "energy_ev_per_atom": saved_energy / reference_atom_count,
+                "comparison_energy_ev": comparison_energy,
+                "comparison_energy_ev_per_atom": (
+                    comparison_energy / reference_atom_count
+                ),
+                "comparison_energy_statistic": ("median_of_three_measured_passes"),
+                "energy_dtype": str(row["output"]["energy_dtype"]),
+                "force_rms_ev_per_a": force_rms,
+                "force_max_ev_per_a": force_max,
+                "structure_sha256": reference_input_sha,
+                "settings_sha256": settings_sha256,
+                "input_tensor_sha256": row["input"]["tensor_sha256"],
+                "positions_pbc_equivalent": positions_pbc_equivalent,
+                "max_minimum_image_displacement_a": (maximum_position_displacement_a),
+                "measurement_role": "fixed_evaluation",
+                "measurement_kind": ("fixed_structure_energy_force_pass"),
+            }
+        )
+
+        _register_row_identity_rewrites(
+            row,
+            world_size=world_size,
+            rewrites=path_rewrites[world_size],
+        )
+        portable = _rewrite_known_paths(
+            row,
+            rewrites=path_rewrites[world_size],
+        )
+        portable["settings_sha256"] = settings_sha256
+        portable["bundle_source"] = "manifest.json#source"
+        portable["bundle_job_record"] = f"manifest.json#job_records/{world_size}"
+        portable_rows.append(portable)
+
+    one_gpu_plan = plans[1]
+    validation_case = one_gpu_plan["validation_cases"][0]
+    validation_row = _read_case_result(
+        job_dirs_by_world[1] / "results" / validation_case["result_file"],
+        validation_case,
+    )
+    if not _validation_passed(validation_row):
+        raise ValueError("the PME-versus-Ewald validation did not pass")
+    _register_row_identity_rewrites(
+        validation_row,
+        world_size=1,
+        rewrites=path_rewrites[1],
+    )
+    portable_validation = _rewrite_known_paths(
+        validation_row,
+        rewrites=path_rewrites[1],
+    )
+    portable_validation["bundle_settings_sha256"] = settings_sha256
+    portable_validation["bundle_source"] = "manifest.json#source"
+    portable_validation["bundle_job_record"] = "manifest.json#job_records/1"
+    portable_rows.append(portable_validation)
+
+    _write_csv(output_dir / "distributed.csv", DISTRIBUTED_COLUMNS, csv_rows)
+    atomic_write_jsonl(output_dir / "raw-results.jsonl", portable_rows)
+    atomic_write_json(
+        output_dir / "electrostatics-validation.json",
+        portable_validation,
+    )
+
+    manifest = {
+        "schema": BUNDLE_SCHEMA,
+        "created_utc": utc_now(),
+        "lesson": "Part 1 fixed-input domain decomposition",
+        "site": args.site,
+        "interconnect": args.interconnect,
+        "source": {
+            **{name: reference_source[name] for name in identity_fields},
+            "toolkit_version": toolkit_version,
+        },
+        "status": "complete",
+        "methodology": reference_methodology,
+        "settings": settings_record,
+        "settings_sha256": settings_sha256,
+        "input": {
+            "molecules_per_species": DEFAULT_FIXED_PAIR_COUNT,
+            "atom_count": reference_atom_count,
+            "structure_sha256": reference_input_sha,
+        },
+        "execution": {
+            "gpu_counts": list(DEFAULT_WORLD_SIZES),
+            "warmup_count": DEFAULT_WARMUP_COUNT,
+            "measured_pass_count": DEFAULT_PASS_COUNT,
+            "work_per_measured_pass": (
+                "one fixed-structure energy-and-force evaluation"
+            ),
+            "publishable_benchmark": False,
+            "observed_speedup": {
+                str(world_size): reference_median / _timing_median(rows[world_size])
+                for world_size in DEFAULT_WORLD_SIZES
+            },
+            "parallel_efficiency": {
+                str(world_size): (
+                    reference_median / _timing_median(rows[world_size]) / world_size
+                )
+                for world_size in DEFAULT_WORLD_SIZES
+            },
+        },
+        "hardware": {
+            "site": args.site,
+            "site_source": "operator-declared",
+            "interconnect": args.interconnect,
+            "interconnect_source": ("operator-declared; raw GPU topology is retained"),
+            "gpus_available": max_observed_gpus,
+            "nodes_available": max_observed_nodes,
+            "resource_count_source": (
+                "derived from successful per-rank runtime records"
+            ),
+            "gpu_model": hardware_reference["gpu_name"],
+            "gpu_memory_bytes": hardware_reference["gpu_total_memory_bytes"],
+            "driver_version": hardware_reference["driver_version"],
+            "cuda_version": hardware_reference["torch_cuda_version"],
+            "observed_gpus_by_job": {
+                str(world_size): observed_gpus_by_world[world_size]
+                for world_size in DEFAULT_WORLD_SIZES
+            },
+            "observed_nodes_by_job": {
+                str(world_size): observed_nodes_by_world[world_size]
+                for world_size in DEFAULT_WORLD_SIZES
+            },
+        },
+        "output_agreement": {
+            "force_reference_gpus": 1,
+            "distributed_energy_reference_gpus": 2,
+            "one_gpu_energy_offsets_are_diagnostics_only": True,
+            "energy_statistic": "median_of_three_measured_passes",
+            "position_check": {
+                "method": "maximum_minimum_image_displacement",
+                "tolerance_a": (DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A),
+                "meaning": (
+                    "Coordinates may be wrapped to equivalent periodic images; "
+                    "each warmup, measured pass, and final gather remains within "
+                    "this minimum-image displacement."
+                ),
+            },
+            "comparisons": {
+                str(world_size): output_comparisons[world_size]
+                for world_size in DEFAULT_WORLD_SIZES
+            },
+            "all_required_checks_passed": True,
+        },
+        "electrostatics_validation": {
+            "file": "electrostatics-validation.json",
+            "sha256": sha256_file(output_dir / "electrostatics-validation.json"),
+            "passed": True,
+        },
+        "job_records": job_record_indexes,
+        "files": {},
+        "interpretation": (
+            "The same fixed structure and complete AIMNet2 plus PME plus D3 "
+            "calculation ran through public Toolkit APIs on 1, 2, and 4 H100 "
+            "GPUs. The recorded times describe only these three short passes."
+        ),
+    }
+    for name in (
+        "distributed.csv",
+        "raw-results.jsonl",
+        "electrostatics-validation.json",
+    ):
+        path = output_dir / name
+        manifest["files"][name] = {
+            "sha256": sha256_file(path),
+            "size_bytes": path.stat().st_size,
+        }
+    atomic_write_json(output_dir / "manifest.json", manifest)
+    checksum_lines = []
+    for path in sorted(
+        candidate
+        for candidate in output_dir.rglob("*")
+        if candidate.is_file() and candidate.name != "SHA256SUMS"
+    ):
+        checksum_lines.append(f"{sha256_file(path)}  {path.relative_to(output_dir)}")
+    (output_dir / "SHA256SUMS").write_text(
+        "\n".join(checksum_lines) + "\n",
+        encoding="utf-8",
+    )
+    return manifest
 
 
 def assemble(args: argparse.Namespace) -> dict[str, Any]:
-    plan_path = args.plan.resolve()
-    plan = json.loads(plan_path.read_text(encoding="utf-8"))
+    plan = _load_json(args.plan.resolve())
     if plan.get("schema") != PLAN_SCHEMA:
         raise ValueError("plan has an unknown schema")
     result_dir = args.result_dir.resolve()
-    validation_rows = [
+    rows = [
         _read_case_result(result_dir / case["result_file"], case)
-        for case in plan["validation_cases"]
+        for case in _planned_cases(plan)
     ]
-    capacity_rows = _capacity_prefix(plan, result_dir)
-    rows = [*validation_rows, *capacity_rows]
-
     atomic_write_jsonl(args.output_jsonl.resolve(), rows)
-    capacity = capacity_rows
-    single_gpu_ooms = sorted(
-        int(row["pair_count"])
-        for row in capacity
-        if int(row["world_size"]) == 1
-        and row.get("failure", {}).get("is_cuda_oom") is True
-    )
     summary = {
         "schema": COLLECTION_SCHEMA,
         "created_utc": utc_now(),
         "run_id": plan["run_id"],
-        "plan": {
-            "path": str(plan_path),
-            "sha256": sha256_file(plan_path),
-        },
-        "rows_jsonl": {
-            "path": str(args.output_jsonl.resolve()),
-            "sha256": sha256_file(args.output_jsonl.resolve()),
-        },
-        "declared_capacity_candidates": len(plan["capacity_cases"]),
-        "attempted_capacity_rows": len(capacity_rows),
         "planned_rows": len(rows),
-        "recorded_rows": len(rows),
-        "successful_rows": sum(bool(row["success"]) for row in rows),
-        "failed_rows": sum(not bool(row["success"]) for row in rows),
-        "capacity_rows": len(capacity),
-        "electrostatics_validation_rows": len(rows) - len(capacity),
-        "first_measured_single_gpu_cuda_oom_pair_count": (
-            single_gpu_ooms[0] if single_gpu_ooms else None
-        ),
-        "rows": rows,
+        "successful_rows": sum(bool(row.get("success")) for row in rows),
+        "failed_rows": sum(not bool(row.get("success")) for row in rows),
     }
     atomic_write_json(args.output_summary.resolve(), summary)
     return summary
 
 
-def _add_shared_plan_arguments(parser: argparse.ArgumentParser) -> None:
-    parser.add_argument("--run-id", required=True)
-    parser.add_argument(
-        "--world-sizes",
-        nargs="+",
-        default=[str(value) for value in DEFAULT_WORLD_SIZES],
-    )
-    parser.add_argument(
-        "--capacity-pair-counts",
-        nargs="+",
-        default=[str(value) for value in DEFAULT_CAPACITY_PAIR_COUNTS],
-    )
-    parser.add_argument(
-        "--validation-pairs", type=int, default=DEFAULT_VALIDATION_PAIRS
-    )
-    parser.add_argument("--density-g-cm3", type=float, default=DEFAULT_DENSITY_G_CM3)
-    parser.add_argument("--pme-cutoff-a", type=float, default=DEFAULT_PME_CUTOFF_A)
-    parser.add_argument(
-        "--pme-mesh-safety-factor",
-        type=float,
-        default=DEFAULT_PME_MESH_SAFETY_FACTOR,
-        help="Multiplier used by Toolkit-Ops' PME mesh estimator.",
-    )
-    parser.add_argument(
-        "--pme-spline-order",
-        type=int,
-        default=DEFAULT_PME_SPLINE_ORDER,
-    )
-    parser.add_argument(
-        "--pme-accuracy",
-        type=float,
-        default=DEFAULT_PME_ACCURACY,
-    )
-    parser.add_argument(
-        "--ewald-reference-accuracy",
-        type=float,
-        default=DEFAULT_EWALD_REFERENCE_ACCURACY,
-    )
-    parser.add_argument("--d3-cutoff-a", type=float, default=DEFAULT_D3_CUTOFF_A)
-    parser.add_argument(
-        "--d3-smoothing-fraction",
-        type=float,
-        default=DEFAULT_D3_SMOOTHING_FRACTION,
-    )
-    parser.add_argument(
-        "--domain-skin-a",
-        type=float,
-        default=DEFAULT_DOMAIN_SKIN_A,
-    )
-    parser.add_argument(
-        "--packmol-tolerance-a",
-        type=float,
-        default=DEFAULT_PACKMOL_TOLERANCE_A,
-    )
-    parser.add_argument(
-        "--packmol-precision-a",
-        type=float,
-        default=DEFAULT_PACKMOL_PRECISION_A,
-    )
-    parser.add_argument("--packmol-seed", type=int, default=DEFAULT_PACKMOL_SEED)
-    parser.add_argument(
-        "--steady-timing-warmup-count",
-        type=int,
-        default=DEFAULT_STEADY_TIMING_WARMUP_COUNT,
-    )
-    parser.add_argument(
-        "--steady-timing-sample-count",
-        type=int,
-        default=DEFAULT_STEADY_TIMING_SAMPLE_COUNT,
-    )
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Plan and prepare the Part 1 domain-decomposition run."
+        description="Prepare and combine the short Part 1 multi-GPU example."
     )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     plan_parser = subparsers.add_parser(
         "plan",
-        help="Print or save the full run plan without GPU or Toolkit imports.",
+        help="Write the independent plan for one 1-, 2-, or 4-GPU job.",
     )
-    _add_shared_plan_arguments(plan_parser)
-    plan_parser.add_argument("--output", type=Path)
+    plan_parser.add_argument("--run-id", required=True)
+    plan_parser.add_argument("--tutorial-commit", required=True)
+    plan_parser.add_argument("--world-size", type=int, required=True)
+    plan_parser.add_argument("--output", type=Path, required=True)
 
     prepare_parser = subparsers.add_parser(
         "prepare",
-        help="Repeat the checked 3,200-atom periodic base box.",
+        help="Build a deterministic integer supercell of the checked base box.",
     )
     prepare_parser.add_argument("--pair-count", type=int, required=True)
     prepare_parser.add_argument(
@@ -4171,121 +2493,63 @@ def parse_args() -> argparse.Namespace:
         "--base-box-dir",
         type=Path,
         default=DEFAULT_BASE_BOX_DIR,
-        help="Directory containing the checked base manifest and structure.",
     )
-    prepare_parser.add_argument(
-        "--packmol",
-        default=None,
-        help="Accepted for older launchers; Packmol is not run by this command.",
-    )
-    prepare_parser.add_argument(
-        "--nci-data",
-        type=Path,
-        help="Optional packaged NCI file whose checksum is verified.",
-    )
+    prepare_parser.add_argument("--nci-data", type=Path)
     prepare_parser.add_argument("--output-dir", type=Path, required=True)
     prepare_parser.add_argument("--reuse-existing", action="store_true")
 
     checkpoint_parser = subparsers.add_parser(
         "checkpoint-preflight",
-        help="Resolve and hash the exact AIMNet2 checkpoint before GPU cases.",
+        help="Resolve and verify the pinned AIMNet2 checkpoint.",
     )
-    checkpoint_parser.add_argument("--checkpoint", default=AIMNET_CHECKPOINT)
+    checkpoint_parser.add_argument(
+        "--checkpoint",
+        default=AIMNET_CHECKPOINT,
+    )
     checkpoint_parser.add_argument("--output", type=Path, required=True)
 
     failure_parser = subparsers.add_parser(
         "record-failure",
-        help="Convert one failed fresh process into a retained result row.",
+        help="Save one unexpected runner failure as a normal result row.",
     )
     failure_parser.add_argument("--run-id", required=True)
     failure_parser.add_argument("--case-id", required=True)
     failure_parser.add_argument(
         "--mode",
-        choices=(
-            "capacity",
-            "parity",
-            "distributed",
-            "steady-timing",
-            "electrostatics-validation",
-        ),
+        choices=("distributed", "electrostatics-validation"),
         required=True,
     )
     failure_parser.add_argument("--world-size", type=int, required=True)
-    failure_parser.add_argument("--pair-count", type=int, required=True)
     failure_parser.add_argument("--input-extxyz", type=Path, required=True)
     failure_parser.add_argument("--rank-output-dir", type=Path, required=True)
     failure_parser.add_argument("--case-log", type=Path, required=True)
     failure_parser.add_argument("--exit-code", type=int, required=True)
     failure_parser.add_argument("--output", type=Path, required=True)
 
-    select_parser = subparsers.add_parser(
-        "select",
-        help=(
-            "Validate the one-GPU prefix and select parity, steady-timing, and "
-            "rescue inputs after the first natural CUDA OOM."
-        ),
-    )
-    select_parser.add_argument("--plan", type=Path, required=True)
-    select_parser.add_argument("--result-dir", type=Path, required=True)
-    select_parser.add_argument("--input-root", type=Path, required=True)
-    select_parser.add_argument(
-        "--parity-pairs",
-        type=int,
-        default=DEFAULT_PARITY_PAIR_COUNT,
-    )
-    select_parser.add_argument("--output", type=Path, required=True)
-
-    derive_parser = subparsers.add_parser(
-        "derive",
-        help="Create one 2- or 4-GPU plan from the checked capacity selection.",
-    )
-    derive_parser.add_argument("--selection", type=Path, required=True)
-    derive_parser.add_argument("--world-size", type=int, required=True)
-    derive_parser.add_argument("--output", type=Path, required=True)
-
     phase_parser = subparsers.add_parser(
         "phase-summary",
-        help="Check one completed campaign phase and write a plain JSON summary.",
-    )
-    phase_parser.add_argument(
-        "--phase",
-        choices=("electrostatics", "capacity", "distributed"),
-        required=True,
+        help="Check one independent GPU job.",
     )
     phase_parser.add_argument("--phase-dir", type=Path, required=True)
     phase_parser.add_argument("--output", type=Path, required=True)
 
     bundle_parser = subparsers.add_parser(
         "bundle",
-        help=(
-            "Combine checked capacity/one-GPU timing and 2/4-GPU jobs into the exact "
-            "notebook-facing recorded bundle."
-        ),
+        help="Combine complete 1-, 2-, and 4-GPU jobs.",
     )
-    bundle_parser.add_argument("--capacity-dir", type=Path, required=True)
     bundle_parser.add_argument(
-        "--distributed-dir",
-        type=Path,
+        "--job-dir",
         action="append",
+        type=Path,
         required=True,
-        help="Repeat for the 2- and 4-GPU result directories.",
     )
     bundle_parser.add_argument("--site", required=True)
     bundle_parser.add_argument("--interconnect", required=True)
-    bundle_parser.add_argument(
-        "--producer-file",
-        type=Path,
-        action="append",
-        default=[],
-    )
     bundle_parser.add_argument("--output-dir", type=Path, required=True)
 
     assemble_parser = subparsers.add_parser(
         "assemble",
-        help=(
-            "Combine validation and the attempted one-GPU prefix, ending at "
-            "the first natural CUDA OOM."
-        ),
+        help="Collect one job's planned rows as JSONL.",
     )
     assemble_parser.add_argument("--plan", type=Path, required=True)
     assemble_parser.add_argument("--result-dir", type=Path, required=True)
@@ -4299,28 +2563,11 @@ def main() -> int:
     if args.command == "plan":
         plan = build_plan(
             run_id=args.run_id,
-            world_sizes=parse_positive_ints(args.world_sizes),
-            capacity_pair_counts=parse_positive_ints(args.capacity_pair_counts),
-            validation_pairs=args.validation_pairs,
-            density_g_cm3=args.density_g_cm3,
-            pme_cutoff_a=args.pme_cutoff_a,
-            pme_mesh_safety_factor=args.pme_mesh_safety_factor,
-            pme_spline_order=args.pme_spline_order,
-            pme_accuracy=args.pme_accuracy,
-            ewald_reference_accuracy=args.ewald_reference_accuracy,
-            d3_cutoff_a=args.d3_cutoff_a,
-            d3_smoothing_fraction=args.d3_smoothing_fraction,
-            domain_skin_a=args.domain_skin_a,
-            packmol_tolerance_a=args.packmol_tolerance_a,
-            packmol_precision_a=args.packmol_precision_a,
-            packmol_seed=args.packmol_seed,
-            steady_timing_warmup_count=args.steady_timing_warmup_count,
-            steady_timing_sample_count=args.steady_timing_sample_count,
+            tutorial_commit=args.tutorial_commit,
+            world_size=args.world_size,
         )
-        text = json.dumps(plan, indent=2, sort_keys=True) + "\n"
-        if args.output is not None:
-            atomic_write_json(args.output.resolve(), plan)
-        print(text, end="")
+        atomic_write_json(args.output.resolve(), plan)
+        print(json.dumps(plan, indent=2, sort_keys=True))
         return 0
     if args.command == "prepare":
         manifest = prepare_input(args)
@@ -4334,18 +2581,10 @@ def main() -> int:
         row = record_failure(args)
         print(json.dumps(row, indent=2, sort_keys=True))
         return 0
-    if args.command == "select":
-        selection = select_capacity(args)
-        print(json.dumps(selection, indent=2, sort_keys=True))
-        return 0
-    if args.command == "derive":
-        plan = derive_distributed_plan(args)
-        print(json.dumps(plan, indent=2, sort_keys=True))
-        return 0
     if args.command == "phase-summary":
         summary = write_phase_summary(args)
         print(json.dumps(summary, indent=2, sort_keys=True))
-        return 0 if bool(summary["passed"]) else 1
+        return 0
     if args.command == "bundle":
         manifest = build_bundle(args)
         print(json.dumps(manifest, indent=2, sort_keys=True))
@@ -4354,7 +2593,7 @@ def main() -> int:
         summary = assemble(args)
         print(json.dumps(summary, indent=2, sort_keys=True))
         return 0
-    raise AssertionError(f"unhandled command {args.command}")
+    raise AssertionError(args.command)
 
 
 if __name__ == "__main__":

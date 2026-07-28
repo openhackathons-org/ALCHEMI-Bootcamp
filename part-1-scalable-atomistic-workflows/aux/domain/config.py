@@ -1,7 +1,7 @@
 """Versioned methodology settings for the Part 1 domain lesson.
 
 This module is the single source for values that change the molecular-box,
-electrostatics, dispersion, domain-decomposition, parity, or evaluation
+electrostatics, dispersion, domain-decomposition, output agreement, or evaluation
 methodology.  It uses only the Python standard library so the campaign planner
 can show its defaults on a machine without ASE, Torch, CUDA, or Toolkit.
 
@@ -17,7 +17,7 @@ import math
 from typing import Any
 
 
-DOMAIN_METHODOLOGY_SCHEMA = "alchemi.part1-domain-methodology.v2"
+DOMAIN_METHODOLOGY_SCHEMA = "alchemi.part1-domain-methodology.v5"
 
 
 def _setting(
@@ -87,33 +87,23 @@ class DomainMethodologyConfig:
         ),
         source="Part 1 domain lesson design, declared before the recorded campaign.",
     )
-    capacity_molecules_per_species: tuple[int, ...] = _setting(
+    fixed_molecules_per_species: int = _setting(
         units="molecules/species",
-        scope="one-GPU capacity ladder",
+        scope="recorded 1/2/4-GPU fixed-input evaluation",
         rationale=(
-            "Uses a declared doubling ladder with no atom-count or memory-fit "
-            "skip; the first genuine CUDA OOM remains a measured row."
+            "Uses one 2 x 2 x 4 repeat of the checked base box for every GPU "
+            "count so the short comparison performs the same scientific work."
         ),
-        source="Part 1 domain campaign plan, declared before measurement.",
+        source="Part 1 fixed-input domain evaluation plan.",
     )
     electrostatics_validation_molecules_per_species: int = _setting(
         units="molecules/species",
         scope="fixed-charge PME-versus-Ewald check",
         rationale=(
-            "Checks the electrostatics settings on the smallest planned "
-            "periodic box before the capacity ladder."
+            "Checks the electrostatics settings on the smaller live-example "
+            "periodic box."
         ),
         source="Part 1 domain campaign plan, declared before measurement.",
-    )
-    parity_molecules_per_species: int = _setting(
-        units="molecules/species",
-        scope="1/2/4-GPU parity input",
-        rationale=(
-            "Uses the 2 x 2 x 4 repeat of the checked base box. A direct "
-            "Toolkit halo check predicts remote atoms on every rank at two and "
-            "four GPUs; require_nondegenerate verifies this during each run."
-        ),
-        source="Part 1 domain decomposition geometry check.",
     )
     construction_density_g_cm3: float = _setting(
         units="g/cm^3",
@@ -216,27 +206,65 @@ class DomainMethodologyConfig:
         ),
         source="Part 1 numerical acceptance limit declared before measurement.",
     )
-    parity_energy_tolerance_ev_per_atom: float = _setting(
+    distributed_energy_repeatability_tolerance_ev_per_atom: float = _setting(
         units="eV/atom",
-        scope="2-GPU versus 4-GPU same-input energy agreement",
+        scope="2/4-GPU repeated fixed-input energy/force passes",
         rationale=(
-            "Checks consistency across the distributed reduction path and "
-            "normalizes by atom count so the atomic-energy baseline does not "
-            "set the acceptance limit."
+            "Checks that the distributed energy reduction is stable across the "
+            "three measured passes. The one-GPU float32 energy spread is "
+            "reported separately as a diagnostic."
         ),
         source="Part 1 numerical acceptance limit declared before measurement.",
     )
-    parity_force_atol_ev_a: float = _setting(
+    evaluation_energy_tolerance_ev_per_atom: float = _setting(
+        units="eV/atom",
+        scope="4-GPU versus 2-GPU median-energy agreement",
+        rationale=(
+            "Checks agreement between two distributed rank layouts while "
+            "normalizing the extensive energy difference by atom count."
+        ),
+        source="Part 1 numerical acceptance limit declared before measurement.",
+    )
+    evaluation_energy_dtype_single_rank: str = _setting(
+        units="Torch dtype name",
+        scope="one-GPU fixed-input energy output",
+        rationale=(
+            "Records the float32 energy returned by the pinned AIMNet2 "
+            "composite when no cross-rank reduction is needed."
+        ),
+        source="Observed with the pinned Part 1 AIMNet2 composite.",
+    )
+    evaluation_energy_dtype_multi_rank: str = _setting(
+        units="Torch dtype name",
+        scope="2/4-GPU fixed-input energy output",
+        rationale=(
+            "Records the float64 energy returned by the pinned multi-rank "
+            "AIMNet2 composite. Toolkit's distributed regression treats this "
+            "float64 result as expected."
+        ),
+        source=("Toolkit Core commit 331d6b2, test_distributed_pipeline_multigpu.py."),
+    )
+    evaluation_force_atol_ev_a: float = _setting(
         units="eV/Å",
-        scope="1-GPU versus multi-GPU componentwise force parity",
-        rationale="Provides the absolute term in the declared force parity rule.",
+        scope="1-GPU versus multi-GPU componentwise force agreement",
+        rationale="Provides the absolute term in the declared force agreement rule.",
         source="Toolkit 0.2 AIMNet2-PME distributed-composite regression methodology.",
     )
-    parity_force_rtol: float = _setting(
+    evaluation_force_rtol: float = _setting(
         units="fraction",
-        scope="1-GPU versus multi-GPU componentwise force parity",
+        scope="1-GPU versus multi-GPU componentwise force agreement",
         rationale="Allows the declared force limit to scale by component.",
         source="Toolkit 0.2 AIMNet2-PME distributed-composite regression methodology.",
+    )
+    evaluation_position_mic_tolerance_a: float = _setting(
+        units="Å",
+        scope="1/2/4-GPU fixed-input position invariance",
+        rationale=(
+            "Allows only float32 roundoff from DomainParallel's automatic "
+            "periodic wrapping while rejecting physical atomic motion through "
+            "a minimum-image displacement check."
+        ),
+        source="Part 1 numerical acceptance limit declared before measurement.",
     )
     d3_cutoff_a: float = _setting(
         units="Å",
@@ -255,64 +283,48 @@ class DomainMethodologyConfig:
         scope="DomainParallel ghost-atom halo",
         rationale=(
             "Adds communication depth for D3 coordination numbers around "
-            "borrowed atoms; acceptance still requires same-input force parity."
+            "borrowed atoms; acceptance still requires same-input force agreement."
         ),
         source="Toolkit 0.2 multi-GPU D3 test starting value.",
     )
-    steady_timing_warmup_count: int = _setting(
-        units="public partition-run-gather workflows/case",
-        scope="steady 1/2/4-GPU timing warmup",
+    evaluation_warmup_count: int = _setting(
+        units="fixed-structure energy/force passes/case",
+        scope="1/2/4-GPU initialization and warmup",
         rationale=(
-            "Warms the complete public DomainParallel workflow before collecting "
-            "steady timing samples."
+            "Runs one untimed pass after partitioning so model initialization "
+            "and the multi-rank force prime are outside the three shown times."
         ),
-        source="Part 1 steady-timing methodology declared before measurement.",
+        source="Part 1 fixed-input domain evaluation plan.",
     )
-    steady_timing_sample_count: int = _setting(
-        units="public partition-run-gather workflows/case",
-        scope="steady 1/2/4-GPU timing samples",
+    evaluation_pass_count: int = _setting(
+        units="measured fixed-structure energy/force passes/case",
+        scope="recorded 1/2/4-GPU evaluation",
         rationale=(
-            "Provides enough repeated complete-workflow observations to report "
-            "a median and interquartile range."
+            "Shows three raw pass times and their median without turning the "
+            "short tutorial example into a long benchmark."
         ),
-        source="Part 1 steady-timing methodology declared before measurement.",
+        source="Part 1 fixed-input domain evaluation plan.",
     )
-    steady_timing_max_relative_iqr: float = _setting(
-        units="IQR / median",
-        scope="steady 1/2/4-GPU timing repeatability",
+    measured_model_evaluations_per_pass: int = _setting(
+        units="complete composed model evaluations/measured pass",
+        scope="equal-work 1/2/4-GPU measured passes",
         rationale=(
-            "Rejects a tutorial timing series when any GPU count has a broad "
-            "middle half of samples. This is a repeatability check, not a "
-            "claim of benchmark-grade statistics."
+            "Each measured DomainParallel run requests one BaseDynamics step "
+            "after the one-time warmup."
         ),
-        source="Part 1 steady-timing methodology declared before measurement.",
+        source="Part 1 fixed-input domain evaluation plan.",
     )
-    steady_timing_model_evaluations_per_workflow: int = _setting(
-        units="model evaluations/public workflow",
-        scope="equal-work 1/2/4-GPU steady timing",
-        rationale=(
-            "Keeps the timed model work identical even though multi-rank "
-            "DomainParallel performs an automatic initial force evaluation."
-        ),
-        source="Part 1 equal-work timing methodology declared before measurement.",
-    )
-    domain_parallel_multi_rank_initial_force_evaluations: int = _setting(
+    domain_parallel_multi_rank_warmup_force_prime_evaluations: int = _setting(
         units="model evaluations before requested steps",
-        scope="pinned Toolkit 0.2 multi-rank DomainParallel.run behavior",
+        scope="first multi-rank warmup run in pinned Toolkit 0.2",
         rationale=(
-            "Records the automatic force priming that must be included when "
-            "deriving equal-work run-step counts."
+            "Records the automatic force prime performed once before the first "
+            "requested multi-rank step; it is part of untimed warmup."
         ),
         source=(
             "Toolkit Core commit 331d6b2, "
             "nvalchemi.distributed.domain_parallel.DomainParallel.run."
         ),
-    )
-    capacity_world_sizes: tuple[int, ...] = _setting(
-        units="ranks/GPUs",
-        scope="one-GPU capacity phase",
-        rationale="Keeps capacity discovery on one fresh single-GPU process per case.",
-        source="Part 1 domain campaign execution plan.",
     )
     domain_grid_dims: tuple[int, int, int] | None = _setting(
         units="spatial cells along x/y/z, or automatic",
@@ -346,50 +358,25 @@ class DomainMethodologyConfig:
         integer_names = (
             "atoms_per_composition_unit",
             "live_molecules_per_species",
+            "fixed_molecules_per_species",
             "electrostatics_validation_molecules_per_species",
-            "parity_molecules_per_species",
             "packmol_seed",
             "pme_spline_order",
-            "steady_timing_warmup_count",
-            "steady_timing_sample_count",
-            "steady_timing_model_evaluations_per_workflow",
-            "domain_parallel_multi_rank_initial_force_evaluations",
+            "evaluation_warmup_count",
+            "evaluation_pass_count",
+            "measured_model_evaluations_per_pass",
+            "domain_parallel_multi_rank_warmup_force_prime_evaluations",
         )
         for name in integer_names:
             value = getattr(self, name)
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ValueError(f"{name} must be a positive integer")
-        if self.steady_timing_sample_count < 5:
-            raise ValueError("steady_timing_sample_count must be at least 5")
-        if self.steady_timing_max_relative_iqr > 1.0:
-            raise ValueError("steady_timing_max_relative_iqr must not exceed 1")
-        if (
-            self.steady_timing_model_evaluations_per_workflow
-            <= self.domain_parallel_multi_rank_initial_force_evaluations
-        ):
-            raise ValueError(
-                "steady timing needs at least one requested multi-rank step"
-            )
-        counts = self.capacity_molecules_per_species
-        if (
-            not isinstance(counts, tuple)
-            or not counts
-            or any(
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value <= 0
-                for value in counts
-            )
-            or tuple(sorted(set(counts))) != counts
-        ):
-            raise ValueError(
-                "capacity_molecules_per_species must be a strictly increasing "
-                "tuple of positive integers"
-            )
-        if self.live_molecules_per_species not in counts:
-            raise ValueError("live molecule count must occur in the capacity ladder")
-        if self.parity_molecules_per_species not in counts:
-            raise ValueError("parity molecule count must occur in the capacity ladder")
+        if self.evaluation_warmup_count != 1:
+            raise ValueError("evaluation_warmup_count must be exactly 1")
+        if self.evaluation_pass_count != 3:
+            raise ValueError("evaluation_pass_count must be exactly 3")
+        if self.measured_model_evaluations_per_pass != 1:
+            raise ValueError("measured_model_evaluations_per_pass must be exactly 1")
 
         real_names = tuple(
             item.name
@@ -397,11 +384,11 @@ class DomainMethodologyConfig:
             if item.name not in {"name", "version", "nci_system_id", *integer_names}
             and item.name
             not in {
-                "capacity_molecules_per_species",
-                "capacity_world_sizes",
                 "campaign_world_sizes",
                 "d3_smoothing_fraction",
                 "domain_grid_dims",
+                "evaluation_energy_dtype_single_rank",
+                "evaluation_energy_dtype_multi_rank",
             }
         )
         for name in real_names:
@@ -413,6 +400,12 @@ class DomainMethodologyConfig:
                 or float(value) <= 0.0
             ):
                 raise ValueError(f"{name} must be positive and finite")
+        if self.evaluation_energy_dtype_single_rank != "torch.float32":
+            raise ValueError(
+                "evaluation_energy_dtype_single_rank must be torch.float32"
+            )
+        if self.evaluation_energy_dtype_multi_rank != "torch.float64":
+            raise ValueError("evaluation_energy_dtype_multi_rank must be torch.float64")
         if (
             not math.isfinite(float(self.d3_smoothing_fraction))
             or not 0.0 <= self.d3_smoothing_fraction < 1.0
@@ -422,28 +415,14 @@ class DomainMethodologyConfig:
             raise ValueError(
                 "packmol_precision_a must be smaller than packmol_tolerance_a"
             )
-        if (
-            not self.capacity_world_sizes
-            or any(
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value <= 0
-                for value in self.capacity_world_sizes
-            )
-        ):
-            raise ValueError("capacity_world_sizes must contain positive integers")
         if self.domain_grid_dims is not None and (
             len(self.domain_grid_dims) != 3
             or any(
-                isinstance(value, bool)
-                or not isinstance(value, int)
-                or value <= 0
+                isinstance(value, bool) or not isinstance(value, int) or value <= 0
                 for value in self.domain_grid_dims
             )
         ):
-            raise ValueError(
-                "domain_grid_dims must be None or three positive integers"
-            )
+            raise ValueError("domain_grid_dims must be None or three positive integers")
         if (
             not self.campaign_world_sizes
             or len(set(self.campaign_world_sizes)) != len(self.campaign_world_sizes)
@@ -456,14 +435,8 @@ class DomainMethodologyConfig:
             )
         ):
             raise ValueError(
-                "campaign_world_sizes must be an increasing tuple of positive "
-                "integers"
+                "campaign_world_sizes must be an increasing tuple of positive integers"
             )
-        if any(
-            value not in self.campaign_world_sizes
-            for value in self.capacity_world_sizes
-        ):
-            raise ValueError("capacity world sizes must be campaign world sizes")
         if self.campaign_world_sizes[0] != 1:
             raise ValueError("the recorded campaign requires a one-GPU reference")
         if len(self.distributed_world_sizes) < 2:
@@ -489,6 +462,22 @@ class DomainMethodologyConfig:
             world_size for world_size in self.supported_world_sizes if world_size > 1
         )
 
+    def evaluation_energy_dtype_for_world_size(self, world_size: int) -> str:
+        """Return the observed energy dtype for one supported rank count."""
+
+        if (
+            isinstance(world_size, bool)
+            or not isinstance(world_size, int)
+            or world_size not in self.supported_world_sizes
+        ):
+            raise ValueError(
+                f"world_size must be one of {self.supported_world_sizes}, "
+                f"got {world_size}"
+            )
+        if world_size == 1:
+            return self.evaluation_energy_dtype_single_rank
+        return self.evaluation_energy_dtype_multi_rank
+
     @property
     def force_reference_world_size(self) -> int:
         """Return the single-GPU reference used for force checks."""
@@ -512,24 +501,6 @@ class DomainMethodologyConfig:
         """Return distributed runs compared with the energy reference."""
 
         return self.distributed_world_sizes[1:]
-
-    @property
-    def steady_timing_world_sizes(self) -> tuple[int, ...]:
-        """Return the 1/2/4-GPU sizes required for steady timing."""
-
-        return self.supported_world_sizes
-
-    def steady_timing_run_steps(self, world_size: int) -> int:
-        """Return requested steps that give equal timed model work."""
-
-        if world_size not in self.steady_timing_world_sizes:
-            raise ValueError(f"unsupported steady-timing world size: {world_size}")
-        automatic = (
-            self.domain_parallel_multi_rank_initial_force_evaluations
-            if world_size > 1
-            else 0
-        )
-        return self.steady_timing_model_evaluations_per_workflow - automatic
 
     def resolved_values(self, *, json_compatible: bool = False) -> dict[str, Any]:
         """Return behavior-affecting values without duplicating defaults."""
@@ -584,25 +555,14 @@ class DomainMethodologyConfig:
 
 DOMAIN_METHODOLOGY = DomainMethodologyConfig(
     name="part1-packmol-domain-decomposition",
-    version="1.7.0",
+    version="1.10.0",
     nci_system_id="1.041",
     nci_scale=1.0,
     atoms_per_composition_unit=25,
     aimnet_neighbor_cutoff_a=5.0,
     live_molecules_per_species=128,
-    capacity_molecules_per_species=(
-        128,
-        256,
-        512,
-        1_024,
-        2_048,
-        4_096,
-        8_192,
-        16_384,
-        32_768,
-    ),
+    fixed_molecules_per_species=2_048,
     electrostatics_validation_molecules_per_species=128,
-    parity_molecules_per_species=2_048,
     construction_density_g_cm3=1.0,
     packmol_tolerance_a=2.0,
     packmol_precision_a=1.0e-3,
@@ -615,18 +575,20 @@ DOMAIN_METHODOLOGY = DomainMethodologyConfig(
     pme_ewald_energy_tolerance_ev_per_atom=1.0e-4,
     pme_ewald_force_max_tolerance_ev_a=5.0e-3,
     charge_sum_tolerance_e=1.0e-4,
-    parity_energy_tolerance_ev_per_atom=1.0e-4,
-    parity_force_atol_ev_a=2.0e-3,
-    parity_force_rtol=1.0e-2,
+    distributed_energy_repeatability_tolerance_ev_per_atom=1.0e-4,
+    evaluation_energy_tolerance_ev_per_atom=1.0e-4,
+    evaluation_energy_dtype_single_rank="torch.float32",
+    evaluation_energy_dtype_multi_rank="torch.float64",
+    evaluation_force_atol_ev_a=2.0e-3,
+    evaluation_force_rtol=1.0e-2,
+    evaluation_position_mic_tolerance_a=1.0e-4,
     d3_cutoff_a=15.0,
     d3_smoothing_fraction=0.2,
     domain_halo_skin_a=4.0,
-    steady_timing_warmup_count=1,
-    steady_timing_sample_count=5,
-    steady_timing_max_relative_iqr=0.10,
-    steady_timing_model_evaluations_per_workflow=2,
-    domain_parallel_multi_rank_initial_force_evaluations=1,
-    capacity_world_sizes=(1,),
+    evaluation_warmup_count=1,
+    evaluation_pass_count=3,
+    measured_model_evaluations_per_pass=1,
+    domain_parallel_multi_rank_warmup_force_prime_evaluations=1,
     domain_grid_dims=None,
     campaign_world_sizes=(1, 2, 4),
 )

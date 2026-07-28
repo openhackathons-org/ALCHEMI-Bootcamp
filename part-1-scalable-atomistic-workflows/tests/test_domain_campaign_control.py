@@ -1,13 +1,12 @@
-"""CPU-only checks for the offline H100 campaign controls."""
+"""CPU-only checks for the short offline H100 example."""
 
 from __future__ import annotations
 
+import csv
 import importlib.util
-import inspect
 import json
 from pathlib import Path
-from types import SimpleNamespace
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 from ase import Atoms
 from ase.io import read as ase_read
@@ -17,6 +16,7 @@ import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
+SBATCH_PATH = REPO_ROOT / "scripts" / "slurm_part1_domain_decomposition.sbatch"
 
 
 def _load_plan_script() -> ModuleType:
@@ -39,23 +39,20 @@ def _write_json(path: Path, value: object) -> None:
     )
 
 
-def _force_record(path: Path, values: np.ndarray) -> dict[str, object]:
+def _write_checksum_file(path: Path, files: list[Path]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.save(path, values, allow_pickle=False)
-    return {
-        "path": str(path.resolve()),
-        "sha256": PLAN.sha256_file(path),
-        "shape": list(values.shape),
-    }
+    path.write_text(
+        "".join(
+            f"{PLAN.sha256_file(source)}  {source.resolve()}\n" for source in files
+        ),
+        encoding="utf-8",
+    )
 
 
 def _write_checked_base_box(root: Path) -> Path:
     phenol_symbols = list("C" * 6 + "H" * 6 + "O")
     nma_symbols = list("C" * 3 + "H" * 7 + "NO")
-    symbols = (
-        phenol_symbols * PLAN.BASE_PAIR_COUNT
-        + nma_symbols * PLAN.BASE_PAIR_COUNT
-    )
+    symbols = phenol_symbols * PLAN.BASE_PAIR_COUNT + nma_symbols * PLAN.BASE_PAIR_COUNT
     atoms = Atoms(symbols, positions=np.zeros((PLAN.BASE_ATOM_COUNT, 3)))
     molecule_id = np.concatenate(
         (
@@ -98,9 +95,7 @@ def _write_checked_base_box(root: Path) -> Path:
         )
     )
     volume_a3 = (
-        float(np.sum(atoms.get_masses()))
-        * 1.66053906660
-        / PLAN.DEFAULT_DENSITY_G_CM3
+        float(np.sum(atoms.get_masses())) * 1.66053906660 / PLAN.DEFAULT_DENSITY_G_CM3
     )
     atoms.set_cell([volume_a3 ** (1.0 / 3.0)] * 3)
     atoms.set_pbc(True)
@@ -112,28 +107,25 @@ def _write_checked_base_box(root: Path) -> Path:
             "count_definition": PLAN.MOLECULE_COUNT_DEFINITION,
         }
     )
-    atoms.set_array(
-        "source_atom_id",
-        np.arange(PLAN.BASE_ATOM_COUNT, dtype=np.int32),
-    )
-    atoms.set_array("molecule_id", molecule_id)
-    atoms.set_array(
-        "molecule_component",
-        molecule_kind.copy(),
-    )
-    atoms.set_array("molecule_kind", molecule_kind)
-    atoms.set_array("template_atom_index", template_atom_index)
+    arrays = {
+        "source_atom_id": np.arange(
+            PLAN.BASE_ATOM_COUNT,
+            dtype=np.int32,
+        ),
+        "molecule_id": molecule_id,
+        "molecule_component": molecule_kind.copy(),
+        "molecule_kind": molecule_kind,
+        "template_atom_index": template_atom_index,
+    }
+    for name, values in arrays.items():
+        atoms.set_array(name, values)
 
     root.mkdir(parents=True)
     structure = root / "structure.extxyz"
     ase_write(structure, atoms, format="extxyz")
     manifest = {
         "schema": PLAN.BASE_BOX_SCHEMA,
-        "methodology": {
-            "schema": PLAN.DOMAIN_METHODOLOGY.schema,
-            "name": PLAN.DOMAIN_METHODOLOGY.name,
-            "version": PLAN.DOMAIN_METHODOLOGY.version,
-        },
+        "methodology": PLAN.BASE_BOX_METHODOLOGY,
         "source": {
             "nci_subset_file": "../../nci_atlas/nci-atlas-curves.csv.gz",
             "nci_subset_sha256": PLAN.NCI_SUBSET_SHA256,
@@ -167,15 +159,7 @@ def _write_checked_base_box(root: Path) -> Path:
                     "shape": list(values.shape),
                     "sha256": PLAN.sha256(values.tobytes()).hexdigest(),
                 }
-                for name, values in atoms.arrays.items()
-                if name
-                in {
-                    "source_atom_id",
-                    "molecule_id",
-                    "molecule_component",
-                    "molecule_kind",
-                    "template_atom_index",
-                }
+                for name, values in arrays.items()
             },
         },
     }
@@ -183,17 +167,88 @@ def _write_checked_base_box(root: Path) -> Path:
     return root
 
 
-def test_prepare_repeats_checked_base_without_running_packmol(tmp_path: Path) -> None:
+def _plan(world_size: int) -> dict[str, object]:
+    return PLAN.build_plan(
+        run_id=f"fixed-gpus-{world_size}",
+        tutorial_commit="1" * 40,
+        world_size=world_size,
+    )
+
+
+def test_plan_has_one_fixed_input_and_three_short_passes() -> None:
+    assert PLAN.DEFAULT_WORLD_SIZES == (1, 2, 4)
+    assert PLAN.DEFAULT_FIXED_PAIR_COUNT == 2_048
+    assert PLAN.DEFAULT_FIXED_PAIR_COUNT * PLAN.ATOMS_PER_PAIR == 51_200
+    assert PLAN.DEFAULT_WARMUP_COUNT == 1
+    assert PLAN.DEFAULT_PASS_COUNT == 3
+
+    plans = [_plan(world_size) for world_size in PLAN.DEFAULT_WORLD_SIZES]
+    fixed_cases = [plan["fixed_case"] for plan in plans]
+
+    assert [case["world_size"] for case in fixed_cases] == [1, 2, 4]
+    assert {case["pair_count"] for case in fixed_cases} == {2_048}
+    assert {case["atom_count"] for case in fixed_cases} == {51_200}
+    assert {tuple(case["repeat_factors_xyz"]) for case in fixed_cases} == {(2, 2, 4)}
+    assert {case["measurement_role"] for case in fixed_cases} == {"fixed_evaluation"}
+    assert len(plans[0]["validation_cases"]) == 1
+    assert plans[1]["validation_cases"] == []
+    assert plans[2]["validation_cases"] == []
+    for plan in plans:
+        assert plan["timing"]["warmup_count"] == 1
+        assert plan["timing"]["pass_count"] == 3
+        assert plan["timing"]["measured_model_evaluations_per_pass"] == 1
+        assert plan["timing"]["publishable_benchmark"] is False
+        assert (
+            plan["validation_acceptance"]["evaluation_position_mic_tolerance_a"]
+            == PLAN.DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+        )
+
+
+@pytest.mark.parametrize("world_size", (0, 3, 8))
+def test_plan_rejects_gpu_counts_outside_1_2_4(world_size: int) -> None:
+    with pytest.raises(ValueError, match="world_size must be one of"):
+        _plan(world_size)
+
+
+def test_campaign_source_has_no_size_search_or_deliberate_failure() -> None:
+    planner = (
+        (REPO_ROOT / "scripts" / "part1_domain_plan.py")
+        .read_text(encoding="utf-8")
+        .lower()
+    )
+    slurm = SBATCH_PATH.read_text(encoding="utf-8").lower()
+
+    for removed in (
+        "capacity-pairs",
+        "first_cuda_oom",
+        "rescue-pairs",
+        "steady-timing-pairs",
+        "parity-pairs",
+        "--dependency",
+        "--measurement-role",
+        "--warmup-count",
+        "--sample-count",
+    ):
+        assert removed not in slurm
+        assert removed not in planner
+    assert "for nodes in 1 2 4" in slurm
+    assert "one untimed initialization pass" in slurm
+    assert "three measured" in slurm
+    assert "--nodes 8" not in slurm
+
+
+def test_prepare_repeats_checked_base_without_running_packmol(
+    tmp_path: Path,
+) -> None:
     base_dir = _write_checked_base_box(tmp_path / "base")
-    output_dir = tmp_path / "pairs-256"
+    output_dir = tmp_path / "pairs-2048"
     args = SimpleNamespace(
-        pair_count=256,
+        pair_count=PLAN.DEFAULT_FIXED_PAIR_COUNT,
         density_g_cm3=PLAN.DEFAULT_DENSITY_G_CM3,
         tolerance_a=PLAN.DEFAULT_PACKMOL_TOLERANCE_A,
         precision_a=PLAN.DEFAULT_PACKMOL_PRECISION_A,
         seed=PLAN.DEFAULT_PACKMOL_SEED,
         base_box_dir=base_dir,
-        packmol="definitely-not-an-executable",
         nci_data=None,
         output_dir=output_dir,
         reuse_existing=False,
@@ -202,61 +257,77 @@ def test_prepare_repeats_checked_base_without_running_packmol(tmp_path: Path) ->
     manifest = PLAN.prepare_input(args)
     expanded = ase_read(output_dir / "structure.extxyz", format="extxyz")
 
-    assert manifest["construction"] == {
-        "method": "balanced_integer_supercell_repeat",
-        "base_pair_count": 128,
-        "repeat_multiplier": 2,
-        "repeat_factors_xyz": [1, 1, 2],
-        "base_box_manifest": str((base_dir / "manifest.json").resolve()),
-        "base_box_manifest_schema": PLAN.BASE_BOX_SCHEMA,
-        "base_box_manifest_sha256": PLAN.sha256_file(
-            base_dir / "manifest.json"
-        ),
-        "base_box_structure": str((base_dir / "structure.extxyz").resolve()),
-        "base_box_structure_sha256": PLAN.sha256_file(
-            base_dir / "structure.extxyz"
-        ),
-        "packmol_rerun": False,
-    }
+    assert manifest["construction"]["method"] == ("balanced_integer_supercell_repeat")
+    assert manifest["construction"]["repeat_factors_xyz"] == [2, 2, 4]
+    assert manifest["construction"]["packmol_rerun"] is False
     assert manifest["packmol"]["applied_to"] == "checked_base_box_only"
-    assert len(expanded) == 6_400
+    assert len(expanded) == 51_200
     assert expanded.pbc.all()
-    base_length_a = float(np.linalg.norm(expanded.cell.array[0]))
-    assert manifest["cell_geometry"] == "orthorhombic"
-    assert manifest["cell_lengths_a"] == pytest.approx(
-        [base_length_a, base_length_a, 2.0 * base_length_a]
-    )
-    assert manifest["minimum_cell_length_a"] == pytest.approx(base_length_a)
-    assert manifest["equivalent_cubic_length_a"] == pytest.approx(
-        float(expanded.get_volume()) ** (1.0 / 3.0)
-    )
-    assert manifest["volume_a3"] == pytest.approx(float(expanded.get_volume()))
-    assert "box_length_a" not in manifest
-    assert np.array_equal(
-        expanded.arrays["source_atom_id"],
-        np.arange(6_400, dtype=np.int64),
-    )
-    assert np.array_equal(
-        np.unique(expanded.arrays["molecule_id"]),
-        np.arange(512, dtype=np.int64),
-    )
-    assert np.unique(
-        expanded.arrays["molecule_kind"],
-        return_counts=True,
-    )[1].tolist() == [3_328, 3_072]
     assert manifest["density_from_mass_and_cell_g_cm3"] == pytest.approx(1.0)
     assert manifest["structure"]["sha256"] == PLAN.sha256_file(
         output_dir / "structure.extxyz"
     )
 
+    reuse_values = vars(args).copy()
+    reuse_values["reuse_existing"] = True
+    reuse_args = SimpleNamespace(**reuse_values)
+    reused = PLAN.prepare_input(reuse_args)
+    assert reused == manifest
 
-def test_input_cell_geometry_rejects_a_cubic_summary_for_an_elongated_cell() -> None:
+
+def test_prepare_wraps_the_checked_box_into_one_periodic_cell(
+    tmp_path: Path,
+) -> None:
+    def prepare(name: str) -> tuple[dict[str, object], Atoms]:
+        output_dir = tmp_path / name
+        manifest = PLAN.prepare_input(
+            SimpleNamespace(
+                pair_count=PLAN.BASE_PAIR_COUNT,
+                density_g_cm3=PLAN.DEFAULT_DENSITY_G_CM3,
+                tolerance_a=PLAN.DEFAULT_PACKMOL_TOLERANCE_A,
+                precision_a=PLAN.DEFAULT_PACKMOL_PRECISION_A,
+                seed=PLAN.DEFAULT_PACKMOL_SEED,
+                base_box_dir=PLAN.DEFAULT_BASE_BOX_DIR,
+                nci_data=None,
+                output_dir=output_dir,
+                reuse_existing=False,
+            )
+        )
+        return manifest, ase_read(
+            output_dir / "structure.extxyz",
+            format="extxyz",
+        )
+
+    first_manifest, first = prepare("first")
+    second_manifest, second = prepare("second")
+    canonicalization = first_manifest["construction"][
+        "periodic_coordinate_canonicalization"
+    ]
+
+    assert canonicalization["method"] == "ase.Atoms.wrap"
+    assert canonicalization["eps"] == 0.0
+    assert canonicalization["atoms_outside_before"] > 0
+    assert canonicalization["atoms_outside_after"] == 0
+    fractional = first.get_scaled_positions(wrap=False)
+    assert np.all(fractional >= 0.0)
+    assert np.all(fractional < 1.0)
+    assert (
+        first_manifest["structure"]["sha256"] == second_manifest["structure"]["sha256"]
+    )
+    np.testing.assert_array_equal(
+        first.arrays["source_atom_id"],
+        second.arrays["source_atom_id"],
+    )
+    np.testing.assert_allclose(first.positions, second.positions, atol=0.0)
+
+
+def test_input_cell_geometry_rejects_a_false_cubic_summary() -> None:
     base_length_a = PLAN.equivalent_cubic_length_angstrom(
         PLAN.BASE_PAIR_COUNT,
         PLAN.DEFAULT_DENSITY_G_CM3,
     )
     volume_a3 = 2.0 * base_length_a**3
-    equivalent_cubic_length_a = volume_a3 ** (1.0 / 3.0)
+    equivalent = volume_a3 ** (1.0 / 3.0)
     manifest = {
         "schema": PLAN.INPUT_SCHEMA,
         "cell_geometry": "orthorhombic",
@@ -265,12 +336,11 @@ def test_input_cell_geometry_rejects_a_cubic_summary_for_an_elongated_cell() -> 
             [0.0, base_length_a, 0.0],
             [0.0, 0.0, 2.0 * base_length_a],
         ],
-        "cell_lengths_a": [equivalent_cubic_length_a] * 3,
-        "minimum_cell_length_a": equivalent_cubic_length_a,
-        "equivalent_cubic_length_a": equivalent_cubic_length_a,
+        "cell_lengths_a": [equivalent] * 3,
+        "minimum_cell_length_a": equivalent,
+        "equivalent_cubic_length_a": equivalent,
         "volume_a3": volume_a3,
     }
-
     with pytest.raises(
         ValueError,
         match="cell geometry is internally inconsistent",
@@ -278,469 +348,1166 @@ def test_input_cell_geometry_rejects_a_cubic_summary_for_an_elongated_cell() -> 
         PLAN.validated_manifest_cell_geometry(manifest)
 
 
-def test_electrostatics_summary_stops_a_failed_validation(tmp_path: Path) -> None:
-    case_id = PLAN.validation_case_id(128)
-    plan = {
-        "validation_cases": [
-            {
-                "case_id": case_id,
-                "result_file": f"{case_id}.json",
-                "mode": "electrostatics-validation",
-                "measurement_role": "electrostatics_validation",
-            }
-        ],
-        "validation_acceptance": {"force_limit": 0.005},
+def _force_record(path: Path, values: np.ndarray) -> dict[str, object]:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.save(path, values, allow_pickle=False)
+    return {
+        "path": str(path.resolve()),
+        "sha256": PLAN.sha256_file(path),
+        "size_bytes": path.stat().st_size,
+        "dtype": str(values.dtype),
+        "shape": list(values.shape),
     }
-    _write_json(tmp_path / "plan.json", plan)
-    result = {
-        "schema": PLAN.RESULT_SCHEMA,
-        "case_id": case_id,
-        "mode": "electrostatics-validation",
-        "measurement_role": "electrostatics_validation",
-        "success": True,
-        "comparison": {
-            "acceptance": plan["validation_acceptance"],
-            "passed": False,
+
+
+def _force_summary(values: np.ndarray) -> dict[str, object]:
+    values64 = values.astype(np.float64)
+    magnitudes = np.linalg.vector_norm(values64, axis=1)
+    return {
+        "shape": list(values.shape),
+        "dtype": str(values.dtype),
+        "sum_vector_ev_a": values64.sum(axis=0).tolist(),
+        "sum_abs_ev_a": float(np.abs(values64).sum()),
+        "sum_squares_ev2_a2": float(np.square(values64).sum()),
+        "rms_ev_a": float(np.sqrt(np.square(values64).mean())),
+        "max_norm_ev_a": float(magnitudes.max(initial=0.0)),
+        "finite": True,
+    }
+
+
+def _charge_record(atom_count: int) -> dict[str, object]:
+    return {
+        "available": True,
+        "values": None,
+        "dtype": "float32",
+        "target_sum_e": 0.0,
+        "shape": [atom_count, 1],
+        "sha256": "c" * 64,
+        "finite": True,
+        "sum_e": 0.0,
+        "residual_e": 0.0,
+        "abs_residual_per_atom": 0.0,
+        "sum_abs_e": 100.0,
+        "max_abs_e": 0.2,
+        "reason": "The float32 charge tensor used by PME was summarized.",
+    }
+
+
+def _unavailable_charge_record() -> dict[str, object]:
+    return {
+        "available": False,
+        "values": None,
+        "dtype": None,
+        "target_sum_e": 0.0,
+        "shape": None,
+        "sha256": None,
+        "finite": None,
+        "sum_e": None,
+        "residual_e": None,
+        "abs_residual_per_atom": None,
+        "sum_abs_e": None,
+        "max_abs_e": None,
+        "reason": "The distributed model group returns energy and forces only.",
+    }
+
+
+def _methodology_record(pair_count: int) -> dict[str, object]:
+    config_path = (
+        REPO_ROOT
+        / "part-1-scalable-atomistic-workflows"
+        / "aux"
+        / "domain"
+        / "config.py"
+    )
+    return {
+        "source": PLAN.DOMAIN_METHODOLOGY.as_record(),
+        "source_file": {
+            "path": str(config_path.resolve()),
+            "sha256": PLAN.sha256_file(config_path),
+            "size_bytes": config_path.stat().st_size,
         },
+        "resolved_values": (
+            PLAN.DOMAIN_METHODOLOGY.resolved_values(
+                json_compatible=True,
+            )
+        ),
+        "case_molecules_per_species": pair_count,
     }
-    _write_json(tmp_path / "results" / f"{case_id}.json", result)
-
-    summary = PLAN._electrostatics_phase_summary(tmp_path)
-
-    assert summary["passed"] is False
-    assert summary["status"] == "failed"
-    assert "must not run" in summary["message"]
 
 
-def _distributed_phase_directory(
-    root: Path,
+def _fixed_row(
+    job_dir: Path,
     *,
-    speed_succeeds: bool,
-    parity_force_offset: float,
-) -> Path:
-    pair_count = 128
-    world_size = 2
-    input_sha = "a" * 64
-    reference_force_path = root / "capacity" / "reference-forces.npy"
-    observed_force_path = root / "distributed" / "parity-forces.npy"
-    steady_force_path = root / "distributed" / "steady-forces.npy"
-    reference_forces = np.zeros((4, 3), dtype=np.float32)
-    observed_forces = np.full(
-        (4, 3),
-        parity_force_offset,
+    world_size: int,
+    input_path: Path,
+    energy_ev: float = -10_000.0,
+    pass_energy_offsets_ev: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    force_offset: float = 0.0,
+    success: bool = True,
+    runner_host_paths: bool = False,
+) -> dict[str, object]:
+    pair_count = PLAN.DEFAULT_FIXED_PAIR_COUNT
+    case_id = PLAN.fixed_case_id(pair_count, world_size)
+    forces = np.full(
+        (pair_count * PLAN.ATOMS_PER_PAIR, 3),
+        force_offset,
         dtype=np.float32,
     )
-    reference_result = {
+    force_path = job_dir / "results" / f"{case_id}-forces.npy"
+    force_summary = _force_summary(forces)
+    rank_grid = {
+        1: [1, 1, 1],
+        2: [1, 1, 2],
+        4: [1, 1, 4],
+    }[world_size]
+    owned = [forces.shape[0] // world_size] * world_size
+    pass_displacements = [
+        1.0e-6 * world_size,
+        2.0e-6 * world_size,
+        3.0e-6 * world_size,
+    ]
+    warmup_displacement = 0.5e-6 * world_size
+    final_displacement = 2.5e-6 * world_size
+    maximum_displacement = max(
+        warmup_displacement,
+        *pass_displacements,
+        final_displacement,
+    )
+    row: dict[str, object] = {
         "schema": PLAN.RESULT_SCHEMA,
-        "case_id": PLAN.capacity_case_id(pair_count, 1),
-        "success": True,
-        "input": {"file_sha256": input_sha},
-        "output": {
-            "energy_ev": -1.0,
-            "forces_source_atom_order_npy": _force_record(
-                reference_force_path,
-                reference_forces,
-            ),
+        "created_utc": "2026-07-27T00:00:00+00:00",
+        "run_id": f"fixed-gpus-{world_size}",
+        "case_id": case_id,
+        "mode": "distributed",
+        "measurement_role": "fixed_evaluation",
+        "status": "complete" if success else "failed",
+        "success": success,
+        "world_size": world_size,
+        "pair_count": pair_count,
+        "molecules_per_species": pair_count,
+        "atom_count": forces.shape[0],
+        "source": {
+            "tutorial_commit": "1" * 40,
+            "toolkit_core_commit": PLAN.CORE_COMMIT,
+            "toolkit_ops_commit": PLAN.OPS_COMMIT,
+            "toolkit_version": "0.2.0",
+            "repository_commit": "1" * 40,
+            "repository_dirty": False,
         },
-    }
-    reference_result_path = root / "capacity" / "reference.json"
-    _write_json(reference_result_path, reference_result)
-    steady_reference_name = "steady-reference.json"
-    _write_json(root / "capacity" / steady_reference_name, reference_result)
-    selection = {
-        "schema": PLAN.SELECTION_SCHEMA,
-        "capacity_result_dir": str((root / "capacity").resolve()),
-        "steady_timing_case": {"result_file": steady_reference_name},
-        "parity_reference": {
-            "result_file": str(reference_result_path.resolve()),
-            "acceptance": {
-                "energy_tolerance_ev_per_atom": 1.0e-4,
-                "force_atol_ev_a": 1.0e-3,
-                "force_rtol": 0.0,
+        "methodology": _methodology_record(pair_count),
+        "runtime": [
+            {
+                "rank": rank,
+                "local_rank": 0,
+                "host": f"h100-node-{rank}",
+                "gpu_name": "NVIDIA H100 NVL",
+                "gpu_uuid": f"GPU-{world_size}-{rank}",
+                "gpu_total_memory_bytes": 100_000_000_000,
+                "driver_version": "590.44",
+                "torch_cuda_version": "13.0",
+            }
+            for rank in range(world_size)
+        ],
+        "input": {
+            "path": str(input_path.resolve()),
+            "file_sha256": PLAN.sha256_file(input_path),
+            "file_size_bytes": input_path.stat().st_size,
+            "tensor_sha256": "b" * 64,
+        },
+        "distributed": {
+            "api": "DomainParallel",
+            "mesh_shape": [world_size],
+            "mesh_dim_names": ["domain"],
+            "grid_dims": None,
+            "cells_per_dim": [4, 4, 8],
+            "rank_grid": rank_grid,
+            "domain_cutoff_a": 15.0,
+            "domain_skin_a": 4.0,
+            "compile": False,
+            "require_nondegenerate": world_size > 1,
+            "owned_atom_counts": owned,
+            "owned_atom_count_min": min(owned),
+            "owned_atom_count_max": max(owned),
+            "halo_atom_counts": None,
+            "halo_atom_counts_reason": "not_exposed_by_public_api",
+            "partition_count": 1,
+            "gather_count": 1,
+        },
+        "charges": (
+            _charge_record(forces.shape[0])
+            if world_size == 1
+            else _unavailable_charge_record()
+        ),
+        "output": {
+            "energy_ev": energy_ev,
+            "energy_ev_per_atom": energy_ev / forces.shape[0],
+            "energy_dtype": (
+                PLAN.DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(
+                    world_size
+                )
+            ),
+            "forces_source_atom_order": force_summary,
+            "forces_source_atom_order_npy": _force_record(
+                force_path,
+                forces,
+            ),
+            "measured_passes": [
+                {
+                    "pass_index": pass_index,
+                    "energy_ev": (energy_ev + pass_energy_offsets_ev[pass_index - 1]),
+                    "energy_ev_per_atom": (
+                        energy_ev + pass_energy_offsets_ev[pass_index - 1]
+                    )
+                    / forces.shape[0],
+                    "energy_dtype": (
+                        PLAN.DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(
+                            world_size
+                        )
+                    ),
+                    "forces": force_summary,
+                    "maximum_minimum_image_displacement_a": (
+                        pass_displacements[pass_index - 1]
+                    ),
+                }
+                for pass_index in (1, 2, 3)
+            ],
+            "position_invariance": {
+                "method": "maximum_minimum_image_displacement",
+                "tolerance_a": (PLAN.DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A),
+                "warmup_maximum_minimum_image_displacement_a": (warmup_displacement),
+                "measured_pass_maximum_minimum_image_displacements_a": (
+                    pass_displacements
+                ),
+                "final_gather_maximum_minimum_image_displacement_a": (
+                    final_displacement
+                ),
+                "maximum_minimum_image_displacement_a": (maximum_displacement),
+                "all_within_tolerance": True,
+                "interpretation": "PBC-equivalent fixed structure.",
             },
         },
+        "timing": {
+            "pass_times_s": [
+                3.0 / world_size,
+                3.1 / world_size,
+                2.9 / world_size,
+            ],
+            "median_s": 3.0 / world_size,
+            "min_s": 2.9 / world_size,
+            "max_s": 3.1 / world_size,
+            "measurement_kind": "fixed_structure_energy_force_pass",
+            "measurement_role": "fixed_evaluation",
+            "warmup_count": 1,
+            "measured_pass_count": 3,
+            "source_input_sha256": "b" * 64,
+            "partition_count": 1,
+            "gather_count": 1,
+            "requested_steps_per_pass": 1,
+            "measured_model_evaluations_per_pass": 1,
+            "warmup_requested_steps": 1,
+            "warmup_automatic_force_prime_evaluations": (1 if world_size > 1 else 0),
+            "warmup_model_evaluations": 2 if world_size > 1 else 1,
+            "publishable_benchmark": False,
+        },
+        "memory": {
+            "max_allocated_bytes": 10_000_000,
+            "max_reserved_bytes": 12_000_000,
+            "measured_pass_max_allocated_bytes_per_rank": [
+                [10_000_000] * world_size for _ in range(3)
+            ],
+            "measured_pass_max_reserved_bytes_per_rank": [
+                [12_000_000] * world_size for _ in range(3)
+            ],
+        },
     }
-    selection_path = root / "capacity" / "selection.json"
-    _write_json(selection_path, selection)
+    if not success:
+        row["error"] = "unexpected runner failure"
+    if runner_host_paths:
+        _add_runner_host_paths(row)
+    return row
 
-    phase_dir = root / "distributed"
-    cases = [
-        {
-            "case_id": PLAN.parity_case_id(pair_count, world_size),
-            "mode": "parity",
-            "series": "parity",
-            "measurement_role": "parity",
-            "input": {"structure": {"sha256": input_sha}},
+
+def _electrostatics_row(
+    *,
+    input_path: Path,
+    runner_host_paths: bool = False,
+) -> dict[str, object]:
+    pair_count = PLAN.DEFAULT_VALIDATION_PAIRS
+    atom_count = pair_count * PLAN.ATOMS_PER_PAIR
+    pme_energy = -1.0
+    ewald_energy = -1.0001
+    energy_difference = abs(pme_energy - ewald_energy)
+    forces = np.zeros((atom_count, 3), dtype=np.float32)
+    force_summary = _force_summary(forces)
+    row: dict[str, object] = {
+        "schema": PLAN.RESULT_SCHEMA,
+        "created_utc": "2026-07-27T00:00:00+00:00",
+        "run_id": "fixed-gpus-1",
+        "case_id": PLAN.validation_case_id(pair_count),
+        "mode": "electrostatics-validation",
+        "measurement_role": "electrostatics_validation",
+        "status": "complete",
+        "success": True,
+        "world_size": 1,
+        "pair_count": pair_count,
+        "molecules_per_species": pair_count,
+        "atom_count": atom_count,
+        "source": {
+            "tutorial_commit": "1" * 40,
+            "toolkit_core_commit": PLAN.CORE_COMMIT,
+            "toolkit_ops_commit": PLAN.OPS_COMMIT,
+            "toolkit_version": "0.2.0",
+            "repository_commit": "1" * 40,
+            "repository_dirty": False,
         },
-        {
-            "case_id": PLAN.steady_timing_case_id(pair_count, world_size),
-            "mode": "steady-timing",
-            "series": "steady_timing",
-            "measurement_role": "steady_timing",
-            "input": {"structure": {"sha256": input_sha}},
+        "methodology": _methodology_record(pair_count),
+        "input": {
+            "path": str(input_path.resolve()),
+            "file_sha256": PLAN.sha256_file(input_path),
+            "file_size_bytes": input_path.stat().st_size,
         },
-        {
-            "case_id": PLAN.rescue_case_id(pair_count * 2, world_size),
-            "mode": "distributed",
-            "series": "rescue",
-            "measurement_role": "rescue",
-            "input": {"structure": {"sha256": input_sha}},
+        "charges": _charge_record(atom_count),
+        "pme": {
+            "energy_ev": pme_energy,
+            "forces": force_summary,
         },
-    ]
-    derived_plan = {
-        "schema": PLAN.DISTRIBUTED_PLAN_SCHEMA,
-        "world_size": world_size,
-        "selection": {
-            "path": str(selection_path.resolve()),
-            "sha256": PLAN.sha256_file(selection_path),
+        "ewald": {
+            "energy_ev": ewald_energy,
+            "forces": force_summary,
         },
-        "cases": cases,
+        "comparison": {
+            "absolute_energy_difference_ev": energy_difference,
+            "absolute_energy_difference_ev_per_atom": (energy_difference / atom_count),
+            "force_difference_rms_ev_a": 1.0e-4,
+            "force_difference_max_norm_ev_a": 1.0e-4,
+            "acceptance": {
+                "declared_before_measurement": True,
+                "absolute_energy_difference_ev_per_atom_max": (
+                    PLAN.DEFAULT_PME_EWAL_ENERGY_TOL_EV_PER_ATOM
+                ),
+                "force_difference_max_norm_ev_a_max": (
+                    PLAN.DEFAULT_PME_EWAL_FORCE_MAX_TOL_EV_A
+                ),
+                "absolute_charge_sum_e_max": (PLAN.DEFAULT_CHARGE_SUM_TOL_E),
+            },
+            "passed": True,
+        },
+        "timing": {
+            "wall_s": 1.0,
+            "timed_work": ("AIMNet2 charge forward, PME forward, and Ewald forward"),
+        },
     }
-    _write_json(phase_dir / "derived-plan.json", derived_plan)
-    for case in cases:
-        success = (
-            True
-            if case["series"] == "parity"
-            else speed_succeeds
-            if case["series"] == "steady_timing"
-            else False
-        )
-        row = {
-            "schema": PLAN.RESULT_SCHEMA,
-            "case_id": case["case_id"],
-            "mode": case["mode"],
-            "measurement_role": case["measurement_role"],
-            "success": success,
-            "input": {"file_sha256": input_sha},
+    if runner_host_paths:
+        _add_runner_host_paths(row)
+    return row
+
+
+def _add_runner_host_paths(row: dict[str, object]) -> None:
+    """Use the path fields and nesting written by the real H100 runner."""
+
+    tutorial_root = (
+        f"/computelab-cluster/nfedik/alchemi/stage/repo/ALCHEMI-Bootcamp-{'1' * 40}"
+    )
+    core_root = (
+        "/computelab-cluster/nfedik/alchemi/stage/toolkit/"
+        f"nvalchemi-toolkit-{PLAN.CORE_COMMIT}"
+    )
+    ops_root = (
+        "/computelab-cluster/nfedik/alchemi/stage/toolkit/"
+        f"nvalchemi-toolkit-ops-{PLAN.OPS_COMMIT}"
+    )
+    checkpoint = (
+        "/computelab-cluster/nfedik/alchemi/cache/aimnet/aimnet2-wb97m-d3_0.jpt"
+    )
+    d3_parameters = (
+        "/computelab-cluster/nfedik/alchemi/home/.cache/"
+        "nvalchemiops/dftd3_parameters.pt"
+    )
+    runner = f"{tutorial_root}/scripts/part1_domain_run.py"
+    methodology = (
+        f"{tutorial_root}/part-1-scalable-atomistic-workflows/aux/domain/config.py"
+    )
+    runtime = {
+        "python_version": "3.12.11",
+        "python_executable": (
+            "/computelab-cluster/nfedik/alchemi/envs/"
+            f"part1-python-{'1' * 40}/bin/python"
+        ),
+        "python_prefix": (
+            f"/computelab-cluster/nfedik/alchemi/envs/part1-python-{'1' * 40}"
+        ),
+    }
+    source = row.setdefault("source", {})
+    assert isinstance(source, dict)
+    source.update(
+        {
+            "toolkit_core_source_root": core_root,
+            "toolkit_core_source_file": (f"{core_root}/src/nvalchemi/__init__.py"),
+            "toolkit_core_source_file_sha256": "d" * 64,
+            "toolkit_ops_source_root": ops_root,
+            "toolkit_ops_source_file": (f"{ops_root}/src/nvalchemiops/__init__.py"),
+            "toolkit_ops_source_file_sha256": "e" * 64,
+            "repository_root": tutorial_root,
+            "domain_methodology_config_file": methodology,
+            "domain_methodology_config_sha256": PLAN.sha256_file(
+                REPO_ROOT
+                / "part-1-scalable-atomistic-workflows"
+                / "aux"
+                / "domain"
+                / "config.py"
+            ),
+            "aimnet_checkpoint": checkpoint,
+            "aimnet_checkpoint_sha256": PLAN.AIMNET_CHECKPOINT_SHA256,
+            "aimnet_checkpoint_file": {
+                "path": checkpoint,
+                "sha256": PLAN.AIMNET_CHECKPOINT_SHA256,
+                "size_bytes": 1,
+            },
+            "runner": runner,
+            "runner_sha256": PLAN.sha256_file(
+                REPO_ROOT / "scripts" / "part1_domain_run.py"
+            ),
+            "runner_file": {
+                "path": runner,
+                "sha256": PLAN.sha256_file(
+                    REPO_ROOT / "scripts" / "part1_domain_run.py"
+                ),
+                "size_bytes": 1,
+            },
+            "runtime_software": runtime,
         }
-        if case["series"] == "parity":
-            row["output"] = {
-                "energy_ev": -1.0,
-                "forces_source_atom_order_npy": _force_record(
-                    observed_force_path,
-                    observed_forces,
-                ),
+    )
+    methodology_record = row["methodology"]
+    assert isinstance(methodology_record, dict)
+    source_file = methodology_record["source_file"]
+    assert isinstance(source_file, dict)
+    source_file["path"] = methodology
+    runtime_rows = row.setdefault("runtime", [{"rank": 0}])
+    assert isinstance(runtime_rows, list)
+    for runtime_row in runtime_rows:
+        assert isinstance(runtime_row, dict)
+        runtime_row.update(runtime)
+    if row["mode"] == "distributed":
+        row["model"] = {
+            "d3": {
+                "parameter_file": d3_parameters,
+                "parameter_file_sha256": PLAN.D3_PARAMETER_SHA256,
+                "parameter_file_identity": {
+                    "path": d3_parameters,
+                    "sha256": PLAN.D3_PARAMETER_SHA256,
+                    "size_bytes": 1,
+                },
             }
-        elif case["series"] == "steady_timing" and success:
-            row["output"] = {
-                "energy_ev": -1.0,
-                "forces_source_atom_order_npy": _force_record(
-                    steady_force_path,
-                    reference_forces,
-                ),
-            }
-        _write_json(
-            phase_dir / "results" / PLAN.result_filename(case["case_id"]),
-            row,
-        )
-    return phase_dir
+        }
+    input_record = row["input"]
+    assert isinstance(input_record, dict)
+    input_record["manifest"] = {
+        "construction": {
+            "base_box_manifest": (
+                f"{tutorial_root}/part-1-scalable-atomistic-workflows/"
+                "data/domain_decomposition/prebuilt_base_box/manifest.json"
+            ),
+            "base_box_manifest_sha256": "8" * 64,
+            "base_box_structure": (
+                f"{tutorial_root}/part-1-scalable-atomistic-workflows/"
+                "data/domain_decomposition/prebuilt_base_box/structure.extxyz"
+            ),
+            "base_box_structure_sha256": "9" * 64,
+        },
+        "source": {
+            "nci_subset": (
+                f"{tutorial_root}/part-1-scalable-atomistic-workflows/"
+                "data/nci_atlas/nci-atlas-curves.csv.gz"
+            ),
+            "nci_subset_sha256": PLAN.NCI_SUBSET_SHA256,
+            "packing_helper": (
+                f"{tutorial_root}/part-1-scalable-atomistic-workflows/"
+                "aux/domain/packing.py"
+            ),
+            "domain_methodology_config": methodology,
+        },
+        "structure": {"path": input_record["path"]},
+    }
 
 
-def test_distributed_phase_requires_parity_and_steady_timing_but_reports_rescue(
-    tmp_path: Path,
-) -> None:
-    phase_dir = _distributed_phase_directory(
-        tmp_path / "accepted",
-        speed_succeeds=True,
-        parity_force_offset=0.0,
+def _complete_job(
+    root: Path,
+    *,
+    world_size: int,
+    input_content: str = "same fixed structure\n",
+    energy_offset_ev: float = 0.0,
+    pass_energy_offsets_ev: tuple[float, float, float] = (0.0, 0.0, 0.0),
+    force_offset: float = 0.0,
+    runner_host_paths: bool = False,
+) -> Path:
+    job_dir = root / f"job-{world_size}"
+    plan = _plan(world_size)
+    _write_json(job_dir / "plan.json", plan)
+    structure = job_dir / "inputs" / "fixed" / "structure.extxyz"
+    structure.parent.mkdir(parents=True)
+    structure.write_text(input_content, encoding="utf-8")
+    _write_json(
+        structure.parent / "manifest.json",
+        {"structure": {"sha256": PLAN.sha256_file(structure)}},
     )
-
-    summary = PLAN._distributed_phase_summary(phase_dir)
-
-    assert summary["passed"] is True
-    assert summary["checks"]["one_gpu_force_agreement_passed"] is True
-    assert summary["checks"]["steady_timing_case_succeeded"] is True
-    assert summary["checks"]["steady_timing_force_agreement_passed"] is True
-    assert (
-        summary["checks"]["distributed_energy_agreement_deferred_to_bundle"]
-        is True
+    row = _fixed_row(
+        job_dir,
+        world_size=world_size,
+        input_path=structure,
+        energy_ev=-10_000.0 + energy_offset_ev,
+        pass_energy_offsets_ev=pass_energy_offsets_ev,
+        force_offset=force_offset,
+        runner_host_paths=runner_host_paths,
     )
-    assert summary["checks"]["exact_oom_input_rescued"] is False
-
-
-def test_distributed_phase_checks_the_actual_timing_output(tmp_path: Path) -> None:
-    phase_dir = _distributed_phase_directory(
-        tmp_path / "timing-output-mismatch",
-        speed_succeeds=True,
-        parity_force_offset=0.0,
-    )
-    case_id = PLAN.steady_timing_case_id(128, 2)
-    result_path = phase_dir / "results" / PLAN.result_filename(case_id)
-    row = json.loads(result_path.read_text(encoding="utf-8"))
-    force_record = row["output"]["forces_source_atom_order_npy"]
-    force_path = Path(force_record["path"])
-    np.save(force_path, np.full((4, 3), 0.01, dtype=np.float32))
-    force_record["sha256"] = PLAN.sha256_file(force_path)
+    result_path = job_dir / "results" / plan["fixed_case"]["result_file"]
     _write_json(result_path, row)
-
-    summary = PLAN._distributed_phase_summary(phase_dir)
-
-    assert summary["passed"] is False
-    assert summary["checks"]["steady_timing_case_succeeded"] is True
-    assert summary["checks"]["steady_timing_force_agreement_passed"] is False
-
-
-def test_energy_and_force_checks_use_their_declared_references(
-    tmp_path: Path,
-) -> None:
-    phase_dir = _distributed_phase_directory(
-        tmp_path / "split-references",
-        speed_succeeds=True,
-        parity_force_offset=0.0,
-    )
-    selection = json.loads(
-        (tmp_path / "split-references" / "capacity" / "selection.json").read_text(
-            encoding="utf-8"
+    if world_size == 1:
+        validation_structure = job_dir / "inputs" / "validation" / "structure.extxyz"
+        validation_structure.parent.mkdir(parents=True)
+        validation_structure.write_text(
+            "small validation structure\n",
+            encoding="utf-8",
+        )
+        _write_json(
+            validation_structure.parent / "manifest.json",
+            {"structure": {"sha256": PLAN.sha256_file(validation_structure)}},
+        )
+        validation_case = plan["validation_cases"][0]
+        _write_json(
+            job_dir / "results" / validation_case["result_file"],
+            _electrostatics_row(
+                input_path=validation_structure,
+                runner_host_paths=runner_host_paths,
+            ),
+        )
+    PLAN.write_phase_summary(
+        SimpleNamespace(
+            phase_dir=job_dir,
+            output=job_dir / "phase-summary.json",
         )
     )
-    parity_path = (
-        phase_dir
-        / "results"
-        / PLAN.result_filename(PLAN.parity_case_id(128, 2))
-    )
-    two_gpu = json.loads(parity_path.read_text(encoding="utf-8"))
+    planned_cases = [
+        plan["fixed_case"],
+        *plan["validation_cases"],
+    ]
+    for case in planned_cases:
+        rank_count = int(case["world_size"])
+        for rank in range(rank_count):
+            _write_json(
+                job_dir / "ranks" / case["case_id"] / f"rank-{rank:02d}.json",
+                {
+                    "case_id": case["case_id"],
+                    "rank": rank,
+                    "success": True,
+                    "stage": "complete",
+                },
+            )
+        log = job_dir / "logs" / f"{case['case_id']}.log"
+        log.parent.mkdir(parents=True, exist_ok=True)
+        log.write_text("completed\n", encoding="utf-8")
 
-    one_gpu_force_check = json.loads(json.dumps(two_gpu))
-    one_gpu_force_check["output"]["energy_ev"] = -0.5
-    force_comparison = PLAN._parity_comparison(selection, one_gpu_force_check)
-    assert force_comparison["passed"] is True
-    assert force_comparison["forces_passed"] is True
-    assert force_comparison["energy_passed"] is False
-    assert force_comparison["energy_required"] is False
+    result_rows = [
+        json.loads(
+            (job_dir / "results" / case["result_file"]).read_text(encoding="utf-8")
+        )
+        for case in planned_cases
+    ]
+    (job_dir / "results.jsonl").write_text(
+        "".join(json.dumps(row, sort_keys=True) + "\n" for row in result_rows),
+        encoding="utf-8",
+    )
+    _write_json(
+        job_dir / "collection-summary.json",
+        {
+            "schema": PLAN.COLLECTION_SCHEMA,
+            "successful_rows": len(result_rows),
+            "failed_rows": 0,
+        },
+    )
+    for name in (
+        "part1-runtime.json",
+        "d3-cache.json",
+        "aimnet-checkpoint-preflight.json",
+    ):
+        _write_json(job_dir / name, {"status": "checked"})
+    (job_dir / "gpu-names.txt").write_text(
+        "".join("NVIDIA H100 NVL\n" for _ in range(world_size)),
+        encoding="utf-8",
+    )
+    (job_dir / "gpu-topology.txt").write_text(
+        "H100 NVL cluster\n",
+        encoding="utf-8",
+    )
+    (job_dir / "network-interfaces.txt").write_text(
+        "".join(
+            f"h100-node-{rank} interface=enp1s0f0np0 "
+            "nccl==enp1s0f0np0 gloo=enp1s0f0np0\n"
+            for rank in range(world_size)
+        ),
+        encoding="utf-8",
+    )
+    producer_sources = [
+        REPO_ROOT / "scripts" / "part1_domain_plan.py",
+        REPO_ROOT / "scripts" / "part1_domain_run.py",
+    ]
+    if runner_host_paths:
+        producer_sources.append(
+            REPO_ROOT
+            / "part-1-scalable-atomistic-workflows"
+            / "aux"
+            / "domain"
+            / "config.py"
+        )
+    _write_checksum_file(
+        job_dir / "producer-SHA256SUMS",
+        producer_sources,
+    )
+    artifact_files = [
+        job_dir / "plan.json",
+        job_dir / "phase-summary.json",
+        job_dir / "collection-summary.json",
+        job_dir / "results.jsonl",
+        job_dir / "part1-runtime.json",
+        job_dir / "d3-cache.json",
+        job_dir / "aimnet-checkpoint-preflight.json",
+        job_dir / "gpu-names.txt",
+        job_dir / "gpu-topology.txt",
+        job_dir / "network-interfaces.txt",
+        job_dir / "producer-SHA256SUMS",
+        *sorted(
+            path
+            for directory in ("inputs", "results", "ranks", "logs")
+            for path in (job_dir / directory).rglob("*")
+            if path.is_file()
+        ),
+    ]
+    _write_checksum_file(
+        job_dir / "artifact-SHA256SUMS",
+        artifact_files,
+    )
+    return job_dir
 
-    four_gpu = json.loads(json.dumps(two_gpu))
-    four_gpu["output"]["energy_ev"] = -0.9998
-    energy_comparison = PLAN._distributed_energy_comparison(
-        two_gpu,
-        four_gpu,
-        selection,
-    )
-    assert energy_comparison["passed"] is True
-    assert energy_comparison["energy_passed"] is True
-    assert energy_comparison["forces_required"] is False
 
-    four_gpu["output"]["energy_ev"] = -0.9990
-    failed_energy_comparison = PLAN._distributed_energy_comparison(
-        two_gpu,
-        four_gpu,
-        selection,
-    )
-    assert failed_energy_comparison["passed"] is False
-    assert failed_energy_comparison["energy_passed"] is False
+def test_phase_summary_requires_pbc_equivalent_positions(
+    tmp_path: Path,
+) -> None:
+    job_dir = _complete_job(tmp_path, world_size=2)
+    summary = json.loads((job_dir / "phase-summary.json").read_text(encoding="utf-8"))
+    assert summary["passed"] is True
+    assert summary["completed_case_count"] == 1
 
-    bundle_source = inspect.getsource(PLAN.build_bundle)
-    assert (
-        "parity_energy_reference = parity_rows_by_world[energy_reference_world_size]"
-        in bundle_source
-    )
-    assert (
-        "steady_energy_reference = steady_rows_by_world[energy_reference_world_size]"
-        in bundle_source
-    )
-    assert "for world_size in energy_comparison_world_sizes" in bundle_source
+    result_path = next((job_dir / "results").glob("*.json"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["output"]["position_invariance"]["all_within_tolerance"] = False
+    _write_json(result_path, result)
+    with pytest.raises(ValueError, match="not PBC-equivalent"):
+        PLAN.write_phase_summary(
+            SimpleNamespace(
+                phase_dir=job_dir,
+                output=job_dir / "phase-summary.json",
+            )
+        )
 
 
 @pytest.mark.parametrize(
-    ("speed_succeeds", "parity_force_offset"),
-    ((False, 0.0), (True, 0.01)),
+    ("change", "message"),
+    (
+        (
+            ("output", "measured_passes", 0, "energy_ev", 100.0),
+            "measured-pass energies are not mutually consistent",
+        ),
+        (
+            ("output", "energy_ev", 100.0),
+            "saved energy does not match the last measured pass",
+        ),
+        (
+            (
+                "output",
+                "forces_source_atom_order",
+                "max_norm_ev_a",
+                1.0,
+            ),
+            "saved force summary does not match the last measured pass",
+        ),
+    ),
 )
-def test_distributed_phase_fails_required_checks(
+def test_phase_summary_checks_all_measured_outputs(
     tmp_path: Path,
-    speed_succeeds: bool,
-    parity_force_offset: float,
+    change: tuple[object, ...],
+    message: str,
 ) -> None:
-    phase_dir = _distributed_phase_directory(
-        tmp_path / "failed",
-        speed_succeeds=speed_succeeds,
-        parity_force_offset=parity_force_offset,
+    job_dir = _complete_job(tmp_path, world_size=2)
+    result_path = next((job_dir / "results").glob("*.json"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    target: object = result
+    for key in change[:-2]:
+        target = target[key]  # type: ignore[index]
+    target[change[-2]] = change[-1]  # type: ignore[index]
+    _write_json(result_path, result)
+
+    with pytest.raises(ValueError, match=message):
+        PLAN.write_phase_summary(
+            SimpleNamespace(
+                phase_dir=job_dir,
+                output=job_dir / "phase-summary.json",
+            )
+        )
+
+
+def test_phase_summary_records_pass_force_variation_but_checks_final_identity(
+    tmp_path: Path,
+) -> None:
+    job_dir = _complete_job(tmp_path, world_size=2)
+    result_path = next((job_dir / "results").glob("*.json"))
+    result = json.loads(result_path.read_text(encoding="utf-8"))
+    result["output"]["measured_passes"][0]["forces"]["rms_ev_a"] = 1.0
+    result["output"]["measured_passes"][1]["forces"]["max_norm_ev_a"] = 2.0
+    _write_json(result_path, result)
+
+    summary = PLAN.write_phase_summary(
+        SimpleNamespace(
+            phase_dir=job_dir,
+            output=job_dir / "phase-summary.json",
+        )
+    )
+    assert summary["passed"] is True
+
+    result["output"]["measured_passes"][2]["forces"]["max_norm_ev_a"] = 1.0
+    _write_json(result_path, result)
+    with pytest.raises(
+        ValueError,
+        match="saved force summary does not match the last measured pass",
+    ):
+        PLAN.write_phase_summary(
+            SimpleNamespace(
+                phase_dir=job_dir,
+                output=job_dir / "phase-summary.json",
+            )
+        )
+
+
+@pytest.mark.parametrize("world_size", (2, 4))
+def test_phase_summary_enforces_energy_repeatability_above_one_gpu(
+    tmp_path: Path,
+    world_size: int,
+) -> None:
+    with pytest.raises(
+        ValueError,
+        match="measured-pass energies are not mutually consistent",
+    ):
+        _complete_job(
+            tmp_path,
+            world_size=world_size,
+            pass_energy_offsets_ev=(20.0, 0.0, 0.0),
+        )
+
+
+def test_bundle_keeps_one_gpu_energy_spread_as_a_diagnostic(
+    tmp_path: Path,
+) -> None:
+    jobs = [
+        _complete_job(
+            tmp_path,
+            world_size=1,
+            pass_energy_offsets_ev=(20.0, 0.0, 0.0),
+        ),
+        _complete_job(
+            tmp_path,
+            world_size=2,
+            energy_offset_ev=10.0,
+        ),
+        _complete_job(
+            tmp_path,
+            world_size=4,
+            energy_offset_ev=10.01,
+        ),
+    ]
+    manifest = PLAN.build_bundle(
+        SimpleNamespace(
+            job_dir=jobs,
+            site="Compute Lab",
+            interconnect="H100 NVL cluster",
+            output_dir=tmp_path / "one-gpu-diagnostic",
+        )
     )
 
-    summary = PLAN._distributed_phase_summary(phase_dir)
+    comparisons = manifest["output_agreement"]["comparisons"]
+    one_gpu = comparisons["1"]
+    assert (
+        one_gpu["energy_repeatability_span_ev_per_atom"]
+        > PLAN.DEFAULT_EVALUATION_ENERGY_TOL_EV_PER_ATOM
+    )
+    assert one_gpu["energy_repeatability_check_required"] is False
+    assert one_gpu["energy_repeatability_passed"] is None
+    for world_size in ("2", "4"):
+        assert comparisons[world_size]["energy_repeatability_check_required"] is True
+        assert comparisons[world_size]["energy_repeatability_passed"] is True
+    assert manifest["output_agreement"]["all_required_checks_passed"] is True
 
+
+def test_record_failure_marks_oom_as_unexpected(tmp_path: Path) -> None:
+    input_path = tmp_path / "structure.extxyz"
+    input_path.write_text("fixed structure\n", encoding="utf-8")
+    log_path = tmp_path / "case.log"
+    log_path.write_text("CUDA out of memory\n", encoding="utf-8")
+    row = PLAN.record_failure(
+        SimpleNamespace(
+            run_id="fixed-gpus-2",
+            case_id=PLAN.fixed_case_id(2_048, 2),
+            mode="distributed",
+            world_size=2,
+            input_extxyz=input_path,
+            rank_output_dir=tmp_path / "ranks",
+            case_log=log_path,
+            exit_code=1,
+            output=tmp_path / "result.json",
+        )
+    )
+    assert row["success"] is False
+    assert row["failure"] == {
+        "type": "CudaOutOfMemory",
+        "stage": "process",
+        "exit_code": 1,
+        "unexpected": True,
+    }
+
+
+def test_failure_phase_summary_falls_back_to_the_nested_structure_digest(
+    tmp_path: Path,
+) -> None:
+    job_dir = tmp_path / "failed-job"
+    plan = _plan(2)
+    _write_json(job_dir / "plan.json", plan)
+    input_path = job_dir / "inputs" / "fixed" / "structure.extxyz"
+    input_path.parent.mkdir(parents=True)
+    input_path.write_text("fixed structure\n", encoding="utf-8")
+    digest = PLAN.sha256_file(input_path)
+    log_path = job_dir / "logs" / "case.log"
+    log_path.parent.mkdir(parents=True)
+    log_path.write_text("NCCL initialization failed\n", encoding="utf-8")
+    result_path = job_dir / "results" / plan["fixed_case"]["result_file"]
+    row = PLAN.record_failure(
+        SimpleNamespace(
+            run_id=plan["run_id"],
+            case_id=plan["fixed_case"]["case_id"],
+            mode="distributed",
+            world_size=2,
+            input_extxyz=input_path,
+            rank_output_dir=job_dir / "ranks",
+            case_log=log_path,
+            exit_code=1,
+            output=result_path,
+        )
+    )
+    del row["input"]["file_sha256"]
+    _write_json(result_path, row)
+
+    summary_path = job_dir / "phase-summary.json"
+    with pytest.raises(ValueError, match="NCCL initialization failed"):
+        PLAN.write_phase_summary(
+            SimpleNamespace(
+                phase_dir=job_dir,
+                output=summary_path,
+            )
+        )
+
+    summary = json.loads(summary_path.read_text(encoding="utf-8"))
     assert summary["passed"] is False
     assert summary["status"] == "failed"
+    assert summary["input_structure_sha256"] == digest
+    assert not any(
+        "valid input structure SHA-256" in error for error in summary["errors"]
+    )
 
 
-def test_job_time_checksum_file_is_verified_before_use(tmp_path: Path) -> None:
-    source = tmp_path / "result.json"
-    source.write_text('{"success": true}\n', encoding="utf-8")
-    checksum_file = tmp_path / "artifact-SHA256SUMS"
-    checksum_file.write_text(
-        f"{PLAN.sha256_file(source)}  {source}\n",
+def test_bundle_requires_complete_matching_1_2_4_results(
+    tmp_path: Path,
+) -> None:
+    jobs = [
+        _complete_job(tmp_path, world_size=1),
+        _complete_job(
+            tmp_path,
+            world_size=2,
+            energy_offset_ev=10.0,
+            force_offset=1.0e-4,
+        ),
+        _complete_job(
+            tmp_path,
+            world_size=4,
+            energy_offset_ev=10.01,
+            force_offset=-1.0e-4,
+        ),
+    ]
+    output_dir = tmp_path / "bundle"
+    manifest = PLAN.build_bundle(
+        SimpleNamespace(
+            job_dir=jobs,
+            site="Compute Lab",
+            interconnect="H100 NVL cluster",
+            output_dir=output_dir,
+        )
+    )
+
+    assert manifest["schema"] == PLAN.BUNDLE_SCHEMA
+    assert manifest["status"] == "complete"
+    assert manifest["source"]["toolkit_version"] == "0.2.0"
+    assert manifest["input"]["atom_count"] == 51_200
+    assert manifest["execution"]["gpu_counts"] == [1, 2, 4]
+    assert manifest["execution"]["warmup_count"] == 1
+    assert manifest["execution"]["measured_pass_count"] == 3
+    assert manifest["hardware"]["gpu_model"] == "NVIDIA H100 NVL"
+    assert manifest["hardware"]["gpu_memory_bytes"] == 100_000_000_000
+    assert manifest["hardware"]["driver_version"] == "590.44"
+    assert manifest["hardware"]["cuda_version"] == "13.0"
+    assert manifest["hardware"]["gpus_available"] == 4
+    assert manifest["hardware"]["nodes_available"] == 4
+    assert manifest["settings_sha256"] == PLAN.canonical_json_sha256(
+        manifest["settings"]
+    )
+    assert manifest["output_agreement"]["all_required_checks_passed"] is True
+    assert manifest["output_agreement"]["force_reference_gpus"] == 1
+    assert manifest["output_agreement"]["distributed_energy_reference_gpus"] == 2
+    assert (
+        manifest["output_agreement"]["one_gpu_energy_offsets_are_diagnostics_only"]
+        is True
+    )
+    assert (
+        manifest["output_agreement"]["position_check"]["tolerance_a"]
+        == PLAN.DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+    )
+    two_gpu = manifest["output_agreement"]["comparisons"]["2"]
+    four_gpu = manifest["output_agreement"]["comparisons"]["4"]
+    assert (
+        two_gpu["one_gpu_energy_abs_offset_ev_per_atom"]
+        > PLAN.DEFAULT_EVALUATION_ENERGY_TOL_EV_PER_ATOM
+    )
+    assert two_gpu["distributed_energy_check_required"] is False
+    assert four_gpu["distributed_energy_check_required"] is True
+    assert four_gpu["distributed_energy_passed"] is True
+    assert set(manifest["execution"]["observed_speedup"]) == {"1", "2", "4"}
+
+    with (output_dir / "distributed.csv").open(
         encoding="utf-8",
+        newline="",
+    ) as stream:
+        reader = csv.DictReader(stream)
+        rows = list(reader)
+    assert tuple(reader.fieldnames or ()) == PLAN.DISTRIBUTED_COLUMNS
+    assert [int(row["gpus"]) for row in rows] == [1, 2, 4]
+    assert {int(row["measured_pass_count"]) for row in rows} == {3}
+    assert {json.loads(row["pass_times_s"]).__len__() for row in rows} == {3}
+    assert {row["positions_pbc_equivalent"] for row in rows} == {"True"}
+    assert all(
+        float(row["max_minimum_image_displacement_a"])
+        <= PLAN.DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+        for row in rows
+    )
+    assert (output_dir / "raw-results.jsonl").is_file()
+    assert (output_dir / "electrostatics-validation.json").is_file()
+    assert (output_dir / "SHA256SUMS").is_file()
+    raw_rows = [
+        json.loads(line)
+        for line in (output_dir / "raw-results.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
+    assert len(raw_rows) == 4
+    fixed_rows = [row for row in raw_rows if row["mode"] == "distributed"]
+    assert [row["world_size"] for row in fixed_rows] == [1, 2, 4]
+    assert fixed_rows[0]["charges"]["available"] is True
+    assert all(row["charges"]["available"] is False for row in fixed_rows[1:])
+    for row in fixed_rows:
+        assert len(row["output"]["measured_passes"]) == 3
+        assert row["timing"]["partition_count"] == 1
+        assert row["timing"]["gather_count"] == 1
+        assert (
+            len(
+                row["output"]["position_invariance"][
+                    "measured_pass_maximum_minimum_image_displacements_a"
+                ]
+            )
+            == 3
+        )
+        assert row["output"]["position_invariance"]["all_within_tolerance"] is True
+        assert len(row["memory"]["measured_pass_max_allocated_bytes_per_rank"]) == 3
+        assert row["bundle_source"] == "manifest.json#source"
+    electrostatics = raw_rows[-1]
+    assert electrostatics["mode"] == "electrostatics-validation"
+    for name in ("charges", "pme", "ewald", "comparison", "timing"):
+        assert name in electrostatics
+
+    required_job_files = {
+        "plan.json",
+        "phase-summary.json",
+        "collection-summary.json",
+        "results.jsonl",
+        "part1-runtime.json",
+        "d3-cache.json",
+        "aimnet-checkpoint-preflight.json",
+        "gpu-names.txt",
+        "gpu-topology.txt",
+        "network-interfaces.txt",
+        "producer-SHA256SUMS",
+        "artifact-SHA256SUMS",
+    }
+    for world_size in ("1", "2", "4"):
+        record = manifest["job_records"][world_size]
+        assert required_job_files <= set(record["files"])
+        assert any(name.startswith("results/") for name in record["files"])
+        assert any(name.startswith("ranks/") for name in record["files"])
+        assert any(name.startswith("logs/") for name in record["files"])
+        assert any(name.startswith("inputs/") for name in record["files"])
+        assert record["verified_producer_file_count"] == 2
+        assert record["verified_artifact_file_count"] == (len(record["files"]) - 1)
+
+    from aux.domain.results import load_domain_lesson_view
+
+    loaded = load_domain_lesson_view(output_dir)
+    assert loaded.available is True
+    assert loaded.successful_case_count == 4
+
+
+def test_bundle_rewrites_real_runner_host_paths(tmp_path: Path) -> None:
+    jobs = [
+        _complete_job(
+            tmp_path,
+            world_size=1,
+            runner_host_paths=True,
+        ),
+        _complete_job(
+            tmp_path,
+            world_size=2,
+            energy_offset_ev=10.0,
+            force_offset=1.0e-4,
+            runner_host_paths=True,
+        ),
+        _complete_job(
+            tmp_path,
+            world_size=4,
+            energy_offset_ev=10.01,
+            force_offset=-1.0e-4,
+            runner_host_paths=True,
+        ),
+    ]
+    output_dir = tmp_path / "portable-bundle"
+    PLAN.build_bundle(
+        SimpleNamespace(
+            job_dir=jobs,
+            site="Compute Lab",
+            interconnect="H100 NVL cluster",
+            output_dir=output_dir,
+        )
     )
 
-    assert PLAN.read_verified_sha256sums(checksum_file) == {
-        source.resolve(): PLAN.sha256_file(source)
-    }
+    raw_rows = [
+        json.loads(line)
+        for line in (output_dir / "raw-results.jsonl")
+        .read_text(encoding="utf-8")
+        .splitlines()
+    ]
 
-    source.write_text('{"success": false}\n', encoding="utf-8")
-    with pytest.raises(ValueError, match="changed after the job"):
-        PLAN.read_verified_sha256sums(checksum_file)
+    def absolute_strings(value: object) -> list[str]:
+        if isinstance(value, dict):
+            return [path for item in value.values() for path in absolute_strings(item)]
+        if isinstance(value, list):
+            return [path for item in value for path in absolute_strings(item)]
+        if isinstance(value, str) and Path(value).is_absolute():
+            return [value]
+        return []
 
-
-def test_bundle_reference_rewriter_rejects_unmapped_host_paths() -> None:
-    value = {
-        "input": "/scratch/run/input.extxyz",
-        "checkpoint": "/cache/aimnet.pt",
-    }
-    rewritten = PLAN._rewrite_bundle_references(
-        value,
-        copied_paths={"/scratch/run/input.extxyz": "job-records/capacity/input.extxyz"},
-        external_paths={
-            "/cache/aimnet.pt": "external:aimnet@sha256:abc",
-        },
+    assert all(not absolute_strings(row) for row in raw_rows)
+    fixed = raw_rows[0]
+    assert fixed["source"]["repository_root"].startswith("git:ALCHEMI-Bootcamp@")
+    assert fixed["source"]["toolkit_core_source_file"].startswith(
+        "git:NVIDIA/nvalchemi-toolkit@"
     )
-    assert rewritten == {
-        "input": "job-records/capacity/input.extxyz",
-        "checkpoint": "external:aimnet@sha256:abc",
-    }
+    assert fixed["source"]["aimnet_checkpoint"].startswith("model:AIMNet2/")
+    assert fixed["model"]["d3"]["parameter_file"].startswith(
+        "parameters:DFT-D3@sha256:"
+    )
+    assert fixed["runtime"][0]["python_executable"].endswith(
+        "part1-runtime.json#python_executable"
+    )
+    assert raw_rows[-1]["bundle_settings_sha256"]
+    assert "settings_sha256" not in raw_rows[-1]
 
-    with pytest.raises(ValueError, match="host path"):
-        PLAN._rewrite_bundle_references(
-            {"missed": "/scratch/run/missed.json"},
-            copied_paths={},
-            external_paths={},
+
+def test_bundle_rejects_missing_or_different_inputs(tmp_path: Path) -> None:
+    jobs = [
+        _complete_job(tmp_path, world_size=1),
+        _complete_job(tmp_path, world_size=2),
+    ]
+    with pytest.raises(ValueError, match="one job directory"):
+        PLAN.build_bundle(
+            SimpleNamespace(
+                job_dir=jobs,
+                site="Compute Lab",
+                interconnect="H100 NVL cluster",
+                output_dir=tmp_path / "missing",
+            )
+        )
+
+    jobs.append(
+        _complete_job(
+            tmp_path,
+            world_size=4,
+            input_content="different fixed structure\n",
+        )
+    )
+    with pytest.raises(ValueError, match="same structure content"):
+        PLAN.build_bundle(
+            SimpleNamespace(
+                job_dir=jobs,
+                site="Compute Lab",
+                interconnect="H100 NVL cluster",
+                output_dir=tmp_path / "different",
+            )
         )
 
 
-def test_slurm_uses_local_caches_and_checks_each_phase() -> None:
-    source = (
-        REPO_ROOT / "scripts" / "slurm_part1_domain_decomposition.sbatch"
-    ).read_text(encoding="utf-8")
-
-    assert "export NODE_CACHE_ROOT" in source
-    assert 'export TMPDIR="$NODE_CACHE_ROOT/tmp"' in source
-    assert 'export WARP_CACHE_PATH="$NODE_CACHE_ROOT/warp"' in source
-    assert 'export CUDA_CACHE_PATH="$NODE_CACHE_ROOT/cuda"' in source
-    bootstrap = source.index(
-        'bash -c \'set -euo pipefail; mkdir -p "$NODE_CACHE_ROOT/tmp"'
-    )
-    tmpdir_export = source.index('export TMPDIR="$NODE_CACHE_ROOT/tmp"')
-    assert bootstrap < tmpdir_export
-    assert 'METHODOLOGY_CONFIG="$SHARED_REPO/' in source
-    assert 'test -f "$METHODOLOGY_CONFIG"' in source
-    assert "config.capacity_molecules_per_species" in source
-    assert "config.electrostatics_validation_molecules_per_species" in source
-    assert "config.parity_molecules_per_species" in source
-    assert "config.distributed_world_sizes" in source
-    assert '"$PACKING_HELPER" "$METHODOLOGY_CONFIG"' in source
-    assert "--producer-file $METHODOLOGY_CONFIG" in source
-    assert "ALCHEMI_DOMAIN_PAIR_COUNTS:-128 " not in source
-    assert "ALCHEMI_DOMAIN_VALIDATION_PAIRS:-128" not in source
-    assert "ALCHEMI_DOMAIN_PARITY_PAIRS:-2048" not in source
-    assert "checkpoint-preflight" in source
-    assert '--checkpoint "$AIMNET_CHECKPOINT"' in source
-    validation_check = source.index("--phase electrostatics")
-    capacity_ladder = source.index("reached_oom=false")
-    assert validation_check < capacity_ladder
-    assert "--phase capacity" in source
-    assert "--phase distributed" in source
-
-
-def test_slurm_runs_each_timing_role_with_the_planned_counts() -> None:
-    source = (
-        REPO_ROOT / "scripts" / "slurm_part1_domain_decomposition.sbatch"
-    ).read_text(encoding="utf-8")
-
-    run_case_start = source.index("run_case() {")
-    capacity_start = source.index('if [[ "$PHASE" == capacity ]]', run_case_start)
-    run_case = source[run_case_start:capacity_start]
-    for declaration in (
-        'local measurement_role="$2"',
-        'local warmup_count="$3"',
-        'local sample_count="$4"',
-    ):
-        assert declaration in run_case
-    for forwarded_argument in (
-        '--measurement-role "$measurement_role"',
-        '--warmup-count "$warmup_count"',
-        '--sample-count "$sample_count"',
-    ):
-        assert forwarded_argument in run_case
-
-    distributed_start = source.index("else\n  CAPACITY_DIR=", capacity_start)
-    capacity_phase = source[capacity_start:distributed_start]
-    selection_read = capacity_phase.index(
-        'json.load(open(sys.argv[1]))["steady_timing_case"]'
-    )
-    one_gpu_timing = capacity_phase.index(
-        "run_case steady-timing steady_timing",
-        selection_read,
-    )
-    capacity_summary = capacity_phase.index("--phase capacity", one_gpu_timing)
-    assert selection_read < one_gpu_timing < capacity_summary
-    assert '"$timing_warmup_count" "$timing_sample_count"' in capacity_phase
-
-    distributed_phase = source[distributed_start:]
-    derived_plan = distributed_phase.index('"$PLAN_SCRIPT" derive')
-    planned_rows = distributed_phase.index(
-        'c["mode"], c["measurement_role"], c["warmup_count"], '
-        'c["sample_count"]',
-        derived_plan,
-    )
-    planned_loop = distributed_phase.index(
-        'for case_row in "${CASE_ROWS[@]}"',
-        planned_rows,
-    )
-    planned_run = distributed_phase.index(
-        'run_case "$mode" "$measurement_role" "$warmup_count" "$sample_count"',
-        planned_loop,
-    )
-    assert derived_plan < planned_rows < planned_loop < planned_run
-    assert '--world-size "$SLURM_NNODES"' in distributed_phase[
-        derived_plan:planned_rows
+def test_bundle_rechecks_every_job_file_checksum(tmp_path: Path) -> None:
+    jobs = [
+        _complete_job(tmp_path, world_size=world_size)
+        for world_size in PLAN.DEFAULT_WORLD_SIZES
     ]
+    changed_log = next((jobs[2] / "logs").glob("*.log"))
+    changed_log.write_text("changed after job completion\n", encoding="utf-8")
 
-
-def test_plan_separates_cold_roles_from_steady_timing() -> None:
-    plan = PLAN.build_plan(
-        run_id="cold-timing-test",
-        world_sizes=(1,),
-        capacity_pair_counts=(128, 256),
-        validation_pairs=128,
-        density_g_cm3=PLAN.DEFAULT_DENSITY_G_CM3,
-        pme_cutoff_a=PLAN.DEFAULT_PME_CUTOFF_A,
-        pme_mesh_safety_factor=PLAN.DEFAULT_PME_MESH_SAFETY_FACTOR,
-        pme_spline_order=PLAN.DEFAULT_PME_SPLINE_ORDER,
-        pme_accuracy=PLAN.DEFAULT_PME_ACCURACY,
-        ewald_reference_accuracy=PLAN.DEFAULT_EWALD_REFERENCE_ACCURACY,
-        d3_cutoff_a=PLAN.DEFAULT_D3_CUTOFF_A,
-        d3_smoothing_fraction=PLAN.DEFAULT_D3_SMOOTHING_FRACTION,
-        domain_skin_a=PLAN.DEFAULT_DOMAIN_SKIN_A,
-        packmol_tolerance_a=PLAN.DEFAULT_PACKMOL_TOLERANCE_A,
-        packmol_precision_a=PLAN.DEFAULT_PACKMOL_PRECISION_A,
-        packmol_seed=PLAN.DEFAULT_PACKMOL_SEED,
-    )
-
-    assert plan["timing"]["cold"]["measurement_roles"] == [
-        "capacity",
-        "parity",
-        "rescue",
-    ]
-    assert plan["timing"]["cold"]["warmup_count"] == 0
-    assert plan["timing"]["cold"]["sample_count"] == 1
-    assert plan["timing"]["steady"]["measurement_role"] == "steady_timing"
-    assert plan["timing"]["steady"]["world_sizes"] == [1, 2, 4]
-    assert plan["timing"]["steady"]["warmup_count"] >= 1
-    assert plan["timing"]["steady"]["sample_count"] >= 5
-    assert (
-        plan["timing"]["steady"]["max_relative_iqr"]
-        == PLAN.DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr
-    )
-    methodology = PLAN.DOMAIN_METHODOLOGY
-    assert (
-        plan["timing"]["steady"]["model_evaluations_per_workflow"]
-        == methodology.steady_timing_model_evaluations_per_workflow
-    )
-    assert (
-        plan["timing"]["steady"]["one_rank_run_steps"]
-        == methodology.steady_timing_run_steps(1)
-    )
-    assert (
-        plan["timing"]["steady"]["multi_rank_run_steps"]
-        == methodology.steady_timing_run_steps(
-            methodology.distributed_world_sizes[0]
+    with pytest.raises(ValueError, match="does not match"):
+        PLAN.build_bundle(
+            SimpleNamespace(
+                job_dir=jobs,
+                site="Compute Lab",
+                interconnect="H100 NVL cluster",
+                output_dir=tmp_path / "changed",
+            )
         )
-    )
-    assert plan["timing"]["publishable_benchmark"] is False
+
+
+def test_slurm_runs_one_fixed_case_per_job_with_runner_derived_counts() -> None:
+    source = SBATCH_PATH.read_text(encoding="utf-8")
+
+    assert 'WORLD_SIZE="$SLURM_NNODES"' in source
+    assert "config.fixed_molecules_per_species" in source
+    assert "config.campaign_world_sizes" in source
+    assert "config.evaluation_warmup_count" in source
+    assert "config.evaluation_pass_count" in source
+    assert 'prepare_input "$FIXED_PAIRS"' in source
+    assert 'run_case distributed "$FIXED_PAIRS"' in source
+    assert 'if [[ "$WORLD_SIZE" -eq 1 ]]' in source
+    assert "run_case electrostatics-validation" in source
+    assert '--mode "$mode"' in source
+    assert '--world-size "$WORLD_SIZE"' in source
+    assert '--pair-count "$pair_count"' in source
+    assert "--force-output-npy" in source
+    assert "--measurement-role" not in source
+    assert "--warmup-count" not in source
+    assert "--sample-count" not in source
+    assert "--dependency" not in source
+    assert "capacity" not in source.lower()
+    assert "rescue" not in source.lower()
+    assert 'elif [[ ! -s "$CURRENT_OUTPUT" ]]' in source
+    assert "The launcher exited successfully but wrote no result JSON." in source
+    assert "record_failure 66" in source
+    assert 'sha256sum -c "$FINAL_DIR/producer-SHA256SUMS"' in source
+    assert '> "$FINAL_DIR/artifact-SHA256SUMS"' in source
