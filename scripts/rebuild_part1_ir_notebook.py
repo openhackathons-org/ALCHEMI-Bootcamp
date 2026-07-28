@@ -8769,14 +8769,14 @@ manifest_workflow_settings = {
         "inflight_nvt_steps": INFLIGHT_NVT_STEPS,
         "inflight_nve_steps": INFLIGHT_NVE_STEPS,
         "domain_live_molecules_per_species": (
-            DOMAIN_LIVE_MOLECULES_PER_SPECIES
+            DOMAIN_METHODOLOGY.live_molecules_per_species
         ),
         "domain_construction_density_g_cm3": (
-            DOMAIN_CONSTRUCTION_DENSITY_G_CM3
+            DOMAIN_METHODOLOGY.construction_density_g_cm3
         ),
-        "domain_packmol_tolerance_a": DOMAIN_PACKMOL_TOLERANCE_A,
-        "domain_packmol_precision_a": DOMAIN_PACKMOL_PRECISION_A,
-        "domain_packmol_seed": DOMAIN_PACKMOL_SEED,
+        "domain_packmol_tolerance_a": DOMAIN_METHODOLOGY.packmol_tolerance_a,
+        "domain_packmol_precision_a": DOMAIN_METHODOLOGY.packmol_precision_a,
+        "domain_packmol_seed": DOMAIN_METHODOLOGY.packmol_seed,
         "domain_pme_realspace_cutoff_a": (
             DOMAIN_METHODOLOGY.pme_realspace_cutoff_a
         ),
@@ -8790,7 +8790,7 @@ manifest_workflow_settings = {
         "domain_ewald_reference_accuracy": (
             DOMAIN_METHODOLOGY.ewald_reference_accuracy
         ),
-        "domain_halo_skin_a": DOMAIN_HALO_SKIN_A,
+        "domain_halo_skin_a": DOMAIN_METHODOLOGY.domain_halo_skin_a,
         "domain_model_cutoff_a": domain_cutoff_a,
         "domain_compile": domain_config.compile,
     },
