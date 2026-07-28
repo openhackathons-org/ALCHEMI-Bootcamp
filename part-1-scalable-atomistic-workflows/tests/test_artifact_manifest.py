@@ -25,6 +25,28 @@ from aux.artifacts import (  # noqa: E402
     write_orbmol_relaxation_structures,
     write_water_run_manifest,
 )
+from aux.domain.config import DOMAIN_METHODOLOGY  # noqa: E402
+from aux.domain.results import load_domain_lesson_view  # noqa: E402
+
+
+def test_installed_domain_result_set_is_complete() -> None:
+    recorded = PART_DIR / "data" / "domain_decomposition" / "recorded"
+    fixed_atom_count = (
+        DOMAIN_METHODOLOGY.fixed_molecules_per_species
+        * DOMAIN_METHODOLOGY.atoms_per_composition_unit
+    )
+
+    view = load_domain_lesson_view(
+        recorded,
+        expected_atom_count=fixed_atom_count,
+        expected_world_sizes=DOMAIN_METHODOLOGY.campaign_world_sizes,
+    )
+
+    assert view.available
+    assert view.bundle_record is not None
+    assert view.takeaway["all_fixed_evaluations_succeeded"]
+    assert view.takeaway["positions_pbc_equivalent"]
+    assert view.takeaway["all_output_checks_passed"]
 
 
 def test_water_run_manifest_is_complete_normalized_and_repeatable(

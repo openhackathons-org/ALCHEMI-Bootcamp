@@ -1790,6 +1790,8 @@ def test_run_details_require_pinned_sevennet_and_structure_manifests() -> None:
         "notebook_sha256": VALIDATOR.sha256_file(source_notebook),
         **VALIDATOR.expected_reference_bundle_details(ROOT),
     }
+    expected_domain_bundle = details["domain_decomposition_bundle"]
+    assert isinstance(expected_domain_bundle, dict)
     manifest = {"run_details": details}
 
     result = VALIDATOR.validate_run_details(manifest, source_notebook, ROOT)
@@ -1797,12 +1799,12 @@ def test_run_details_require_pinned_sevennet_and_structure_manifests() -> None:
         VALIDATOR.EXPECTED_SEVENNET_CHECKPOINT_SHA256
     )
     assert result["nci_subset_sha256"] == VALIDATOR.NCI_ATLAS_SUBSET_SHA256
-    assert result["domain_decomposition_bundle"] is None
+    assert result["domain_decomposition_bundle"] == expected_domain_bundle
 
     details["domain_decomposition_bundle"] = {"manifest_sha256": "0" * 64}
-    with pytest.raises(RuntimeError, match="must be null"):
+    with pytest.raises(RuntimeError, match="does not match the live bundle"):
         VALIDATOR.validate_run_details(manifest, source_notebook, ROOT)
-    details["domain_decomposition_bundle"] = None
+    details["domain_decomposition_bundle"] = expected_domain_bundle
 
     details["adsorption_structure_manifest_sha256"] = "0" * 64
     with pytest.raises(RuntimeError, match="adsorption_structure_manifest_sha256"):

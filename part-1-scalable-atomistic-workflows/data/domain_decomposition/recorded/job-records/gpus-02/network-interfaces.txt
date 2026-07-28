@@ -1,0 +1,2 @@
+ipp1-3198 address=10.117.10.97 interface=eno1np0 nccl==eno1np0 gloo=eno1np0 selection=automatic
+ipp1-3210 address=10.117.9.246 interface=eno1np0 nccl==eno1np0 gloo=eno1np0 selection=automatic

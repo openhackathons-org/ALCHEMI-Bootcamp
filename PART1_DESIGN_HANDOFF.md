@@ -519,8 +519,12 @@ ranges and the 4-versus-2 median difference must each remain within
 `1e-4 eV/atom`. The raw one-GPU-to-multi-GPU energy offset and one-GPU pass
 range are saved as diagnostics only. Every GPU count reports one untimed
 warm-up, all three measured energy/force pass times, and their median.
-Until that run is complete, all domain timings and speedups remain
-**NOT REPORTED**.
+The checked result set is now installed at
+`part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/`.
+The observed medians were `0.268238 s`, `0.273560 s`, and `0.228844 s` on
+one, two, and four H100 PCIe nodes. That corresponds to `0.98×` on two GPUs
+and `1.17×` on four GPUs relative to one GPU for this input. These are three
+short tutorial passes, not a general performance benchmark.
 
 ## The key change this session: MD centerpiece is IR, not VACF/VDOS
 
@@ -764,8 +768,11 @@ Three phases run on one batch of {H₂O, D₂O, (H₂O)₆, (D₂O)₆} (~42 ato
   energy/force passes on 1/2/4 GPUs, compares 2/4-GPU forces with one GPU, and
   requires repeatable distributed energies before comparing the 4-GPU median
   with the 2-GPU median at `1e-4 eV/atom`. The raw one-to-multi-GPU energy
-  offset and one-GPU pass range remain diagnostic. No complete H100 result set
-  is installed, so these results remain **NOT REPORTED**.
+  offset and one-GPU pass range remain diagnostic. Compute Lab jobs `3311164`,
+  `3311328`, and `3311123` completed with exit `0:0` in `5:53`, `3:49`, and
+  `3:54` of scheduler wall time. The strict loader accepts the installed
+  result set: all fixed evaluations, periodic-position checks, distributed
+  energy checks, force checks, and the one-GPU PME-versus-Ewald check pass.
 - **Stage-pipeline evidence:** the separate `DistributedPipeline` path still
   fails the full-dtype transfer preflight because `Batch.put` skips integer
   segmented fields. Its retained producer also lacks the fixed-work selection
@@ -849,9 +856,6 @@ classical MD. These questions remain:
   substituting the older local environment.
 - Build the clean distributable Docker image and repeat its import/runtime
   smoke checks.
-- Record and check the stock 1/2/4-H100 `DomainParallel` result set with no
-  local Toolkit patches, using one GPU as the force reference and two GPUs as
-  the distributed-energy reference.
 - Keep `DistributedPipeline` correctness and timing **NOT REPORTED** for this
   release. After an upstream stock revision transfers every required batch
   field correctly, record the separate 1/2/4-H100 campaign as a later tutorial
@@ -872,6 +876,10 @@ classical MD. These questions remain:
   No valid bundle is present. No result or speedup should be cited from this
   path until the stock transfer issue is fixed and the strict loader accepts
   the complete planned repeat set.
+- Installed `DomainParallel` result set:
+  `part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/`.
+  Its manifest SHA-256 is
+  `af5d7461808491bfd38d7e6be0645842b551bfacd6bdfa694deeb7f845b4bd7c`.
 - Experimental position bundle:
   `part-1-scalable-atomistic-workflows/reference/experimental_water_fundamentals/`.
 - Accepted SevenNet-source H100 result set from earlier Toolkit versions,

@@ -1,0 +1,8 @@
+{
+  "created_utc": "2026-07-28T07:17:17.575577+00:00",
+  "failed_rows": 0,
+  "planned_rows": 1,
+  "run_id": "domain-fixed-3311123-gpus-4",
+  "schema": "alchemi.part1-domain-collection.v5",
+  "successful_rows": 1
+}

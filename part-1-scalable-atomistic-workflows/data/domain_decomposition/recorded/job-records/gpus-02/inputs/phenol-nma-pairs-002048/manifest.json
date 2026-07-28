@@ -1,0 +1,109 @@
+{
+  "atom_count": 51200,
+  "cell_a": [
+    [
+      65.75599727378771,
+      0.0,
+      0.0
+    ],
+    [
+      0.0,
+      65.75599727378771,
+      0.0
+    ],
+    [
+      0.0,
+      0.0,
+      131.51199454757543
+    ]
+  ],
+  "cell_geometry": "orthorhombic",
+  "cell_lengths_a": [
+    65.75599727378771,
+    65.75599727378771,
+    131.51199454757543
+  ],
+  "construction": {
+    "base_box_manifest": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/part-1-scalable-atomistic-workflows/data/domain_decomposition/prebuilt_base_box/manifest.json",
+    "base_box_manifest_schema": "alchemi.part1-domain-base-box.v1",
+    "base_box_manifest_sha256": "ea30e3f12f042f98f136147e783b56ab2e0da622f3486718b9fec69f3cde74b4",
+    "base_box_structure": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/part-1-scalable-atomistic-workflows/data/domain_decomposition/prebuilt_base_box/structure.extxyz",
+    "base_box_structure_sha256": "5fcfc9394ebed3583267f20f322f60fb7b9311650e3b8dec4b8e8edaa4e0c0da",
+    "base_pair_count": 128,
+    "method": "balanced_integer_supercell_repeat",
+    "packmol_rerun": false,
+    "periodic_coordinate_canonicalization": {
+      "atoms_outside_after": 0,
+      "atoms_outside_before": 294,
+      "eps": 0.0,
+      "fractional_interval": "[0, 1)",
+      "method": "ase.Atoms.wrap"
+    },
+    "repeat_factors_xyz": [
+      2,
+      2,
+      4
+    ],
+    "repeat_multiplier": 16
+  },
+  "construction_density_g_cm3": 1.0,
+  "count_definition": "The count is the number of independent phenol molecules and the equal number of independent N-methylacetamide molecules; it is not a count of pre-bound dimers.",
+  "created_utc": "2026-07-28T07:11:33.009342+00:00",
+  "density_from_mass_and_cell_g_cm3": 1.0000000000000013,
+  "equivalent_cubic_length_a": 82.84736512207502,
+  "interpretation": "This is an integer supercell of the checked Packmol starting geometry at a declared construction density. It has not been equilibrated and is not a density prediction.",
+  "minimum_cell_length_a": 65.75599727378771,
+  "molecules_per_species": 2048,
+  "net_charge_e": 0,
+  "packmol": {
+    "applied_to": "checked_base_box_only",
+    "periodic_boundary_check": true,
+    "periodic_min_distance_a": 2.1978073856580345,
+    "periodic_min_distance_required_a": 1.999,
+    "precision_a": 0.001,
+    "seed": 20260723,
+    "tolerance_a": 2.0,
+    "version": "21.2.1"
+  },
+  "pair_count": 2048,
+  "pair_mass_u": 167.208,
+  "schema": "alchemi.part1-domain-input.v3",
+  "source": {
+    "base_box_methodology": {
+      "name": "part1-packmol-domain-decomposition",
+      "schema": "alchemi.part1-domain-methodology.v5",
+      "version": "1.10.0"
+    },
+    "domain_methodology_config": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/part-1-scalable-atomistic-workflows/aux/domain/config.py",
+    "domain_methodology_config_sha256": "0959eb58bf7a3f7c3cf19e3e7b5dfc0802481d0bfa0d5db50fcbb4c7c5cd85fd",
+    "domain_methodology_name": "part1-packmol-domain-decomposition",
+    "domain_methodology_version": "1.10.0",
+    "fragments": {
+      "A": "phenol",
+      "B": "N-methylacetamide"
+    },
+    "nci_scale": 1.0,
+    "nci_subset": "../../nci_atlas/nci-atlas-curves.csv.gz",
+    "nci_subset_sha256": "7ffbc071e2998cee8e487a2697517187110a05f436920f8611d28d2af5d4d7b7",
+    "nci_system_id": "1.041",
+    "packing_helper": "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/repo/ALCHEMI-Bootcamp-d4c615a568a3493172eb88ab6d78f0797f80b824/part-1-scalable-atomistic-workflows/aux/domain/packing.py",
+    "packing_helper_sha256": "58a018ec630d5a1832840c2cf18990cc50061b217b898af5300447dd20f8e85d"
+  },
+  "structure": {
+    "format": "extxyz",
+    "molecule_id": "0-based stable molecule identity",
+    "molecule_kind": {
+      "0": "phenol",
+      "1": "N-methylacetamide"
+    },
+    "path": "/home/scratch.nfedik_other/alchemi-ir-20260710/results/domain-fixed-3311328-gpus-2/inputs/phenol-nma-pairs-002048/structure.extxyz",
+    "pbc": [
+      true,
+      true,
+      true
+    ],
+    "sha256": "5751f7331200f5f9865e0e8e37d82ff50b92d3d81722853c92f4628713d33959",
+    "source_atom_id": "0-based stable atom identity"
+  },
+  "volume_a3": 568638.2924760119
+}

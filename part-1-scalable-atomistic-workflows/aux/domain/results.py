@@ -1503,7 +1503,7 @@ def _validate_raw_distributed(
             or row["success"] is not True
         ):
             raise DomainLessonResultsError(
-                f"{context} is not a successful v4 fixed evaluation"
+                f"{context} is not a successful v5 fixed evaluation"
             )
         if (
             row["settings_sha256"] != settings_sha256
@@ -2958,17 +2958,17 @@ def load_domain_lesson_view(
     expected_atom_count: int = FIXED_ATOM_COUNT,
     expected_world_sizes: Sequence[int] = REQUIRED_WORLD_SIZES,
 ) -> DomainLessonView:
-    """Load one complete v4 fixed-input result set."""
+    """Load one complete v5 fixed-input result set."""
 
     root_path = Path(root)
     if (
         isinstance(expected_atom_count, bool)
         or int(expected_atom_count) != FIXED_ATOM_COUNT
     ):
-        raise ValueError(f"v4 records one fixed atom count: {FIXED_ATOM_COUNT}")
+        raise ValueError(f"v5 records one fixed atom count: {FIXED_ATOM_COUNT}")
     worlds = tuple(int(value) for value in expected_world_sizes)
     if worlds != REQUIRED_WORLD_SIZES:
-        raise ValueError("v4 records the configured 1/2/4-GPU world sizes")
+        raise ValueError("v5 records the configured 1/2/4-GPU world sizes")
     if not root_path.exists():
         return _empty_view(
             root_path,
@@ -2996,7 +2996,7 @@ def load_domain_lesson_view(
         )
     if manifest.get("status") != "complete":
         raise DomainLessonResultsError(
-            "existing v4 result sets must have status complete"
+            "existing v5 result sets must have status complete"
         )
 
     checksums = _read_checksum_index(root_path)

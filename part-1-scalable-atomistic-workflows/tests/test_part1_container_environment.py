@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+from hashlib import sha256
 from pathlib import Path, PurePosixPath
 import re
 
@@ -38,6 +39,7 @@ RETIRED_ORBMOL_TEST_FILES = {
 }
 
 PART1_PREFIX = "part-1-scalable-atomistic-workflows/"
+SELF_INDEXED_PART1_BUNDLE_ROOTS = (f"{PART1_PREFIX}data/domain_decomposition/recorded",)
 
 EXPECTED_PART1_EXCLUSION_RULES = {
     f"{PART1_PREFIX}outputs/",
@@ -105,6 +107,60 @@ def _source_manifest_paths() -> tuple[str, ...]:
         if relative_path and not relative_path.startswith("#"):
             paths.append(relative_path)
     return tuple(paths)
+
+
+def _self_indexed_bundle_paths() -> set[str]:
+    packaged: set[str] = set()
+    for relative_root in SELF_INDEXED_PART1_BUNDLE_ROOTS:
+        root = ROOT / relative_root
+        if not root.exists():
+            continue
+        assert root.is_dir()
+        checksum_index = root / "SHA256SUMS"
+        assert checksum_index.is_file()
+
+        expected = {
+            checksum_index.relative_to(ROOT).as_posix(),
+        }
+        indexed: set[str] = set()
+        for line_number, raw_line in enumerate(
+            checksum_index.read_text(encoding="utf-8").splitlines(),
+            start=1,
+        ):
+            fields = raw_line.split(maxsplit=1)
+            assert len(fields) == 2, (
+                f"malformed checksum entry at {checksum_index}:{line_number}"
+            )
+            digest, relative = fields
+            assert re.fullmatch(r"[0-9a-f]{64}", digest), (
+                f"invalid checksum at {checksum_index}:{line_number}"
+            )
+            pure = PurePosixPath(relative)
+            assert (
+                not pure.is_absolute()
+                and ".." not in pure.parts
+                and relative == pure.as_posix()
+            ), f"unsafe checksum path at {checksum_index}:{line_number}"
+            assert relative not in indexed, (
+                f"duplicate checksum path at {checksum_index}:{line_number}"
+            )
+            indexed.add(relative)
+
+            path = root / pure
+            assert path.is_file(), f"indexed bundle file is missing: {path}"
+            assert sha256(path.read_bytes()).hexdigest() == digest, (
+                f"indexed bundle checksum does not match: {path}"
+            )
+            expected.add(path.relative_to(ROOT).as_posix())
+
+        actual = {
+            path.relative_to(ROOT).as_posix()
+            for path in root.rglob("*")
+            if path.is_file()
+        }
+        assert actual == expected
+        packaged.update(expected)
+    return packaged
 
 
 def _normalize_link_path(source: str, target: str) -> PurePosixPath:
@@ -268,6 +324,7 @@ def test_clean_image_ships_only_the_tests_run_during_build() -> None:
 
 def test_part1_directory_copy_has_no_undeclared_files() -> None:
     source_paths = set(_source_manifest_paths())
+    self_indexed_paths = _self_indexed_bundle_paths()
     dockerignore_lines = {
         line.strip()
         for line in _read(".dockerignore").splitlines()
@@ -279,7 +336,11 @@ def test_part1_directory_copy_has_no_undeclared_files() -> None:
     part1_root = ROOT / PART1_PREFIX
     for path in sorted(item for item in part1_root.rglob("*") if item.is_file()):
         relative_path = path.relative_to(ROOT).as_posix()
-        if relative_path in source_paths or relative_path in PACKAGED_IMAGE_TEST_FILES:
+        if (
+            relative_path in source_paths
+            or relative_path in PACKAGED_IMAGE_TEST_FILES
+            or relative_path in self_indexed_paths
+        ):
             continue
         if not _is_intentionally_excluded_part1_file(relative_path):
             unclassified.append(relative_path)
@@ -289,7 +350,9 @@ def test_part1_directory_copy_has_no_undeclared_files() -> None:
 
 def test_relative_links_resolve_within_the_clean_image() -> None:
     source_paths = set(_source_manifest_paths())
-    image_paths = source_paths | PACKAGED_IMAGE_TEST_FILES
+    image_paths = (
+        source_paths | PACKAGED_IMAGE_TEST_FILES | _self_indexed_bundle_paths()
+    )
     image_directories = {
         parent
         for relative_path in image_paths

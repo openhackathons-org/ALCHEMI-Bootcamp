@@ -1,0 +1,22 @@
+{
+  "completed_case_count": 1,
+  "created_utc": "2026-07-28T07:17:17.754164+00:00",
+  "electrostatics_validation": null,
+  "errors": [],
+  "fixed_case_id": "fixed-evaluation-pairs-002048-gpus-04",
+  "fixed_result_sha256": "2b7ee1260bc1590d9ebaf511ea5448c6dfa0a768bd7cbcd56c1fac548923e26f",
+  "input_structure_sha256": "5751f7331200f5f9865e0e8e37d82ff50b92d3d81722853c92f4628713d33959",
+  "methodology": {
+    "name": "part1-packmol-domain-decomposition",
+    "path": "part-1-scalable-atomistic-workflows/aux/domain/config.py",
+    "schema": "alchemi.part1-domain-methodology.v5",
+    "sha256": "0959eb58bf7a3f7c3cf19e3e7b5dfc0802481d0bfa0d5db50fcbb4c7c5cd85fd",
+    "version": "1.10.0"
+  },
+  "passed": true,
+  "planned_case_count": 1,
+  "run_id": "domain-fixed-3311123-gpus-4",
+  "schema": "alchemi.part1-domain-phase-summary.v2",
+  "status": "passed",
+  "world_size": 4
+}
