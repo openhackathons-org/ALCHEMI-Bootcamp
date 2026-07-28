@@ -2684,7 +2684,11 @@ def _settings_table(manifest: Mapping[str, Any]) -> pd.DataFrame:
             ("Fixed input", f"{FIXED_ATOM_COUNT:,} atoms"),
             ("Molecular composition", "phenol + N-methylacetamide"),
             ("Model", "AIMNet2 + PME electrostatics + D3(BJ)"),
-            ("Precision", "float32"),
+            ("Model tensors, coordinates, forces", "float32"),
+            (
+                "Total energy",
+                "float32 on 1 GPU; float64 distributed reduction on 2/4 GPUs",
+            ),
             ("Toolkit API", "DomainParallel"),
             ("Domain cutoff", f"{domain_cutoff:g} Å"),
             ("Domain skin", f"{DOMAIN_METHODOLOGY.domain_halo_skin_a:g} Å"),

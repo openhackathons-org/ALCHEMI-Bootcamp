@@ -240,7 +240,9 @@ charges, so the recorded multi-GPU checks compare the supported energy and
 force outputs. These comparisons do not independently verify the global charge
 residual of the distributed prediction. The short times apply only to this
 input, model, software, and hardware; they are not a trajectory or a general
-scaling claim.
+scaling claim. The first measured one-GPU pass contains remaining first-use
+work even after the warm-up, so the notebook shows every raw pass and treats
+the timing as instructional.
 
 Exact cutoffs, halo depth, tolerances, energy-reduction handling, and launch
 commands are in the
@@ -308,10 +310,11 @@ PBC-equivalent to the input, with a maximum minimum-image displacement no
 larger than `1e-4 Å`.
 
 Before the times are interpreted, every multi-GPU force component must agree
-with the one-GPU result. The one-GPU path returns a `torch.float32` energy.
+with the one-GPU result. Model tensors, coordinates, and forces remain
+`torch.float32`. The one-GPU path also returns a `torch.float32` total energy.
 The pinned multi-GPU path returns `torch.float64` after Toolkit's distributed
-reduction. Each GPU layout is represented by the median of its three measured
-energies. The 2- and 4-GPU energy ranges must each remain within
+energy reduction. Each GPU layout is represented by the median of its three
+measured energies. The 2- and 4-GPU energy ranges must each remain within
 `1e-4 eV/atom`, and the 4-GPU median must agree with the 2-GPU median within
 `1e-4 eV/atom`. The raw one-GPU-to-multi-GPU offset and one-GPU pass range are
 diagnostic because Toolkit 0.2 reduces the one- and multi-GPU paths

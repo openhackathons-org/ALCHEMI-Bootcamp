@@ -232,20 +232,31 @@ def test_notebook_has_seven_stylized_sequential_stage_cards() -> None:
 
 def test_learner_visible_cells_are_short() -> None:
     oversized = []
+    wide_lines = []
     for cell in _notebook()["cells"]:
         if cell.get("cell_type") != "code":
             continue
         if cell.get("metadata", {}).get("jupyter", {}).get("source_hidden") is True:
             continue
-        line_count = len(_source(cell).splitlines())
-        limit = 60
+        lines = _source(cell).splitlines()
+        line_count = len(lines)
+        limit = 55
         if line_count > limit:
             oversized.append(
                 f"{cell.get('id', '<missing id>')}: {line_count} lines (limit {limit})"
             )
+        wide_lines.extend(
+            f"{cell.get('id', '<missing id>')}:{line_number}: "
+            f"{len(line)} characters"
+            for line_number, line in enumerate(lines, start=1)
+            if len(line) > 100
+        )
 
     assert not oversized, "learner-visible code cells must stay focused:\n" + "\n".join(
         oversized
+    )
+    assert not wide_lines, "learner-visible code must fit without scrolling:\n" + "\n".join(
+        wide_lines
     )
 
 
@@ -985,8 +996,6 @@ def test_notebook_discovers_and_switches_sevennet_tasks() -> None:
         "task_outputs = task_model(task_batch)",
         'task_outputs["energy"]',
         'task_outputs["forces"]',
-        "torch.isfinite(energies).all()",
-        "torch.isfinite(forces).all()",
         "sevennet_task_outputs",
         "summarize_sevennet_task_outputs(",
         "sevennet_task_summary",
@@ -1096,13 +1105,13 @@ def test_notebook_orients_new_alchemi_users_before_the_first_model_call() -> Non
 
     hello = _source(by_id["hello-world"])
     for term in (
+        "first_atomic_data_table(",
+        "first_model_result_tables(",
         'label="First model outputs by atom"',
-        '"charge (e)"',
-        '"Fx (eV/Å)"',
-        '"|F| (eV/Å)"',
         'label="First system-level outputs"',
-        '("Energy / eV", hello["energy"].item())',
-        '("Total predicted charge / e", hello_charges.sum().item())',
+        'energy_eV=hello["energy"].item()',
+        "charges_e=hello_charges.numpy()",
+        "forces_eV_A=hello_forces.numpy()",
     ):
         assert term in hello
 
@@ -1241,10 +1250,11 @@ def test_precision_lesson_distinguishes_tensor_storage_from_model_math() -> None
         "parameter.element_size()",
         "dtype=torch.float64",
         "aimnet.adapt_input(precision_probe_batch)",
-        "precision_dtype_after_adapt == torch.float64",
-        'precision_model_input["coord"].dtype == torch.float32',
-        "precision_dtype_after_forward == torch.float32",
-        'precision_probe["energy"].dtype == torch.float64',
+        "validate_precision_observation(",
+        "probe_coordinates_after_adapt_dtype=precision_dtype_after_adapt",
+        'model_input_coordinates_dtype=precision_model_input["coord"].dtype',
+        "probe_coordinates_after_forward_dtype=precision_dtype_after_forward",
+        "probe_output_dtypes",
         "torch.nextafter(",
         "torch.get_float32_matmul_precision()",
         "precision_summary.widening_preserves_stored_values",
@@ -1309,14 +1319,25 @@ def test_aimnet_card_and_fused_stage_state_the_important_limits() -> None:
     fused_intro = _source(by_id["fused-stage-intro"])
 
     for detail in (
-        "metadata.version('aimnet')",
-        '"code_license": "AIMNet software: MIT"',
+        "aimnet_model_card_table(",
+        'aimnet_version=metadata.version("aimnet")',
+        "cutoff_A=aimnet.model_config.neighbor_config.cutoff",
+        "supports_pbc=aimnet.model_config.supports_pbc",
+        "optional_inputs=aimnet.model_config.optional_inputs",
+        "neighbor_convention=str(aimnet.model_config.neighbor_config)",
+    ):
+        assert detail in model_card
+    model_card_helper = (PART_DIR / "aux" / "checkpoint.py").read_text(
+        encoding="utf-8"
+    )
+    for detail in (
+        "AIMNet software: MIT",
         "molecular training domain; wrapper supports PBC",
         "condensed-phase accuracy is not established here",
         "one explicit total charge per graph through Batch.charge",
         "selected checkpoint is closed-shell; no multiplicity input is used",
     ):
-        assert detail in model_card
+        assert detail in model_card_helper
     assert "uses the model attached to its first sub-stage" in fused_intro
     assert "`nvt + nve` changes the update rule, not the model" in fused_intro
 
@@ -1538,6 +1559,8 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
         "PME grid | defines the electrostatics FFT repeated on every GPU",
         "restricts this example to an input total-charge target of zero",
         "passes AIMNet2 charges to PME unchanged",
+        "stable `source_atom_id` values stay outside the Toolkit `Batch`",
+        "locally cloned reference positions",
         "does not emit predicted atomic charges",
         "Rank consistency is checked through source-ordered forces and distributed energies",
         "rebuilds neighbors inside each region",
@@ -1576,6 +1599,7 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
         by_id["display-domain-scaling-methodology"]
     )
     plan = _source(by_id["domain-scaling-plan"])
+    api = _source(by_id["domain-parallel-api"])
     loader = _source(by_id["domain-parallel-results"])
     display_results = _source(by_id["display-domain-parallel-results"])
 
@@ -1596,11 +1620,14 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
     for safeguard in (
         "one checked 51,200-atom supercell",
         "Packmol is not rerun",
-        "structure, composed AIMNet2 + PME + D3 model, precision, cutoffs",
+        "model tensors, coordinates, forces, cutoffs",
+        "single-rank total energy is float32",
+        "cross-rank energy reduction returns float64",
         "one warm-up, then three measured energy/force evaluations",
         "partitioned once and gathered once",
         "one `run(..., n_steps=1)` call",
-        "not a trajectory or a general scaling benchmark",
+        "first one-GPU pass is visibly a first-use outlier",
+        "instructional measurements, not a general benchmark",
         "Four GPUs means four one-H100 nodes",
         "checks 1-GPU forces against 2/4 GPUs",
         "2-GPU distributed energy against 4",
@@ -1612,6 +1639,12 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
         "Missing files produce `NOT REPORTED`, never an estimate",
     ):
         assert safeguard in plan_text
+    for timing_step in (
+        "elapsed_s = torch.tensor(",
+        "dist.all_reduce(elapsed_s, op=dist.ReduceOp.MAX)",
+        "pass_times_s.append(float(elapsed_s.item()))",
+    ):
+        assert timing_step in api
     assert "first-OOM" not in plan_text
     assert "capacity ladder" not in plan_text
 
@@ -1639,12 +1672,14 @@ def test_domain_results_require_same_input_agreement_and_stable_timings() -> Non
         "domain_layout_display",
         "domain_timing_display.round(3)",
         "domain_agreement_display.round(6)",
+        "domain_agreement_display_table(",
         "domain_charge_display.round(9)",
         "domain_electrostatics_display.round(6)",
         "plot_domain_decomposition(domain_view.plot_data)",
         "three raw energy/force passes",
-        "they do not measure a ",
-        "trajectory or a memory limit.",
+        "remaining first-use work",
+        "they do not ",
+        "measure a trajectory or a memory limit.",
     ):
         assert lesson_result in display_results
     assert 'result_state="not_reported"' in display_results
@@ -1896,6 +1931,8 @@ def test_stage_3_runs_the_90_graph_nci_composition_and_reference_check() -> None
         "PipelineStep(model=nci_d3)",
         'neighbor_adaptation="always"',
         "nci_member_residual_eV[0] + nci_member_coulomb_eV[0]",
+        "check_nci_interaction_component_sum(",
+        "atol_eV=NCI_VALIDATION.interaction_energy_atol_eV",
     ):
         assert term in compose
 

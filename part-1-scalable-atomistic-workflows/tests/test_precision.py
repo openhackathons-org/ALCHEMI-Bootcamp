@@ -12,7 +12,11 @@ import torch
 PART_DIR = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(PART_DIR))
 
-from aux.precision import precision_display_table, summarize_model_precision  # noqa: E402
+from aux.precision import (  # noqa: E402
+    precision_display_table,
+    summarize_model_precision,
+    validate_precision_observation,
+)
 
 
 class TinyFloatModel(torch.nn.Module):
@@ -55,4 +59,45 @@ def test_precision_table_requires_the_visible_dtype_observations() -> None:
             summary,
             observed_dtypes={"hello-world coordinates": "torch.float32"},
             matmul_precision="highest",
+        )
+
+
+def test_precision_observation_checks_and_formats_every_visible_dtype() -> None:
+    observed = validate_precision_observation(
+        hello_coordinates_dtype=torch.float32,
+        probe_coordinates_before_dtype=torch.float64,
+        probe_coordinates_after_adapt_dtype=torch.float64,
+        model_input_coordinates_dtype=torch.float32,
+        probe_coordinates_after_forward_dtype=torch.float32,
+        probe_output_dtypes={
+            "energy": torch.float64,
+            "forces": torch.float32,
+            "charges": torch.float32,
+        },
+    )
+
+    assert observed == {
+        "hello-world coordinates": "torch.float32",
+        "probe coordinates before wrapper call": "torch.float64",
+        "coordinates passed to AIMNet": "torch.float32",
+        "probe coordinates after wrapper call": "torch.float32",
+        "probe energy / forces / charges": (
+            "torch.float64 / torch.float32 / torch.float32"
+        ),
+    }
+
+    with pytest.raises(
+        AssertionError, match="probe coordinates after input adaptation"
+    ):
+        validate_precision_observation(
+            hello_coordinates_dtype=torch.float32,
+            probe_coordinates_before_dtype=torch.float64,
+            probe_coordinates_after_adapt_dtype=torch.float32,
+            model_input_coordinates_dtype=torch.float32,
+            probe_coordinates_after_forward_dtype=torch.float32,
+            probe_output_dtypes={
+                "energy": torch.float64,
+                "forces": torch.float32,
+                "charges": torch.float32,
+            },
         )

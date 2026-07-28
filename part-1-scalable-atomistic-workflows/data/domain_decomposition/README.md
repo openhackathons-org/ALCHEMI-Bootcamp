@@ -61,8 +61,11 @@ energy offset only as a diagnostic.
 ## Required measurements
 
 - One fixed 51,200-atom input on 1, 2, and 4 H100s. It is a 2 x 2 x 4
-  supercell of the checked base box. Geometry, model, dtype, cutoffs, requested
-  outputs, and source files must match across all three runs.
+  supercell of the checked base box. Geometry, model, cutoffs, requested
+  outputs, and source files must match across all three runs. Model tensors,
+  coordinates, predicted charges, and forces remain float32. Only the scalar
+  total energy changes representation: it is a float32 model total on one GPU
+  and a float64 result after the distributed reduction on multiple ranks.
 - One `DomainParallel` context per GPU count. The structure is partitioned
   once, evaluated once for initialization and warm-up, evaluated three more
   times for measurement, and gathered once.
@@ -130,9 +133,14 @@ residual is reported without adjustment.
 
 This example is neutral and must not be reused for a charged box. The globally
 reduced energy stays on the local result, while `gather` reconstructs atom
-fields. The campaign carries stable atom IDs and fixed reference coordinates
-as public custom node properties, then restores input order and checks
-PBC-equivalent positions after the final gather.
+fields. Stable `source_atom_id` values stay in a separate tensor outside the
+Toolkit `Batch`; they bind the input checksum to atom identity, predict the
+rank-contiguous gather order, and restore the forces to input order. Position
+checks use local reference clones made before the warm-up and measured calls.
+The final gathered positions are compared with a separate source-ordered
+reference copy, using
+minimum-image displacements so periodic wrapping is allowed without treating it
+as physical motion.
 
 The fixed 51,200-atom input is a 2 x 2 x 4 supercell. With the declared
 cutoff, Toolkit is expected to choose 1 × 1 × 2 ranks on two GPUs and

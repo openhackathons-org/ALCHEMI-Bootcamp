@@ -17,6 +17,7 @@ import torch
 
 from nvalchemi.data import AtomicData, Batch
 
+from .nci_atlas import reduce_fragment_energies
 from .nci_config import NCIValidationSettings
 
 
@@ -32,6 +33,46 @@ class NCIForceCheck:
     official_finite_difference_error_eV_A: float
     toolkit_force_eV_A: float
     toolkit_official_error_eV_A: float
+
+
+def check_nci_interaction_component_sum(
+    graph_index: pd.DataFrame,
+    pipeline_graph_energies_eV: Any,
+    component_graph_energies_eV: Any,
+    *,
+    atol_eV: float,
+) -> float:
+    """Compare pipeline and explicit-component ``AB - A - B`` energies.
+
+    Model construction and the explicit residual + Coulomb + D3 sum stay in
+    the notebook.  This helper applies the fragment reduction to both supplied
+    graph-energy vectors, requires agreement at the caller's explicit absolute
+    tolerance, and returns the maximum absolute interaction-energy difference.
+    """
+
+    tolerance = float(atol_eV)
+    if not np.isfinite(tolerance) or tolerance < 0.0:
+        raise ValueError("atol_eV must be finite and non-negative")
+    interactions = reduce_fragment_energies(
+        graph_index,
+        {
+            "pipeline": pipeline_graph_energies_eV,
+            "component_sum": component_graph_energies_eV,
+        },
+    )
+    if interactions.empty:
+        raise ValueError("graph_index must contain at least one AB/A/B group")
+    difference = np.abs(
+        interactions["pipeline"].to_numpy(dtype=float)
+        - interactions["component_sum"].to_numpy(dtype=float)
+    )
+    maximum = float(difference.max())
+    if maximum > tolerance:
+        raise AssertionError(
+            "pipeline and explicit component AB - A - B energies differ by "
+            f"{maximum:.6g} eV; allowed {tolerance:.6g} eV"
+        )
+    return maximum
 
 
 def _official_outputs(
@@ -212,5 +253,6 @@ __all__ = [
     "NCIForceCheck",
     "build_nci_force_check_table",
     "check_nci_force",
+    "check_nci_interaction_component_sum",
     "nci_force_check_record",
 ]

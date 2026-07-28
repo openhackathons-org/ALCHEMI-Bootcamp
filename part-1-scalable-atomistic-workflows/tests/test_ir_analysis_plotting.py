@@ -23,6 +23,8 @@ from aux import analysis  # noqa: E402
 from aux.analysis import (  # noqa: E402
     comparison_display_table,
     dimer_interaction_energy_table,
+    first_atomic_data_table,
+    first_model_result_tables,
     ir_comparison_table,
     ir_spectrum_metrics,
     topology_time_series,
@@ -258,6 +260,84 @@ def test_topology_timeline_and_dimer_energy_table() -> None:
         energy["D3_interaction_kJ_mol"],
         np.array([-0.12, -0.08]) * analysis.EV_PER_MOLECULE_TO_KJ_MOL,
     )
+
+
+def test_first_toolkit_call_tables_preserve_structure_and_model_results() -> None:
+    atomic_data = first_atomic_data_table(
+        num_atoms=3,
+        atomic_numbers=[8, 1, 1],
+        positions_shape=(3, 3),
+        cell=None,
+        positions_dtype="torch.float32",
+        device="cuda:0",
+    )
+    system, atoms = first_model_result_tables(
+        num_graphs=1,
+        energy_eV=-76.123456789,
+        symbols=["O", "H", "H"],
+        charges_e=[-0.8, 0.4, 0.4],
+        forces_eV_A=[
+            [0.0, 0.0, 1.25],
+            [0.1, -0.2, -0.625],
+            [-0.1, 0.2, -0.625],
+        ],
+    )
+
+    assert atomic_data["Field"].tolist() == [
+        "atoms",
+        "atomic numbers",
+        "positions shape",
+        "cell / PBC",
+        "dtype",
+        "device",
+    ]
+    atomic_fields = atomic_data.set_index("Field")["Value"]
+    assert atomic_fields["atomic numbers"] == [8, 1, 1]
+    assert atomic_fields["positions shape"] == (3, 3)
+    assert atomic_fields["cell / PBC"] == "none / nonperiodic"
+
+    assert system["System result"].tolist() == [
+        "Graphs",
+        "Energy / eV",
+        "Total predicted charge / e",
+    ]
+    system_values = system.set_index("System result")["Value"]
+    assert system_values["Graphs"] == 1
+    assert system_values["Energy / eV"] == pytest.approx(-76.123456789)
+    assert system_values["Total predicted charge / e"] == pytest.approx(0.0)
+
+    assert atoms.columns.tolist() == [
+        "atom",
+        "charge (e)",
+        "Fx (eV/Å)",
+        "Fy (eV/Å)",
+        "Fz (eV/Å)",
+        "|F| (eV/Å)",
+    ]
+    assert atoms["atom"].tolist() == ["O1", "H2", "H3"]
+    np.testing.assert_allclose(atoms["charge (e)"], [-0.8, 0.4, 0.4])
+    np.testing.assert_allclose(
+        atoms[["Fx (eV/Å)", "Fy (eV/Å)", "Fz (eV/Å)"]],
+        [
+            [0.0, 0.0, 1.25],
+            [0.1, -0.2, -0.625],
+            [-0.1, 0.2, -0.625],
+        ],
+    )
+    np.testing.assert_allclose(
+        atoms["|F| (eV/Å)"],
+        [1.25, np.sqrt(0.440625), np.sqrt(0.440625)],
+        atol=5.0e-7,
+    )
+
+    with pytest.raises(ValueError, match="forces_eV_A"):
+        first_model_result_tables(
+            num_graphs=1,
+            energy_eV=0.0,
+            symbols=["H"],
+            charges_e=[0.0],
+            forces_eV_A=[0.0, 0.0, 0.0],
+        )
 
 
 def _harmonic_comparison_table() -> pd.DataFrame:
