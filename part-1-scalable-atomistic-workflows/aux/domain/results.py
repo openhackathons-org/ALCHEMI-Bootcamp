@@ -1,9 +1,13 @@
-"""Read saved H100 domain-decomposition results for the Part 1 notebook.
+"""Read the short H100 domain-decomposition example used in Part 1.
 
-An absent result directory is represented explicitly as ``not reported``.
-An existing bundle is accepted only when its hashes, requested rows, hardware,
-settings, and retained failures all agree.  Failed rows stay in every
-learner-facing table; plot values are simply missing for failed measurements.
+The recorded example evaluates one unchanged 51,200-atom structure on one,
+two, and four H100 GPUs.  Each run partitions once, performs one untimed
+warmup, records three energy/force passes, and gathers once.  This module
+checks the saved files before it prepares the small tables shown to learners.
+
+Missing results are reported explicitly.  Existing results are never accepted
+partially: the three GPU counts, the output comparison, the charge diagnostic,
+and the small PME-versus-Ewald check must all be present and consistent.
 """
 
 from __future__ import annotations
@@ -23,59 +27,13 @@ import pandas as pd
 from .config import DOMAIN_METHODOLOGY
 
 
-BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v3"
+BUNDLE_SCHEMA = "alchemi.domain-decomposition-lesson.v5"
+RUNNER_SCHEMA = "alchemi.part1-domain-case.v5"
 MANIFEST_NAME = "manifest.json"
 CHECKSUM_INDEX_NAME = "SHA256SUMS"
 RAW_RESULTS_NAME = "raw-results.jsonl"
-TABLE_NAMES = ("capacity", "parity", "distributed")
+TABLE_NAMES = ("distributed",)
 
-CAPACITY_COLUMNS = (
-    "case_id",
-    "atom_count",
-    "molecules_per_species",
-    "gpus",
-    "success",
-    "status",
-    "failure_type",
-    "failure_stage",
-    "error",
-    "elapsed_s",
-    "peak_memory_bytes_max_rank",
-    "energy_ev",
-    "force_rms_ev_per_a",
-    "force_max_ev_per_a",
-    "structure_sha256",
-    "settings_sha256",
-    "measurement_role",
-    "measurement_kind",
-)
-PARITY_COLUMNS = (
-    "case_id",
-    "atom_count",
-    "force_reference_gpus",
-    "energy_reference_gpus",
-    "gpus",
-    "success",
-    "status",
-    "failure_type",
-    "failure_stage",
-    "error",
-    "one_gpu_energy_abs_offset_ev",
-    "one_gpu_energy_abs_offset_ev_per_atom",
-    "distributed_energy_difference_ev",
-    "distributed_energy_difference_ev_per_atom",
-    "force_rms_difference_ev_per_a",
-    "force_max_difference_ev_per_a",
-    "energy_tolerance_ev_per_atom",
-    "force_tolerance_ev_per_a",
-    "distributed_energy_passed",
-    "force_passed",
-    "parity_passed",
-    "structure_sha256",
-    "settings_sha256",
-    "measurement_role",
-    "measurement_kind",
-)
 DISTRIBUTED_COLUMNS = (
     "case_id",
     "atom_count",
@@ -88,267 +46,195 @@ DISTRIBUTED_COLUMNS = (
     "failure_type",
     "failure_stage",
     "error",
-    "elapsed_s",
     "warmup_count",
-    "sample_count",
-    "elapsed_samples_s",
-    "elapsed_median_s",
-    "elapsed_q1_s",
-    "elapsed_q3_s",
-    "elapsed_iqr_s",
+    "measured_pass_count",
+    "pass_times_s",
+    "median_s",
+    "min_s",
+    "max_s",
     "peak_memory_bytes_max_rank",
     "owned_atoms_min_rank",
     "owned_atoms_max_rank",
     "spatial_grid",
     "energy_ev",
+    "energy_ev_per_atom",
+    "comparison_energy_ev",
+    "comparison_energy_ev_per_atom",
+    "comparison_energy_statistic",
+    "energy_dtype",
     "force_rms_ev_per_a",
     "force_max_ev_per_a",
     "structure_sha256",
     "settings_sha256",
+    "input_tensor_sha256",
+    "positions_pbc_equivalent",
+    "max_minimum_image_displacement_a",
     "measurement_role",
     "measurement_kind",
 )
-TABLE_COLUMNS = {
-    "capacity": CAPACITY_COLUMNS,
-    "parity": PARITY_COLUMNS,
-    "distributed": DISTRIBUTED_COLUMNS,
-}
+
+PLOT_COLUMNS = (
+    "world_size",
+    "owned_atoms_min",
+    "owned_atoms_max",
+    "pass_1_s",
+    "pass_2_s",
+    "pass_3_s",
+    "median_time_s",
+)
 
 _HEX40 = re.compile(r"^[0-9a-f]{40}$")
 _HEX64 = re.compile(r"^[0-9a-f]{64}$")
 _H100 = re.compile(r"(?:^|[^A-Za-z0-9])H100(?:[^A-Za-z0-9]|$)", re.IGNORECASE)
-_PARITY_CASE_ID = re.compile(
-    r"^parity-pairs-(?P<pair_count>[0-9]{6})-gpus-(?P<gpus>[0-9]{2})$"
-)
-_DISTRIBUTED_CASE_ID = re.compile(
-    r"^(?P<kind>steady-timing|rescue)-pairs-(?P<pair_count>[0-9]{6})-"
-    r"gpus-(?P<gpus>[0-9]{2})$"
-)
-_OOM_TYPES = {"CUDAOutOfMemoryError", "OutOfMemoryError"}
-CHARGE_SUM_TOLERANCE_E = DOMAIN_METHODOLOGY.charge_sum_tolerance_e
-PME_EWALD_ENERGY_TOLERANCE_EV_PER_ATOM = (
-    DOMAIN_METHODOLOGY.pme_ewald_energy_tolerance_ev_per_atom
-)
-PME_EWALD_FORCE_TOLERANCE_EV_PER_A = (
-    DOMAIN_METHODOLOGY.pme_ewald_force_max_tolerance_ev_a
-)
-ATOMS_PER_COMPOSITION_UNIT = DOMAIN_METHODOLOGY.atoms_per_composition_unit
-ELECTROSTATICS_VALIDATION_ATOM_COUNT = (
+
+FIXED_PAIR_COUNT = DOMAIN_METHODOLOGY.fixed_molecules_per_species
+FIXED_ATOM_COUNT = FIXED_PAIR_COUNT * DOMAIN_METHODOLOGY.atoms_per_composition_unit
+ELECTROSTATICS_ATOM_COUNT = (
     DOMAIN_METHODOLOGY.electrostatics_validation_molecules_per_species
-    * ATOMS_PER_COMPOSITION_UNIT
+    * DOMAIN_METHODOLOGY.atoms_per_composition_unit
 )
-_REQUIRED_PARITY_GPUS = frozenset(DOMAIN_METHODOLOGY.distributed_world_sizes)
-_REQUIRED_STEADY_TIMING_GPUS = frozenset(
-    DOMAIN_METHODOLOGY.steady_timing_world_sizes
+ELECTROSTATICS_PAIRS = (
+    DOMAIN_METHODOLOGY.electrostatics_validation_molecules_per_species
 )
-_REQUIRED_RESCUE_GPUS = frozenset(DOMAIN_METHODOLOGY.distributed_world_sizes)
+REQUIRED_WORLD_SIZES = tuple(DOMAIN_METHODOLOGY.campaign_world_sizes)
+PASS_COUNT = DOMAIN_METHODOLOGY.evaluation_pass_count
+WARMUP_COUNT = DOMAIN_METHODOLOGY.evaluation_warmup_count
 
 
 class DomainLessonResultsError(ValueError):
-    """Raised when an existing result bundle is incomplete or inconsistent."""
+    """Raised when a saved result set is incomplete or inconsistent."""
 
 
 @dataclass(frozen=True)
 class DomainLessonView:
-    """Notebook-ready saved results, or an explicit not-reported state."""
+    """Checked, learner-ready domain-decomposition results."""
 
     available: bool
     reason: str
     root: Path
     manifest: Mapping[str, Any]
-    capacity_table: pd.DataFrame
+    run_settings_table: pd.DataFrame
+    layout_table: pd.DataFrame
+    timing_table: pd.DataFrame
+    output_agreement_table: pd.DataFrame
     charge_diagnostics_table: pd.DataFrame
     electrostatics_table: pd.DataFrame
-    parity_table: pd.DataFrame
     distributed_table: pd.DataFrame
     plot_data: pd.DataFrame
 
     @property
     def successful_case_count(self) -> int:
-        """Count successful saved cases across the three measurement tables."""
+        """Count successful fixed-input and electrostatics calculations."""
 
-        return sum(
-            int(success.sum())
-            for success in (
-                self.capacity_table["success"].eq(True),
-                self.parity_table["passed"].eq(True),
-                self.distributed_table["success"].eq(True),
-            )
-        )
+        if not self.available:
+            return 0
+        fixed = int(self.distributed_table["success"].eq(True).sum())
+        electrostatics = int(self.electrostatics_table["passed"].eq(True).sum())
+        return fixed + electrostatics
 
     @property
     def failed_case_count(self) -> int:
-        """Count failed saved cases across the three measurement tables."""
+        """Count checked failures retained in the learner tables."""
 
-        return sum(
-            int(failed.sum())
-            for failed in (
-                self.capacity_table["success"].eq(False),
-                self.parity_table["passed"].eq(False),
-                self.distributed_table["success"].eq(False),
-            )
-        )
+        if not self.available:
+            return 0
+        fixed = int(self.distributed_table["success"].eq(False).sum())
+        electrostatics = int(self.electrostatics_table["passed"].eq(False).sum())
+        return fixed + electrostatics
 
     @property
     def measured_max_atom_count(self) -> int | None:
-        """Return the largest measured case, or ``None`` when results are absent."""
+        """Return the fixed recorded atom count when results are available."""
 
-        if not self.available:
-            return None
-        atom_counts = pd.concat(
-            [
-                table["atom_count"]
-                for table in (
-                    self.capacity_table,
-                    self.parity_table,
-                    self.distributed_table,
-                )
-                if not table.empty
-            ],
-            ignore_index=True,
-        )
-        return int(atom_counts.max())
-
-    @property
-    def takeaway(self) -> dict[str, Any]:
-        """Return the small set of conclusions shown below the recorded plots."""
-
-        if not self.available:
-            raise DomainLessonResultsError(
-                "recorded domain-decomposition results are not available"
-            )
-
-        successful_capacity = self.capacity_table.loc[
-            self.capacity_table["success"].eq(True)
-        ]
-        oom_capacity = self.capacity_table.loc[
-            self.capacity_table["success"].eq(False)
-            & self.capacity_table["failure_type"]
-            .astype(str)
-            .str.contains("OutOfMemory", case=False, na=False)
-        ].sort_values("atom_count")
-        if successful_capacity.empty or oom_capacity.empty:
-            raise DomainLessonResultsError(
-                "recorded capacity results need a success and a CUDA OOM"
-            )
-
-        first_oom_atoms = int(oom_capacity.iloc[0]["atom_count"])
-        rescue_rows = self.distributed_table.loc[
-            self.distributed_table["atom_count"].eq(first_oom_atoms)
-            & self.distributed_table["world_size"].gt(1)
-        ]
-        rescue_gpu_counts = tuple(
-            sorted(
-                int(value)
-                for value in rescue_rows.loc[
-                    rescue_rows["success"].eq(True), "world_size"
-                ]
-            )
-        )
-
-        scaling_rows = self.distributed_table.loc[
-            self.distributed_table["world_size"].gt(1)
-            & self.distributed_table["speedup_vs_1gpu"].notna()
-        ].sort_values("world_size")
-        speedup_by_gpu = tuple(
-            (int(row.world_size), float(row.speedup_vs_1gpu))
-            for row in scaling_rows.itertuples(index=False)
-        )
-        parallel_efficiency_by_gpu = tuple(
-            (int(row.world_size), float(row.parallel_efficiency))
-            for row in scaling_rows.itertuples(index=False)
-        )
-        energy_comparison_rows = self.parity_table.loc[
-            self.parity_table["world_size"].isin(
-                DOMAIN_METHODOLOGY.energy_comparison_world_sizes
-            )
-        ]
-
-        return {
-            "largest_successful_single_gpu_atoms": int(
-                successful_capacity["atom_count"].max()
-            ),
-            "first_single_gpu_oom_atoms": first_oom_atoms,
-            "rescue_successful_gpu_counts": rescue_gpu_counts,
-            "all_one_gpu_force_checks_passed": bool(
-                self.parity_table["force_passed"].eq(True).all()
-            ),
-            "all_distributed_energy_checks_passed": bool(
-                energy_comparison_rows["distributed_energy_passed"].eq(True).all()
-            ),
-            "timed_one_gpu_force_checks_passed": True,
-            "timed_distributed_energy_checks_passed": True,
-            "rescue_output_comparison_count": max(
-                len(rescue_rows.loc[rescue_rows["success"].eq(True)]) - 1,
-                0,
-            ),
-            "speedup_by_gpu": speedup_by_gpu,
-            "parallel_efficiency_by_gpu": parallel_efficiency_by_gpu,
-        }
+        return FIXED_ATOM_COUNT if self.available else None
 
     @property
     def bundle_record(self) -> dict[str, str] | None:
-        """Return compact file identities for the verified saved result set."""
+        """Return compact file and source identities for notebook metadata."""
 
         if not self.available:
             return None
-        source = self.manifest["identity"]["source"]
+        source = self.manifest["source"]
         return {
             "created_utc": str(self.manifest["created_utc"]),
             "manifest_sha256": _sha256_file(self.root / MANIFEST_NAME),
             "raw_results_sha256": _sha256_file(self.root / RAW_RESULTS_NAME),
             "checksum_index_sha256": _sha256_file(self.root / CHECKSUM_INDEX_NAME),
-            "repository_commit": str(source["repository_commit"]),
+            "repository_commit": str(source["tutorial_commit"]),
         }
 
     @property
     def recorded_run_table(self) -> pd.DataFrame:
-        """Identify the saved run without exposing the full manifest."""
+        """Identify the saved run without showing the full manifest."""
 
         if not self.available:
             return pd.DataFrame(columns=("Recorded result set",))
-        identity = self.manifest["identity"]
-        source = identity["source"]
-        hardware = identity["hardware"]
-        gpu_counts = sorted(
-            set(self.distributed_table["world_size"].astype(int).tolist())
-        )
+        source = self.manifest["source"]
+        hardware = self.manifest["hardware"]
+        counts = ", ".join(f"{count} / {count}" for count in REQUIRED_WORLD_SIZES)
         return pd.Series(
             {
                 "Bundle created (UTC)": self.manifest["created_utc"],
                 "Site": hardware["site"],
                 "GPU": hardware["gpu_model"],
                 "Interconnect": hardware["interconnect"],
-                "Measured nodes / GPUs": ", ".join(
-                    f"{count} / {count}" for count in gpu_counts
-                ),
+                "Measured nodes / GPUs": counts,
                 "Toolkit version": source["toolkit_version"],
-                "Toolkit Core commit": source["toolkit_commit"],
+                "Toolkit Core commit": source["toolkit_core_commit"],
                 "Toolkit-Ops commit": source["toolkit_ops_commit"],
-                "Tutorial commit": source["repository_commit"],
+                "Tutorial commit": source["tutorial_commit"],
             },
             name="Recorded result set",
         ).to_frame()
 
     @property
-    def failed_table(self) -> pd.DataFrame:
-        """Return every measured failure without dropping its source table."""
+    def takeaway(self) -> dict[str, Any]:
+        """Return only conclusions supported by this short recorded example."""
 
-        failures: list[pd.DataFrame] = []
-        for table_name, table in (
-            ("capacity", self.capacity_table),
-            ("parity", self.parity_table),
-            ("distributed", self.distributed_table),
-        ):
-            if "success" not in table or table.empty:
-                continue
-            selected = table.loc[table["success"].eq(False)].copy()
-            if not selected.empty:
-                selected.insert(0, "table", table_name)
-                failures.append(selected)
-        if not failures:
-            return pd.DataFrame(columns=("table", "case_id", "failure_type", "error"))
-        return pd.concat(failures, ignore_index=True, sort=False)
+        if not self.available:
+            raise DomainLessonResultsError(
+                "recorded domain-decomposition results are not available"
+            )
+        timings = self.timing_table.set_index("world_size")
+        agreement = self.output_agreement_table
+        return {
+            "fixed_atom_count": FIXED_ATOM_COUNT,
+            "world_sizes": REQUIRED_WORLD_SIZES,
+            "all_fixed_evaluations_succeeded": bool(
+                self.distributed_table["success"].eq(True).all()
+            ),
+            "positions_pbc_equivalent": bool(
+                self.distributed_table["positions_pbc_equivalent"].eq(True).all()
+            ),
+            "max_minimum_image_displacement_a": float(
+                self.distributed_table["max_minimum_image_displacement_a"].max()
+            ),
+            "all_output_checks_passed": bool(agreement["passed"].eq(True).all()),
+            "speedup_by_gpu": tuple(
+                (int(world_size), float(timings.loc[world_size, "speedup_vs_1gpu"]))
+                for world_size in REQUIRED_WORLD_SIZES[1:]
+            ),
+            "parallel_efficiency_by_gpu": tuple(
+                (
+                    int(world_size),
+                    float(timings.loc[world_size, "parallel_efficiency"]),
+                )
+                for world_size in REQUIRED_WORLD_SIZES[1:]
+            ),
+        }
+
+    @property
+    def failed_table(self) -> pd.DataFrame:
+        """Return any retained failure rows."""
+
+        if not self.available:
+            return pd.DataFrame(
+                columns=("case_id", "failure_type", "failure_stage", "error")
+            )
+        return self.distributed_table.loc[
+            self.distributed_table["success"].eq(False),
+            ("case_id", "failure_type", "failure_stage", "error"),
+        ].reset_index(drop=True)
 
 
 def _sha256_file(path: Path) -> str:
@@ -372,77 +258,71 @@ def canonical_json_sha256(value: Any) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
-def _not_reported(
-    root: Path,
-    planned_atom_counts: tuple[int, ...],
-    reason: str,
-    manifest: Mapping[str, Any] | None = None,
-) -> DomainLessonView:
-    raw_capacity = pd.DataFrame(
-        [
-            {
-                "case_id": f"planned-{atoms}",
-                "atom_count": atoms,
-                "success": pd.NA,
-                "status": "not reported",
-                "failure_type": "",
-                "failure_stage": "",
-                "error": reason,
-                "measurement_role": "capacity",
-                "measurement_kind": "not reported",
-            }
-            for atoms in planned_atom_counts
-        ],
-        columns=CAPACITY_COLUMNS,
-    )
-    raw_parity = pd.DataFrame(columns=PARITY_COLUMNS)
-    raw_distributed = pd.DataFrame(columns=DISTRIBUTED_COLUMNS)
-    plot_data = _plot_data(raw_capacity, raw_distributed)
+def _empty_view(root: Path, reason: str) -> DomainLessonView:
     return DomainLessonView(
         available=False,
         reason=reason,
         root=root,
-        manifest={} if manifest is None else manifest,
-        capacity_table=_capacity_view(raw_capacity),
-        charge_diagnostics_table=_charge_diagnostics_view(()),
-        electrostatics_table=_electrostatics_view(None),
-        parity_table=_parity_view(raw_parity),
-        distributed_table=_distributed_view(raw_distributed),
-        plot_data=plot_data,
+        manifest={},
+        run_settings_table=pd.DataFrame(columns=("setting", "value")),
+        layout_table=pd.DataFrame(
+            columns=(
+                "world_size",
+                "nodes",
+                "ranks",
+                "spatial_grid",
+                "owned_atoms_min",
+                "owned_atoms_max",
+            )
+        ),
+        timing_table=pd.DataFrame(
+            columns=(
+                "world_size",
+                "pass_1_s",
+                "pass_2_s",
+                "pass_3_s",
+                "median_time_s",
+                "speedup_vs_1gpu",
+                "parallel_efficiency",
+            )
+        ),
+        output_agreement_table=pd.DataFrame(
+            columns=(
+                "world_size",
+                "one_gpu_energy_offset_meV_atom",
+                "one_gpu_energy_offset_is_diagnostic",
+                "energy_statistic",
+                "energy_dtype",
+                "energy_repeatability_span_meV_atom",
+                "energy_repeatability_tolerance_meV_atom",
+                "energy_repeatability_check_required",
+                "energy_repeatability_passed",
+                "energy_reference_world_size",
+                "energy_difference_meV_atom",
+                "energy_check_required",
+                "force_reference_world_size",
+                "force_rms_error_eV_A",
+                "force_max_error_eV_A",
+                "energy_passed",
+                "force_passed",
+                "passed",
+            )
+        ),
+        charge_diagnostics_table=pd.DataFrame(
+            columns=(
+                "atom_count",
+                "dtype",
+                "target_sum_e",
+                "charge_sum_e",
+                "residual_e",
+                "abs_residual_per_atom_e",
+                "finite",
+            )
+        ),
+        electrostatics_table=pd.DataFrame(),
+        distributed_table=pd.DataFrame(columns=DISTRIBUTED_COLUMNS),
+        plot_data=pd.DataFrame(columns=PLOT_COLUMNS),
     )
-
-
-def _planned_counts(values: Sequence[int]) -> tuple[int, ...]:
-    counts: list[int] = []
-    for value in values:
-        if isinstance(value, bool):
-            raise ValueError("planned_atom_counts must contain positive integers")
-        try:
-            count = int(value)
-            unchanged = float(value) == count
-        except (TypeError, ValueError) as exc:
-            raise ValueError(
-                "planned_atom_counts must contain positive integers"
-            ) from exc
-        if count <= 0 or not unchanged:
-            raise ValueError("planned_atom_counts must contain positive integers")
-        counts.append(count)
-    if not counts or len(set(counts)) != len(counts):
-        raise ValueError("planned_atom_counts must be nonempty and unique")
-    return tuple(counts)
-
-
-def _positive_integer(value: Any, *, name: str) -> int:
-    if isinstance(value, bool):
-        raise ValueError(f"{name} must be a positive integer")
-    try:
-        integer = int(value)
-        unchanged = float(value) == integer
-    except (TypeError, ValueError) as exc:
-        raise ValueError(f"{name} must be a positive integer") from exc
-    if integer <= 0 or not unchanged:
-        raise ValueError(f"{name} must be a positive integer")
-    return integer
 
 
 def _require_mapping(
@@ -468,13 +348,45 @@ def _require_keys(
         raise DomainLessonResultsError(f"{context} is missing {sorted(missing)!r}")
 
 
+def _require_sha256(value: Any, *, name: str) -> str:
+    digest = str(value)
+    if not _HEX64.fullmatch(digest):
+        raise DomainLessonResultsError(f"{name} must be a SHA-256")
+    return digest
+
+
+def _positive_integer(value: Any, *, name: str) -> int:
+    if isinstance(value, bool):
+        raise DomainLessonResultsError(f"{name} must be a positive integer")
+    try:
+        integer = int(value)
+        unchanged = float(value) == integer
+    except (TypeError, ValueError) as exc:
+        raise DomainLessonResultsError(f"{name} must be a positive integer") from exc
+    if integer <= 0 or not unchanged:
+        raise DomainLessonResultsError(f"{name} must be a positive integer")
+    return integer
+
+
+def _finite_number(value: Any, *, name: str) -> float:
+    if isinstance(value, bool):
+        raise DomainLessonResultsError(f"{name} must be finite")
+    try:
+        number = float(value)
+    except (TypeError, ValueError) as exc:
+        raise DomainLessonResultsError(f"{name} must be finite") from exc
+    if not math.isfinite(number):
+        raise DomainLessonResultsError(f"{name} must be finite")
+    return number
+
+
 def _read_checksum_index(root: Path) -> dict[str, str]:
-    index_path = root / CHECKSUM_INDEX_NAME
-    if not index_path.is_file():
+    path = root / CHECKSUM_INDEX_NAME
+    if not path.is_file():
         raise DomainLessonResultsError(f"missing {CHECKSUM_INDEX_NAME}")
     checksums: dict[str, str] = {}
     for line_number, raw in enumerate(
-        index_path.read_text(encoding="utf-8").splitlines(),
+        path.read_text(encoding="utf-8").splitlines(),
         start=1,
     ):
         if not raw.strip():
@@ -486,7 +398,9 @@ def _read_checksum_index(root: Path) -> dict[str, str]:
             )
         relative = PurePosixPath(parts[1].removeprefix("*"))
         if relative.is_absolute() or ".." in relative.parts:
-            raise DomainLessonResultsError("checksum path must stay inside the bundle")
+            raise DomainLessonResultsError(
+                "checksum paths must stay inside the result directory"
+            )
         name = relative.as_posix()
         if name in checksums:
             raise DomainLessonResultsError(f"duplicate checksum entry for {name}")
@@ -494,44 +408,621 @@ def _read_checksum_index(root: Path) -> dict[str, str]:
     return checksums
 
 
-def _validate_file(root: Path, relative_name: str, expected_sha256: str) -> Path:
+def _checked_file(
+    root: Path,
+    relative_name: str,
+    expected_sha256: str,
+) -> Path:
     relative = PurePosixPath(relative_name)
     if relative.is_absolute() or ".." in relative.parts:
-        raise DomainLessonResultsError("data path must stay inside the bundle")
-    if not _HEX64.fullmatch(str(expected_sha256)):
-        raise DomainLessonResultsError(f"invalid SHA-256 for {relative_name}")
+        raise DomainLessonResultsError(
+            "saved file paths must stay inside the result directory"
+        )
+    expected = _require_sha256(expected_sha256, name=relative_name)
     path = root.joinpath(*relative.parts)
     try:
         path.resolve().relative_to(root.resolve())
     except ValueError as exc:
-        raise DomainLessonResultsError("data path must stay inside the bundle") from exc
+        raise DomainLessonResultsError(
+            "saved file paths must stay inside the result directory"
+        ) from exc
     if not path.is_file():
-        raise DomainLessonResultsError(f"missing data file {relative_name}")
+        raise DomainLessonResultsError(f"missing saved file {relative_name}")
     observed = _sha256_file(path)
-    if observed != expected_sha256:
+    if observed != expected:
         raise DomainLessonResultsError(
             f"SHA-256 mismatch for {relative_name}: {observed}"
         )
     return path
 
 
-def _reject_absolute_json_paths(value: Any, *, context: str) -> None:
-    """Reject direct host-path references in portable JSON records."""
-
+def _reject_host_paths(value: Any, *, context: str) -> None:
     if isinstance(value, Mapping):
         for key, item in value.items():
-            _reject_absolute_json_paths(item, context=f"{context}.{key}")
+            _reject_host_paths(item, context=f"{context}.{key}")
         return
     if isinstance(value, list):
         for index, item in enumerate(value):
-            _reject_absolute_json_paths(item, context=f"{context}[{index}]")
+            _reject_host_paths(item, context=f"{context}[{index}]")
         return
     if isinstance(value, str):
-        is_windows_path = re.match(r"^[A-Za-z]:[\\/]", value) is not None
-        if PurePosixPath(value).is_absolute() or is_windows_path:
+        windows_path = re.match(r"^[A-Za-z]:[\\/]", value) is not None
+        if PurePosixPath(value).is_absolute() or windows_path:
             raise DomainLessonResultsError(
-                f"{context} contains a host path; bundle references must be relative"
+                f"{context} contains a host path; saved paths must be relative"
             )
+
+
+def _validate_identity(
+    manifest: Mapping[str, Any],
+) -> tuple[str, Mapping[str, Any], str]:
+    """Check the saved source, method, fixed input, execution, and hardware."""
+
+    source = _require_mapping(manifest, "source", context="manifest")
+    _require_keys(
+        source,
+        (
+            "tutorial_commit",
+            "toolkit_core_commit",
+            "toolkit_ops_commit",
+            "toolkit_version",
+            "nci_subset_sha256",
+            "aimnet_checkpoint",
+            "aimnet_checkpoint_sha256",
+            "d3_parameter_sha256",
+        ),
+        context="manifest.source",
+    )
+    for name in ("tutorial_commit", "toolkit_core_commit", "toolkit_ops_commit"):
+        if not _HEX40.fullmatch(str(source[name])):
+            raise DomainLessonResultsError(
+                f"manifest.source.{name} must be a 40-digit SHA"
+            )
+    for name in (
+        "nci_subset_sha256",
+        "aimnet_checkpoint_sha256",
+        "d3_parameter_sha256",
+    ):
+        _require_sha256(source[name], name=f"manifest.source.{name}")
+    if (
+        not str(source["toolkit_version"]).strip()
+        or not str(source["aimnet_checkpoint"]).strip()
+    ):
+        raise DomainLessonResultsError(
+            "Toolkit version and AIMNet2 checkpoint must be reported"
+        )
+
+    expected_config_hash = _sha256_file(Path(__file__).with_name("config.py"))
+    expected_values = json.loads(
+        json.dumps(
+            DOMAIN_METHODOLOGY.resolved_values(json_compatible=True),
+            allow_nan=False,
+        )
+    )
+    methodology = _require_mapping(manifest, "methodology", context="manifest")
+    _require_keys(
+        methodology,
+        ("schema", "name", "version", "path", "sha256"),
+        context="manifest.methodology",
+    )
+    if (
+        methodology["schema"] != DOMAIN_METHODOLOGY.schema
+        or methodology["name"] != DOMAIN_METHODOLOGY.name
+        or methodology["version"] != DOMAIN_METHODOLOGY.version
+        or methodology["sha256"] != expected_config_hash
+    ):
+        raise DomainLessonResultsError(
+            "saved results do not use the current domain methodology"
+        )
+    if (
+        methodology["path"]
+        != "part-1-scalable-atomistic-workflows/aux/domain/config.py"
+    ):
+        raise DomainLessonResultsError("manifest methodology path is incorrect")
+
+    hardware = _require_mapping(manifest, "hardware", context="manifest")
+    _require_keys(
+        hardware,
+        (
+            "site",
+            "gpu_model",
+            "gpu_memory_bytes",
+            "gpus_available",
+            "nodes_available",
+            "driver_version",
+            "cuda_version",
+            "interconnect",
+            "site_source",
+            "resource_count_source",
+            "interconnect_source",
+            "observed_gpus_by_job",
+            "observed_nodes_by_job",
+        ),
+        context="manifest.hardware",
+    )
+    if not _H100.search(str(hardware["gpu_model"])):
+        raise DomainLessonResultsError("recorded results must identify H100 GPUs")
+    for name in ("gpu_memory_bytes", "gpus_available", "nodes_available"):
+        _positive_integer(
+            hardware[name],
+            name=f"manifest.hardware.{name}",
+        )
+    if int(hardware["gpus_available"]) < max(REQUIRED_WORLD_SIZES):
+        raise DomainLessonResultsError(
+            "hardware identity reports fewer GPUs than the saved runs use"
+        )
+    if int(hardware["nodes_available"]) < max(REQUIRED_WORLD_SIZES):
+        raise DomainLessonResultsError(
+            "hardware identity reports fewer nodes than the saved runs use"
+        )
+    for name in ("site", "driver_version", "cuda_version", "interconnect"):
+        if not str(hardware[name]).strip():
+            raise DomainLessonResultsError(f"manifest.hardware.{name} must be reported")
+    expected_counts = {str(value): value for value in REQUIRED_WORLD_SIZES}
+    if (
+        hardware["site_source"] != "operator-declared"
+        or hardware["resource_count_source"]
+        != "derived from successful per-rank runtime records"
+        or hardware["interconnect_source"]
+        != "operator-declared; raw GPU topology is retained"
+        or hardware["observed_gpus_by_job"] != expected_counts
+        or hardware["observed_nodes_by_job"] != expected_counts
+    ):
+        raise DomainLessonResultsError(
+            "manifest hardware sources or observed per-job counts are incorrect"
+        )
+
+    settings = _require_mapping(manifest, "settings", context="manifest")
+    _require_keys(
+        settings,
+        ("methodology", "model", "input_structure_sha256"),
+        context="manifest.settings",
+    )
+    if settings["methodology"] != expected_values:
+        raise DomainLessonResultsError(
+            "saved settings do not use the current domain methodology"
+        )
+    settings_sha256 = _require_sha256(
+        manifest.get("settings_sha256"),
+        name="manifest.settings_sha256",
+    )
+    if settings_sha256 != canonical_json_sha256(settings):
+        raise DomainLessonResultsError(
+            "manifest settings hash does not match its settings"
+        )
+    structure_sha256 = _require_sha256(
+        settings["input_structure_sha256"],
+        name="manifest.settings.input_structure_sha256",
+    )
+
+    model = _require_mapping(settings, "model", context="manifest.settings")
+    _require_keys(
+        model,
+        (
+            "aimnet_checkpoint",
+            "aimnet_compile_model",
+            "pme_cutoff_a",
+            "pme_mesh_safety_factor",
+            "pme_spline_order",
+            "pme_accuracy",
+            "ewald_reference_accuracy",
+            "d3_cutoff_a",
+            "d3_smoothing_fraction",
+            "d3_parameters",
+            "neighbor_adaptation",
+            "pipeline_groups",
+            "position_invariance",
+        ),
+        context="manifest.settings.model",
+    )
+    expected_model_values = {
+        "aimnet_checkpoint": source["aimnet_checkpoint"],
+        "aimnet_compile_model": False,
+        "pme_cutoff_a": DOMAIN_METHODOLOGY.pme_realspace_cutoff_a,
+        "pme_mesh_safety_factor": DOMAIN_METHODOLOGY.pme_mesh_safety_factor,
+        "pme_spline_order": DOMAIN_METHODOLOGY.pme_spline_order,
+        "pme_accuracy": DOMAIN_METHODOLOGY.pme_accuracy,
+        "ewald_reference_accuracy": DOMAIN_METHODOLOGY.ewald_reference_accuracy,
+        "d3_cutoff_a": DOMAIN_METHODOLOGY.d3_cutoff_a,
+        "d3_smoothing_fraction": DOMAIN_METHODOLOGY.d3_smoothing_fraction,
+        "d3_parameters": "read from AIMNet2 checkpoint metadata",
+        "neighbor_adaptation": "never",
+        "pipeline_groups": [
+            {
+                "steps": ["AIMNet2Wrapper", "PMEModelWrapper"],
+                "use_autograd": True,
+            },
+            {
+                "steps": ["DFTD3ModelWrapper"],
+                "use_autograd": False,
+            },
+        ],
+        "position_invariance": {
+            "method": "maximum_minimum_image_displacement",
+            "tolerance_a": (DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a),
+        },
+    }
+    if dict(model) != expected_model_values:
+        raise DomainLessonResultsError(
+            "saved model settings differ from the current methodology"
+        )
+
+    input_record = _require_mapping(manifest, "input", context="manifest")
+    _require_keys(
+        input_record,
+        ("molecules_per_species", "atom_count", "structure_sha256"),
+        context="manifest.input",
+    )
+    if (
+        input_record["molecules_per_species"] != FIXED_PAIR_COUNT
+        or input_record["atom_count"] != FIXED_ATOM_COUNT
+        or input_record["structure_sha256"] != structure_sha256
+    ):
+        raise DomainLessonResultsError(
+            "manifest input is not the configured fixed 51,200-atom structure"
+        )
+
+    execution = _require_mapping(manifest, "execution", context="manifest")
+    _require_keys(
+        execution,
+        (
+            "gpu_counts",
+            "warmup_count",
+            "measured_pass_count",
+            "work_per_measured_pass",
+            "publishable_benchmark",
+            "observed_speedup",
+            "parallel_efficiency",
+        ),
+        context="manifest.execution",
+    )
+    if (
+        execution["gpu_counts"] != list(REQUIRED_WORLD_SIZES)
+        or execution["warmup_count"] != WARMUP_COUNT
+        or execution["measured_pass_count"] != PASS_COUNT
+        or execution["work_per_measured_pass"]
+        != "one fixed-structure energy-and-force evaluation"
+        or execution["publishable_benchmark"] is not False
+    ):
+        raise DomainLessonResultsError(
+            "manifest execution does not describe the declared few-pass method"
+        )
+    expected_world_keys = {str(value) for value in REQUIRED_WORLD_SIZES}
+    for name in ("observed_speedup", "parallel_efficiency"):
+        values = execution[name]
+        if not isinstance(values, Mapping) or set(values) != expected_world_keys:
+            raise DomainLessonResultsError(
+                f"manifest.execution.{name} must cover 1, 2, and 4 GPUs"
+            )
+        for world, value in values.items():
+            if (
+                _finite_number(
+                    value,
+                    name=f"manifest.execution.{name}.{world}",
+                )
+                <= 0.0
+            ):
+                raise DomainLessonResultsError(
+                    f"manifest.execution.{name}.{world} must be positive"
+                )
+    return settings_sha256, source, structure_sha256
+
+
+def _read_table(
+    root: Path,
+    manifest: Mapping[str, Any],
+    checksums: Mapping[str, str],
+) -> pd.DataFrame:
+    files = _require_mapping(manifest, "files", context="manifest")
+    metadata = _require_mapping(files, "distributed.csv", context="manifest.files")
+    _require_keys(
+        metadata,
+        ("sha256", "size_bytes"),
+        context="manifest.files.distributed.csv",
+    )
+    filename = "distributed.csv"
+    expected_sha256 = _require_sha256(
+        metadata["sha256"],
+        name="manifest.files.distributed.csv.sha256",
+    )
+    if checksums.get(filename) != expected_sha256:
+        raise DomainLessonResultsError(
+            "distributed.csv checksum index and manifest disagree"
+        )
+    path = _checked_file(root, filename, expected_sha256)
+    expected_size = _positive_integer(
+        metadata["size_bytes"],
+        name="manifest.files.distributed.csv.size_bytes",
+    )
+    if path.stat().st_size != expected_size:
+        raise DomainLessonResultsError(
+            "distributed.csv size does not match the manifest"
+        )
+    table = pd.read_csv(path, keep_default_na=False)
+    if tuple(table.columns) != DISTRIBUTED_COLUMNS:
+        raise DomainLessonResultsError(
+            "distributed CSV columns do not match the v5 schema"
+        )
+    case_ids = table["case_id"].astype(str).tolist()
+    if len(table) != len(REQUIRED_WORLD_SIZES) or len(set(case_ids)) != len(case_ids):
+        raise DomainLessonResultsError(
+            "distributed.csv must contain one unique 1/2/4-GPU row"
+        )
+    return table
+
+
+def _coerce_bool(series: pd.Series, *, name: str) -> pd.Series:
+    values: list[bool] = []
+    for value in series:
+        if isinstance(value, (bool, np.bool_)):
+            values.append(bool(value))
+        elif str(value).strip().lower() == "true":
+            values.append(True)
+        elif str(value).strip().lower() == "false":
+            values.append(False)
+        else:
+            raise DomainLessonResultsError(f"{name} must be boolean")
+    return pd.Series(values, index=series.index, dtype=bool)
+
+
+def _parse_pass_times(value: Any, *, context: str) -> tuple[float, float, float]:
+    try:
+        raw = json.loads(str(value))
+    except json.JSONDecodeError as exc:
+        raise DomainLessonResultsError(f"{context} must contain a JSON list") from exc
+    if not isinstance(raw, list) or len(raw) != PASS_COUNT:
+        raise DomainLessonResultsError(
+            f"{context} must contain exactly {PASS_COUNT} pass times"
+        )
+    values = tuple(_finite_number(item, name=context) for item in raw)
+    if any(item <= 0.0 for item in values):
+        raise DomainLessonResultsError(f"{context} values must be positive")
+    return values  # type: ignore[return-value]
+
+
+def _validate_table(
+    table: pd.DataFrame,
+    *,
+    settings_sha256: str,
+    structure_sha256: str,
+) -> dict[int, tuple[float, float, float]]:
+    table["success"] = _coerce_bool(table["success"], name="distributed.success")
+    table["positions_pbc_equivalent"] = _coerce_bool(
+        table["positions_pbc_equivalent"],
+        name="distributed.positions_pbc_equivalent",
+    )
+    if not table["success"].eq(True).all():
+        raise DomainLessonResultsError(
+            "all three fixed-input GPU evaluations must succeed"
+        )
+    if not table["status"].astype(str).eq("complete").all():
+        raise DomainLessonResultsError(
+            "successful fixed-input rows must have status complete"
+        )
+    for name in ("failure_type", "failure_stage", "error"):
+        if table[name].astype(str).str.strip().ne("").any():
+            raise DomainLessonResultsError(
+                f"successful fixed-input rows must leave {name} empty"
+            )
+    if not table["measurement_role"].astype(str).eq("fixed_evaluation").all():
+        raise DomainLessonResultsError(
+            "distributed rows must use the fixed_evaluation role"
+        )
+    if (
+        not table["measurement_kind"]
+        .astype(str)
+        .eq("fixed_structure_energy_force_pass")
+        .all()
+    ):
+        raise DomainLessonResultsError(
+            "distributed rows have the wrong measurement kind"
+        )
+    if not table["settings_sha256"].astype(str).eq(settings_sha256).all():
+        raise DomainLessonResultsError(
+            "distributed settings do not match the manifest identity"
+        )
+    if not table["structure_sha256"].astype(str).eq(structure_sha256).all():
+        raise DomainLessonResultsError(
+            "distributed rows do not use the fixed input structure"
+        )
+    for value in table["input_tensor_sha256"]:
+        _require_sha256(value, name="distributed.input_tensor_sha256")
+    if table["input_tensor_sha256"].astype(str).nunique() != 1:
+        raise DomainLessonResultsError(
+            "the 1/2/4-GPU rows do not use the same input tensor"
+        )
+    if not table["positions_pbc_equivalent"].eq(True).all():
+        raise DomainLessonResultsError(
+            "a fixed-input evaluation is not PBC-equivalent to its input"
+        )
+    displacement = np.array(
+        [
+            _finite_number(
+                value,
+                name="distributed.max_minimum_image_displacement_a",
+            )
+            for value in table["max_minimum_image_displacement_a"]
+        ]
+    )
+    if np.any(displacement < 0.0) or np.any(
+        displacement > DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
+    ):
+        raise DomainLessonResultsError(
+            "a fixed-input evaluation exceeds the minimum-image position tolerance"
+        )
+    table["max_minimum_image_displacement_a"] = displacement
+
+    integer_columns = (
+        "atom_count",
+        "molecules_per_species",
+        "nodes",
+        "gpus",
+        "ranks",
+        "warmup_count",
+        "measured_pass_count",
+        "peak_memory_bytes_max_rank",
+        "owned_atoms_min_rank",
+        "owned_atoms_max_rank",
+    )
+    for name in integer_columns:
+        values = pd.to_numeric(table[name], errors="coerce").to_numpy(dtype=float)
+        if (
+            not np.isfinite(values).all()
+            or not np.equal(values, np.rint(values)).all()
+            or np.any(values <= 0)
+        ):
+            raise DomainLessonResultsError(
+                f"distributed.{name} must contain positive integers"
+            )
+        table[name] = values.astype(np.int64)
+    if not table["atom_count"].eq(FIXED_ATOM_COUNT).all():
+        raise DomainLessonResultsError(
+            f"every fixed-input row must contain {FIXED_ATOM_COUNT} atoms"
+        )
+    if not table["molecules_per_species"].eq(FIXED_PAIR_COUNT).all():
+        raise DomainLessonResultsError(
+            f"every fixed-input row must contain {FIXED_PAIR_COUNT} molecule pairs"
+        )
+    if not (table["nodes"].eq(table["gpus"]) & table["gpus"].eq(table["ranks"])).all():
+        raise DomainLessonResultsError(
+            "fixed-input rows must satisfy nodes == gpus == ranks"
+        )
+    observed_worlds = tuple(sorted(table["gpus"].astype(int).tolist()))
+    if observed_worlds != REQUIRED_WORLD_SIZES:
+        raise DomainLessonResultsError(
+            "fixed-input results require exactly the declared 1/2/4-GPU rows"
+        )
+    if not table["warmup_count"].eq(WARMUP_COUNT).all():
+        raise DomainLessonResultsError("fixed-input rows have the wrong warmup count")
+    if not table["measured_pass_count"].eq(PASS_COUNT).all():
+        raise DomainLessonResultsError(
+            "fixed-input rows have the wrong measured pass count"
+        )
+    if not (
+        table["comparison_energy_statistic"]
+        .astype(str)
+        .eq("median_of_three_measured_passes")
+        .all()
+    ):
+        raise DomainLessonResultsError(
+            "distributed rows have the wrong comparison energy statistic"
+        )
+    energy_dtypes = table["energy_dtype"].astype(str)
+    expected_energy_dtypes = (
+        table["gpus"]
+        .astype(int)
+        .map(DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size)
+    )
+    if not energy_dtypes.eq(expected_energy_dtypes).all():
+        raise DomainLessonResultsError("distributed rows have the wrong energy dtype")
+
+    pass_times: dict[int, tuple[float, float, float]] = {}
+    for index, row in table.iterrows():
+        world_size = int(row["gpus"])
+        values = _parse_pass_times(
+            row["pass_times_s"],
+            context=f"distributed pass times for {world_size} GPUs",
+        )
+        pass_times[world_size] = values
+        expected = {
+            "median_s": float(np.median(values)),
+            "min_s": min(values),
+            "max_s": max(values),
+        }
+        for name, value in expected.items():
+            observed = _finite_number(
+                row[name],
+                name=f"distributed.{name}",
+            )
+            if not math.isclose(
+                observed,
+                value,
+                rel_tol=1.0e-12,
+                abs_tol=1.0e-12,
+            ):
+                raise DomainLessonResultsError(
+                    f"distributed timing statistics do not match pass times at row {index}"
+                )
+    for name in (
+        "energy_ev",
+        "energy_ev_per_atom",
+        "comparison_energy_ev",
+        "comparison_energy_ev_per_atom",
+        "force_rms_ev_per_a",
+        "force_max_ev_per_a",
+    ):
+        values = np.array(
+            [_finite_number(value, name=f"distributed.{name}") for value in table[name]]
+        )
+        if name.startswith("force_") and np.any(values < 0.0):
+            raise DomainLessonResultsError(f"distributed.{name} must be non-negative")
+    expected_per_atom = table["energy_ev"].astype(float) / FIXED_ATOM_COUNT
+    if not np.allclose(
+        table["energy_ev_per_atom"].astype(float),
+        expected_per_atom,
+        rtol=1.0e-12,
+        atol=1.0e-12,
+    ):
+        raise DomainLessonResultsError(
+            "distributed energy per atom does not match total energy"
+        )
+    expected_comparison_per_atom = (
+        table["comparison_energy_ev"].astype(float) / FIXED_ATOM_COUNT
+    )
+    if not np.allclose(
+        table["comparison_energy_ev_per_atom"].astype(float),
+        expected_comparison_per_atom,
+        rtol=1.0e-12,
+        atol=1.0e-12,
+    ):
+        raise DomainLessonResultsError(
+            "distributed comparison energy per atom does not match total energy"
+        )
+    for row in table.itertuples(index=False):
+        grid = _parse_grid(
+            row.spatial_grid,
+            world_size=int(row.gpus),
+            context="distributed.spatial_grid",
+        )
+        if int(row.owned_atoms_min_rank) > int(row.owned_atoms_max_rank):
+            raise DomainLessonResultsError(
+                "owned_atoms_min_rank must not exceed owned_atoms_max_rank"
+            )
+        if not (
+            int(row.owned_atoms_min_rank)
+            <= FIXED_ATOM_COUNT / int(row.gpus)
+            <= int(row.owned_atoms_max_rank)
+        ):
+            raise DomainLessonResultsError(
+                "owned-atom range does not bracket the mean atoms per rank"
+            )
+        if math.prod(grid) != int(row.gpus):
+            raise DomainLessonResultsError(
+                "spatial_grid product must equal the GPU count"
+            )
+    return pass_times
+
+
+def _parse_grid(
+    value: Any,
+    *,
+    world_size: int,
+    context: str,
+) -> tuple[int, int, int]:
+    parts = str(value).split("x")
+    if len(parts) != 3:
+        raise DomainLessonResultsError(f"{context} must contain three dimensions")
+    try:
+        grid = tuple(int(item) for item in parts)
+    except ValueError as exc:
+        raise DomainLessonResultsError(
+            f"{context} must contain positive integers"
+        ) from exc
+    if any(item <= 0 for item in grid) or math.prod(grid) != world_size:
+        raise DomainLessonResultsError(
+            f"{context} must be a positive rank grid for {world_size} GPUs"
+        )
+    return grid  # type: ignore[return-value]
 
 
 def _read_raw_results(
@@ -539,3060 +1030,2051 @@ def _read_raw_results(
     manifest: Mapping[str, Any],
     checksums: Mapping[str, str],
 ) -> list[Mapping[str, Any]]:
-    metadata = _require_mapping(manifest, "raw_results", context="manifest")
+    files = _require_mapping(manifest, "files", context="manifest")
+    metadata = _require_mapping(files, RAW_RESULTS_NAME, context="manifest.files")
     _require_keys(
         metadata,
-        ("file", "sha256", "row_count"),
-        context="manifest.raw_results",
+        ("sha256", "size_bytes"),
+        context=f"manifest.files.{RAW_RESULTS_NAME}",
     )
-    filename = str(metadata["file"])
-    if filename != RAW_RESULTS_NAME:
+    expected_sha256 = _require_sha256(
+        metadata["sha256"],
+        name=f"manifest.files.{RAW_RESULTS_NAME}.sha256",
+    )
+    if checksums.get(RAW_RESULTS_NAME) != expected_sha256:
         raise DomainLessonResultsError(
-            f"manifest.raw_results.file must be {RAW_RESULTS_NAME}"
+            "raw-results.jsonl checksum index and manifest disagree"
         )
-    expected_sha256 = str(metadata["sha256"])
-    if checksums.get(filename) != expected_sha256:
+    path = _checked_file(root, RAW_RESULTS_NAME, expected_sha256)
+    expected_size = _positive_integer(
+        metadata["size_bytes"],
+        name=f"manifest.files.{RAW_RESULTS_NAME}.size_bytes",
+    )
+    if path.stat().st_size != expected_size:
         raise DomainLessonResultsError(
-            "raw results checksum index and manifest disagree"
+            "raw-results.jsonl size does not match the manifest"
         )
-    path = _validate_file(root, filename, expected_sha256)
     rows: list[Mapping[str, Any]] = []
-    for line_number, raw_line in enumerate(
+    for line_number, line in enumerate(
         path.read_text(encoding="utf-8").splitlines(),
         start=1,
     ):
-        if not raw_line.strip():
+        if not line.strip():
             continue
         try:
-            row = json.loads(raw_line)
+            row = json.loads(line)
         except json.JSONDecodeError as exc:
             raise DomainLessonResultsError(
-                f"invalid raw results JSON on line {line_number}"
+                f"invalid raw result JSON on line {line_number}"
             ) from exc
         if not isinstance(row, Mapping):
             raise DomainLessonResultsError(
-                f"raw results line {line_number} must contain an object"
+                f"raw result line {line_number} must be an object"
             )
-        _reject_absolute_json_paths(
-            row,
-            context=f"raw results line {line_number}",
-        )
+        _reject_host_paths(row, context=f"raw result line {line_number}")
         rows.append(row)
-    raw_row_count = metadata["row_count"]
-    if isinstance(raw_row_count, bool):
+    if len(rows) != len(REQUIRED_WORLD_SIZES) + 1:
         raise DomainLessonResultsError(
-            "manifest.raw_results.row_count must be a non-negative integer"
+            "raw-results.jsonl must contain three fixed rows and one electrostatics row"
         )
-    try:
-        expected_rows = int(raw_row_count)
-    except (TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            "manifest.raw_results.row_count must be a non-negative integer"
-        ) from exc
-    if expected_rows < 0 or float(raw_row_count) != expected_rows:
-        raise DomainLessonResultsError(
-            "manifest.raw_results.row_count must be a non-negative integer"
-        )
-    if len(rows) != expected_rows:
-        raise DomainLessonResultsError("raw results row count does not match")
     return rows
 
 
-def _artifact_path(
-    record: Mapping[str, Any],
+def _validate_raw_source(
+    row: Mapping[str, Any],
     *,
+    expected: Mapping[str, Any],
     context: str,
-    directory: str,
-    suffix: str,
-    checksums: Mapping[str, str],
-    root: Path,
-) -> str:
-    _require_keys(record, ("file", "sha256"), context=context)
-    filename = str(record["file"])
-    relative = PurePosixPath(filename)
+) -> None:
+    source = _require_mapping(row, "source", context=context)
+    repository_commit = str(source.get("repository_commit", ""))
+    if not _HEX40.fullmatch(repository_commit):
+        raise DomainLessonResultsError(
+            f"{context}.source.repository_commit must be a 40-digit SHA"
+        )
+    if source.get("repository_dirty") is not False:
+        raise DomainLessonResultsError(
+            f"{context}.source.repository_dirty must be false"
+        )
+    observed = {
+        "tutorial_commit": repository_commit,
+        "toolkit_core_commit": str(source.get("toolkit_core_commit", "")),
+        "toolkit_ops_commit": str(source.get("toolkit_ops_commit", "")),
+        "toolkit_version": str(source.get("toolkit_version", "")),
+    }
+    expected_values = {
+        name: str(expected[name])
+        for name in (
+            "tutorial_commit",
+            "toolkit_core_commit",
+            "toolkit_ops_commit",
+            "toolkit_version",
+        )
+    }
+    if observed != expected_values:
+        raise DomainLessonResultsError(
+            f"{context} source commit or Toolkit version does not match the manifest"
+        )
+
+
+def _validate_raw_methodology(
+    row: Mapping[str, Any],
+    *,
+    pair_count: int,
+    context: str,
+) -> None:
+    methodology = _require_mapping(row, "methodology", context=context)
+    _require_keys(
+        methodology,
+        ("source", "source_file", "resolved_values", "case_molecules_per_species"),
+        context=f"{context}.methodology",
+    )
+    expected_record = json.loads(
+        json.dumps(DOMAIN_METHODOLOGY.as_record(), allow_nan=False)
+    )
+    expected_values = json.loads(
+        json.dumps(
+            DOMAIN_METHODOLOGY.resolved_values(json_compatible=True),
+            allow_nan=False,
+        )
+    )
     if (
-        relative.is_absolute()
-        or ".." in relative.parts
-        or len(relative.parts) < 2
-        or relative.parts[0] != directory
-        or relative.suffix != suffix
+        methodology["source"] != expected_record
+        or methodology["resolved_values"] != expected_values
+        or methodology["case_molecules_per_species"] != pair_count
     ):
         raise DomainLessonResultsError(
-            f"{context}.file must be a {suffix} file inside {directory}/"
+            f"{context} methodology differs from the current fixed method"
         )
+    source_file = _require_mapping(
+        methodology,
+        "source_file",
+        context=f"{context}.methodology",
+    )
+    if source_file.get("sha256") != _sha256_file(Path(__file__).with_name("config.py")):
+        raise DomainLessonResultsError(
+            f"{context} methodology file hash does not match"
+        )
+
+
+def _check_force_summary(
+    summary: Mapping[str, Any],
+    *,
+    atom_count: int,
+    context: str,
+) -> None:
+    _require_keys(
+        summary,
+        (
+            "shape",
+            "dtype",
+            "rms_ev_a",
+            "max_norm_ev_a",
+            "finite",
+        ),
+        context=context,
+    )
+    if list(summary["shape"]) != [atom_count, 3]:
+        raise DomainLessonResultsError(f"{context}.shape is incorrect")
+    if summary["dtype"] != "float32":
+        raise DomainLessonResultsError(f"{context}.dtype must be float32")
+    if summary["finite"] is not True:
+        raise DomainLessonResultsError(f"{context} reports non-finite forces")
+    for name in ("rms_ev_a", "max_norm_ev_a"):
+        value = _finite_number(summary[name], name=f"{context}.{name}")
+        if value < 0.0:
+            raise DomainLessonResultsError(f"{context}.{name} must be non-negative")
+    for optional in (
+        "sum_abs_ev_a",
+        "sum_squares_ev2_a2",
+    ):
+        if optional in summary:
+            value = _finite_number(
+                summary[optional],
+                name=f"{context}.{optional}",
+            )
+            if value < 0.0:
+                raise DomainLessonResultsError(
+                    f"{context}.{optional} must be non-negative"
+                )
+    if "sum_vector_ev_a" in summary:
+        values = summary["sum_vector_ev_a"]
+        if not isinstance(values, list) or len(values) != 3:
+            raise DomainLessonResultsError(
+                f"{context}.sum_vector_ev_a must have three values"
+            )
+        for value in values:
+            _finite_number(value, name=f"{context}.sum_vector_ev_a")
+
+
+def _validate_position_invariance(
+    output: Mapping[str, Any],
+    *,
+    context: str,
+) -> tuple[float, tuple[float, float, float]]:
+    record = _require_mapping(
+        output,
+        "position_invariance",
+        context=context,
+    )
+    _require_keys(
+        record,
+        (
+            "method",
+            "tolerance_a",
+            "warmup_maximum_minimum_image_displacement_a",
+            "measured_pass_maximum_minimum_image_displacements_a",
+            "final_gather_maximum_minimum_image_displacement_a",
+            "maximum_minimum_image_displacement_a",
+            "all_within_tolerance",
+            "interpretation",
+        ),
+        context=f"{context}.position_invariance",
+    )
+    tolerance = _finite_number(
+        record["tolerance_a"],
+        name=f"{context}.position_invariance.tolerance_a",
+    )
+    if (
+        record["method"] != "maximum_minimum_image_displacement"
+        or not math.isclose(
+            tolerance,
+            DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a,
+            rel_tol=0.0,
+            abs_tol=0.0,
+        )
+        or record["all_within_tolerance"] is not True
+        or not str(record["interpretation"]).strip()
+    ):
+        raise DomainLessonResultsError(
+            f"{context} uses the wrong PBC-equivalent position check"
+        )
+    warmup = _finite_number(
+        record["warmup_maximum_minimum_image_displacement_a"],
+        name=(
+            f"{context}.position_invariance.warmup_maximum_minimum_image_displacement_a"
+        ),
+    )
+    raw_passes = record["measured_pass_maximum_minimum_image_displacements_a"]
+    if not isinstance(raw_passes, list) or len(raw_passes) != PASS_COUNT:
+        raise DomainLessonResultsError(
+            f"{context} must report one minimum-image displacement per pass"
+        )
+    pass_values = tuple(
+        _finite_number(
+            value,
+            name=(
+                f"{context}.position_invariance."
+                "measured_pass_maximum_minimum_image_displacements_a"
+            ),
+        )
+        for value in raw_passes
+    )
+    final = _finite_number(
+        record["final_gather_maximum_minimum_image_displacement_a"],
+        name=(
+            f"{context}.position_invariance."
+            "final_gather_maximum_minimum_image_displacement_a"
+        ),
+    )
+    overall = _finite_number(
+        record["maximum_minimum_image_displacement_a"],
+        name=(f"{context}.position_invariance.maximum_minimum_image_displacement_a"),
+    )
+    values = (warmup, *pass_values, final)
+    if any(value < 0.0 or value > tolerance for value in values):
+        raise DomainLessonResultsError(
+            f"{context} exceeds the minimum-image position tolerance"
+        )
+    if not math.isclose(
+        overall,
+        max(values),
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-12,
+    ):
+        raise DomainLessonResultsError(
+            f"{context} maximum minimum-image displacement is inconsistent"
+        )
+    return overall, pass_values  # type: ignore[return-value]
+
+
+def _load_force_array(
+    root: Path,
+    output: Mapping[str, Any],
+    checksums: Mapping[str, str],
+    *,
+    atom_count: int,
+    context: str,
+) -> np.ndarray:
+    metadata = _require_mapping(
+        output,
+        "forces_source_atom_order_npy",
+        context=context,
+    )
+    _require_keys(
+        metadata,
+        ("path", "sha256", "dtype", "shape"),
+        context=f"{context}.forces_source_atom_order_npy",
+    )
+    filename = str(metadata["path"])
     expected_sha256 = _require_sha256(
-        record["sha256"],
-        name=f"{context}.sha256",
+        metadata["sha256"],
+        name=f"{context}.forces_source_atom_order_npy.sha256",
     )
     if checksums.get(filename) != expected_sha256:
         raise DomainLessonResultsError(
-            f"{filename} checksum index and manifest disagree"
+            f"{context} force-array checksum index and raw result disagree"
         )
-    _validate_file(root, filename, expected_sha256)
-    return filename
+    path = _checked_file(root, filename, expected_sha256)
+    try:
+        array = np.load(path, allow_pickle=False)
+    except (OSError, ValueError) as exc:
+        raise DomainLessonResultsError(
+            f"{context} force array could not be read"
+        ) from exc
+    if array.shape != (atom_count, 3):
+        raise DomainLessonResultsError(f"{context} force array has the wrong shape")
+    if list(metadata["shape"]) != [atom_count, 3]:
+        raise DomainLessonResultsError(
+            f"{context} force-array metadata has the wrong shape"
+        )
+    if str(array.dtype) != str(metadata["dtype"]):
+        raise DomainLessonResultsError(
+            f"{context} force-array dtype does not match metadata"
+        )
+    if str(array.dtype) != "float32":
+        raise DomainLessonResultsError(
+            f"{context} force array must use the recorded float32 precision"
+        )
+    if not np.isfinite(array).all():
+        raise DomainLessonResultsError(f"{context} force array is not finite")
+    return array
 
 
-def _validate_artifacts(
-    root: Path,
-    manifest: Mapping[str, Any],
-    checksums: Mapping[str, str],
-) -> set[str]:
-    artifacts = _require_mapping(manifest, "artifacts", context="manifest")
+def _validate_charge_record(
+    record: Mapping[str, Any],
+    *,
+    atom_count: int,
+    context: str,
+) -> dict[str, Any]:
     _require_keys(
-        artifacts,
-        ("structures", "case_logs", "files"),
-        context="manifest.artifacts",
+        record,
+        (
+            "available",
+            "dtype",
+            "target_sum_e",
+            "shape",
+            "sha256",
+            "finite",
+            "sum_e",
+            "residual_e",
+            "abs_residual_per_atom",
+        ),
+        context=context,
     )
-    structures = artifacts["structures"]
-    case_logs = artifacts["case_logs"]
-    files = artifacts["files"]
-    if not isinstance(structures, list) or not structures:
+    if record["available"] is not True or record["finite"] is not True:
         raise DomainLessonResultsError(
-            "manifest.artifacts.structures must be a nonempty list"
+            f"{context} must report finite predicted charges"
         )
-    if not isinstance(case_logs, list) or not case_logs:
+    if str(record["dtype"]) != "float32":
+        raise DomainLessonResultsError(f"{context} must report float32 charges")
+    shape = list(record["shape"])
+    if (
+        math.prod(_positive_integer(value, name=f"{context}.shape") for value in shape)
+        != atom_count
+    ):
+        raise DomainLessonResultsError(f"{context}.shape does not match the atom count")
+    _require_sha256(record["sha256"], name=f"{context}.sha256")
+    target = _finite_number(record["target_sum_e"], name=f"{context}.target_sum_e")
+    charge_sum = _finite_number(record["sum_e"], name=f"{context}.sum_e")
+    residual = _finite_number(record["residual_e"], name=f"{context}.residual_e")
+    per_atom = _finite_number(
+        record["abs_residual_per_atom"],
+        name=f"{context}.abs_residual_per_atom",
+    )
+    if not math.isclose(
+        residual,
+        charge_sum - target,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-12,
+    ):
         raise DomainLessonResultsError(
-            "manifest.artifacts.case_logs must be a nonempty list"
+            f"{context}.residual_e does not equal sum minus target"
         )
-    if not isinstance(files, list) or not files:
+    if not math.isclose(
+        per_atom,
+        abs(residual) / atom_count,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-12,
+    ):
         raise DomainLessonResultsError(
-            "manifest.artifacts.files must be a nonempty list"
+            f"{context}.abs_residual_per_atom is inconsistent"
         )
+    return {
+        "atom_count": atom_count,
+        "dtype": "float32",
+        "target_sum_e": target,
+        "charge_sum_e": charge_sum,
+        "residual_e": residual,
+        "abs_residual_per_atom_e": per_atom,
+        "finite": True,
+    }
 
-    declared_paths: set[str] = set()
-    structure_roles: set[str] = set()
-    for index, item in enumerate(structures):
-        context = f"manifest.artifacts.structures[{index}]"
-        if not isinstance(item, Mapping):
-            raise DomainLessonResultsError(f"{context} must be an object")
-        _require_keys(item, ("role", "pair_count"), context=context)
-        role = str(item["role"]).strip()
-        if not role or role in structure_roles:
-            raise DomainLessonResultsError("structure artifact roles must be unique")
-        structure_roles.add(role)
-        try:
-            _positive_integer(item["pair_count"], name=f"{context}.pair_count")
-        except ValueError as exc:
-            raise DomainLessonResultsError(str(exc)) from exc
-        filename = _artifact_path(
-            item,
-            context=context,
-            directory="structures",
-            suffix=".extxyz",
-            checksums=checksums,
-            root=root,
+
+def _validate_unavailable_charges(
+    record: Mapping[str, Any],
+    *,
+    context: str,
+) -> None:
+    if record.get("available") is not False:
+        raise DomainLessonResultsError(
+            f"{context} must state that multi-GPU charges are unavailable"
         )
-        if filename in declared_paths:
+    if not str(record.get("reason", "")).strip():
+        raise DomainLessonResultsError(
+            f"{context} must explain why charges are unavailable"
+        )
+    for name in ("dtype", "shape", "sha256", "finite", "sum_e", "residual_e"):
+        if record.get(name) is not None:
             raise DomainLessonResultsError(
-                f"artifact file is declared twice: {filename}"
+                f"{context}.{name} must be null when charges are unavailable"
             )
-        declared_paths.add(filename)
 
-    case_ids: set[str] = set()
-    for index, item in enumerate(case_logs):
-        context = f"manifest.artifacts.case_logs[{index}]"
-        if not isinstance(item, Mapping):
-            raise DomainLessonResultsError(f"{context} must be an object")
-        _require_keys(item, ("case_id",), context=context)
-        case_id = str(item["case_id"]).strip()
-        if not case_id or case_id in case_ids:
-            raise DomainLessonResultsError("case log IDs must be unique")
-        case_ids.add(case_id)
-        filename = _artifact_path(
-            item,
-            context=context,
-            directory="logs",
-            suffix=".log",
-            checksums=checksums,
-            root=root,
+
+def _validate_raw_distributed(
+    rows: Sequence[Mapping[str, Any]],
+    *,
+    table: pd.DataFrame,
+    source_identity: Mapping[str, Any],
+    settings_sha256: str,
+    structure_sha256: str,
+    checksums: Mapping[str, str],
+    root: Path,
+) -> tuple[
+    dict[int, Mapping[str, Any]],
+    dict[int, np.ndarray],
+    dict[str, Any],
+]:
+    if len(rows) != len(REQUIRED_WORLD_SIZES):
+        raise DomainLessonResultsError(
+            "raw results require exactly one fixed-input row per GPU count"
         )
-        if filename in declared_paths:
-            raise DomainLessonResultsError(
-                f"artifact file is declared twice: {filename}"
-            )
-        declared_paths.add(filename)
+    by_world: dict[int, Mapping[str, Any]] = {}
+    force_arrays: dict[int, np.ndarray] = {}
+    input_hashes: set[str] = set()
+    one_gpu_charge: dict[str, Any] | None = None
+    table_by_case = table.set_index("case_id")
 
-    for index, item in enumerate(files):
-        context = f"manifest.artifacts.files[{index}]"
-        if not isinstance(item, Mapping):
-            raise DomainLessonResultsError(f"{context} must be an object")
-        _require_keys(item, ("role", "file", "sha256"), context=context)
-        role = str(item["role"]).strip()
-        if not role:
-            raise DomainLessonResultsError(f"{context}.role must be nonempty")
-        filename = str(item["file"])
-        relative = PurePosixPath(filename)
+    for row in rows:
+        context = f"raw fixed-input result {row.get('case_id', '<missing>')}"
+        _require_keys(
+            row,
+            (
+                "schema",
+                "run_id",
+                "case_id",
+                "mode",
+                "measurement_role",
+                "status",
+                "success",
+                "world_size",
+                "pair_count",
+                "atom_count",
+                "source",
+                "methodology",
+                "runtime",
+                "input",
+                "distributed",
+                "output",
+                "charges",
+                "timing",
+                "memory",
+                "settings_sha256",
+                "bundle_source",
+                "bundle_job_record",
+            ),
+            context=context,
+        )
         if (
-            relative.is_absolute()
-            or ".." in relative.parts
-            or not relative.parts
-            or relative.as_posix() in {MANIFEST_NAME, CHECKSUM_INDEX_NAME}
+            row["schema"] != RUNNER_SCHEMA
+            or row["mode"] != "distributed"
+            or row["measurement_role"] != "fixed_evaluation"
+            or row["status"] != "complete"
+            or row["success"] is not True
         ):
             raise DomainLessonResultsError(
-                f"{context}.file must stay inside the bundle"
+                f"{context} is not a successful v4 fixed evaluation"
             )
-        expected_sha256 = _require_sha256(
-            item["sha256"],
-            name=f"{context}.sha256",
+        if (
+            row["settings_sha256"] != settings_sha256
+            or row["bundle_source"] != "manifest.json#source"
+            or row["bundle_job_record"]
+            != f"manifest.json#job_records/{row['world_size']}"
+        ):
+            raise DomainLessonResultsError(
+                f"{context} does not link to the bundle settings and job record"
+            )
+        _validate_raw_source(
+            row,
+            expected=source_identity,
+            context=context,
         )
-        if checksums.get(filename) != expected_sha256:
+        _validate_raw_methodology(
+            row,
+            pair_count=FIXED_PAIR_COUNT,
+            context=context,
+        )
+        world_size = _positive_integer(
+            row["world_size"],
+            name=f"{context}.world_size",
+        )
+        if world_size not in REQUIRED_WORLD_SIZES or world_size in by_world:
             raise DomainLessonResultsError(
-                f"{filename} checksum index and manifest disagree"
+                f"{context} has an unexpected or duplicate GPU count"
             )
-        _validate_file(root, filename, expected_sha256)
-        if filename in declared_paths:
+        if (
+            _positive_integer(row["pair_count"], name=f"{context}.pair_count")
+            != FIXED_PAIR_COUNT
+            or _positive_integer(row["atom_count"], name=f"{context}.atom_count")
+            != FIXED_ATOM_COUNT
+        ):
             raise DomainLessonResultsError(
-                f"artifact file is declared twice: {filename}"
+                f"{context} does not use the fixed {FIXED_ATOM_COUNT}-atom input"
             )
-        declared_paths.add(filename)
-    return declared_paths
+        case_id = str(row["case_id"])
+        if case_id not in table_by_case.index:
+            raise DomainLessonResultsError(
+                f"{context} has no matching distributed CSV row"
+            )
+        csv_row = table_by_case.loc[case_id]
+        if int(csv_row["gpus"]) != world_size:
+            raise DomainLessonResultsError(
+                f"{context} GPU count differs from distributed.csv"
+            )
+        if not str(row["run_id"]).strip():
+            raise DomainLessonResultsError(f"{context}.run_id must be nonempty")
+        input_record = _require_mapping(row, "input", context=context)
+        _require_keys(
+            input_record,
+            ("path", "file_sha256", "file_size_bytes", "tensor_sha256"),
+            context=f"{context}.input",
+        )
+        input_digest = _require_sha256(
+            input_record["file_sha256"],
+            name=f"{context}.input.file_sha256",
+        )
+        if input_digest != structure_sha256:
+            raise DomainLessonResultsError(
+                f"{context} input structure hash does not match the manifest"
+            )
+        input_path = str(input_record["path"])
+        if checksums.get(input_path) != input_digest:
+            raise DomainLessonResultsError(
+                f"{context} input checksum index and raw result disagree"
+            )
+        checked_input = _checked_file(root, input_path, input_digest)
+        if checked_input.stat().st_size != _positive_integer(
+            input_record["file_size_bytes"],
+            name=f"{context}.input.file_size_bytes",
+        ):
+            raise DomainLessonResultsError(f"{context} input file size does not match")
+        tensor_hash = _require_sha256(
+            input_record["tensor_sha256"],
+            name=f"{context}.input.tensor_sha256",
+        )
+        input_hashes.add(tensor_hash)
+        if tensor_hash != str(csv_row["input_tensor_sha256"]):
+            raise DomainLessonResultsError(
+                f"{context} input tensor hash differs from distributed.csv"
+            )
+
+        distributed = _require_mapping(row, "distributed", context=context)
+        _require_keys(
+            distributed,
+            (
+                "api",
+                "cells_per_dim",
+                "rank_grid",
+                "owned_atom_counts",
+                "owned_atom_count_min",
+                "owned_atom_count_max",
+                "partition_count",
+                "gather_count",
+            ),
+            context=f"{context}.distributed",
+        )
+        if (
+            distributed["api"] != "DomainParallel"
+            or distributed["partition_count"] != 1
+            or distributed["gather_count"] != 1
+        ):
+            raise DomainLessonResultsError(
+                f"{context} must partition and gather exactly once through DomainParallel"
+            )
+        cells = _layout_triplet(
+            distributed["cells_per_dim"],
+            context=f"{context}.distributed.cells_per_dim",
+        )
+        ranks = _layout_triplet(
+            distributed["rank_grid"],
+            context=f"{context}.distributed.rank_grid",
+        )
+        if math.prod(ranks) != world_size:
+            raise DomainLessonResultsError(
+                f"{context} rank grid does not match its GPU count"
+            )
+        if any(cell % rank != 0 for cell, rank in zip(cells, ranks, strict=True)):
+            raise DomainLessonResultsError(
+                f"{context} rank grid does not divide the cell grid"
+            )
+        owned = distributed["owned_atom_counts"]
+        if (
+            not isinstance(owned, list)
+            or len(owned) != world_size
+            or any(
+                _positive_integer(value, name=f"{context}.owned_atom_counts") <= 0
+                for value in owned
+            )
+            or sum(int(value) for value in owned) != FIXED_ATOM_COUNT
+        ):
+            raise DomainLessonResultsError(
+                f"{context} owned atom counts do not cover the fixed input"
+            )
+        if min(int(value) for value in owned) != _positive_integer(
+            distributed["owned_atom_count_min"],
+            name=f"{context}.distributed.owned_atom_count_min",
+        ) or max(int(value) for value in owned) != _positive_integer(
+            distributed["owned_atom_count_max"],
+            name=f"{context}.distributed.owned_atom_count_max",
+        ):
+            raise DomainLessonResultsError(
+                f"{context} owned-atom range is inconsistent"
+            )
+        if (
+            int(csv_row["owned_atoms_min_rank"]) != min(owned)
+            or int(csv_row["owned_atoms_max_rank"]) != max(owned)
+            or str(csv_row["spatial_grid"]) != "x".join(str(value) for value in ranks)
+        ):
+            raise DomainLessonResultsError(
+                f"{context} layout differs from distributed.csv"
+            )
+
+        timing = _require_mapping(row, "timing", context=context)
+        _require_keys(
+            timing,
+            (
+                "pass_times_s",
+                "median_s",
+                "min_s",
+                "max_s",
+                "warmup_count",
+                "measured_pass_count",
+                "requested_steps_per_pass",
+                "measured_model_evaluations_per_pass",
+                "warmup_requested_steps",
+                "warmup_automatic_force_prime_evaluations",
+                "warmup_model_evaluations",
+                "publishable_benchmark",
+                "source_input_sha256",
+                "partition_count",
+                "gather_count",
+            ),
+            context=f"{context}.timing",
+        )
+        raw_times = timing["pass_times_s"]
+        if not isinstance(raw_times, list):
+            raise DomainLessonResultsError(
+                f"{context}.timing.pass_times_s must be a list"
+            )
+        times = _parse_pass_times(
+            json.dumps(raw_times, separators=(",", ":")),
+            context=f"{context}.timing.pass_times_s",
+        )
+        csv_times = _parse_pass_times(
+            csv_row["pass_times_s"],
+            context=f"{context} CSV pass times",
+        )
+        if not np.array_equal(np.asarray(times), np.asarray(csv_times)):
+            raise DomainLessonResultsError(
+                f"{context} pass times differ from distributed.csv"
+            )
+        expected_timing = {
+            "median_s": float(np.median(times)),
+            "min_s": min(times),
+            "max_s": max(times),
+        }
+        for name, value in expected_timing.items():
+            if not math.isclose(
+                _finite_number(timing[name], name=f"{context}.timing.{name}"),
+                value,
+                rel_tol=1.0e-12,
+                abs_tol=1.0e-12,
+            ):
+                raise DomainLessonResultsError(
+                    f"{context} timing summary does not match the three passes"
+                )
+        warmup_prime = (
+            DOMAIN_METHODOLOGY.domain_parallel_multi_rank_warmup_force_prime_evaluations
+            if world_size > 1
+            else 0
+        )
+        if (
+            timing["warmup_count"] != WARMUP_COUNT
+            or timing["measured_pass_count"] != PASS_COUNT
+            or timing["requested_steps_per_pass"] != 1
+            or timing["measured_model_evaluations_per_pass"]
+            != DOMAIN_METHODOLOGY.measured_model_evaluations_per_pass
+            or timing["warmup_requested_steps"] != 1
+            or timing["warmup_automatic_force_prime_evaluations"] != warmup_prime
+            or timing["warmup_model_evaluations"] != 1 + warmup_prime
+            or timing["publishable_benchmark"] is not False
+            or timing["partition_count"] != 1
+            or timing["gather_count"] != 1
+        ):
+            raise DomainLessonResultsError(
+                f"{context} does not record the declared few-pass method"
+            )
+        timing_source_hash = _require_sha256(
+            timing["source_input_sha256"],
+            name=f"{context}.timing.source_input_sha256",
+        )
+        if timing_source_hash != tensor_hash:
+            raise DomainLessonResultsError(
+                f"{context} timing does not identify the original input tensor"
+            )
+
+        output = _require_mapping(row, "output", context=context)
+        _require_keys(
+            output,
+            (
+                "energy_ev",
+                "energy_ev_per_atom",
+                "energy_dtype",
+                "forces_source_atom_order",
+                "measured_passes",
+                "position_invariance",
+            ),
+            context=f"{context}.output",
+        )
+        energy = _finite_number(
+            output["energy_ev"],
+            name=f"{context}.output.energy_ev",
+        )
+        energy_per_atom = _finite_number(
+            output["energy_ev_per_atom"],
+            name=f"{context}.output.energy_ev_per_atom",
+        )
+        energy_dtype = str(output["energy_dtype"])
+        expected_energy_dtype = (
+            DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(world_size)
+        )
+        if (
+            energy_dtype != expected_energy_dtype
+            or str(csv_row["energy_dtype"]) != energy_dtype
+        ):
+            raise DomainLessonResultsError(
+                f"{context} energy dtype differs from the declared method"
+            )
+        if not math.isclose(
+            energy_per_atom,
+            energy / FIXED_ATOM_COUNT,
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise DomainLessonResultsError(f"{context} energy per atom is inconsistent")
+        if not math.isclose(
+            energy,
+            float(csv_row["energy_ev"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ) or not math.isclose(
+            energy_per_atom,
+            float(csv_row["energy_ev_per_atom"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise DomainLessonResultsError(
+                f"{context} energy differs from distributed.csv"
+            )
+        overall_displacement, pass_displacements = _validate_position_invariance(
+            output,
+            context=f"{context}.output",
+        )
+        if not math.isclose(
+            overall_displacement,
+            float(csv_row["max_minimum_image_displacement_a"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ) or not bool(csv_row["positions_pbc_equivalent"]):
+            raise DomainLessonResultsError(
+                f"{context} position check differs from distributed.csv"
+            )
+        force_summary = _require_mapping(
+            output,
+            "forces_source_atom_order",
+            context=f"{context}.output",
+        )
+        _check_force_summary(
+            force_summary,
+            atom_count=FIXED_ATOM_COUNT,
+            context=f"{context}.output.forces_source_atom_order",
+        )
+        if not math.isclose(
+            float(csv_row["force_rms_ev_per_a"]),
+            float(force_summary["rms_ev_a"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ) or not math.isclose(
+            float(csv_row["force_max_ev_per_a"]),
+            float(force_summary["max_norm_ev_a"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise DomainLessonResultsError(
+                f"{context} force summary differs from distributed.csv"
+            )
+        passes = output["measured_passes"]
+        if not isinstance(passes, list) or len(passes) != PASS_COUNT:
+            raise DomainLessonResultsError(
+                f"{context} must report all three measured outputs"
+            )
+        pass_energy_values: list[float] = []
+        for pass_index, pass_record in enumerate(passes, start=1):
+            if not isinstance(pass_record, Mapping):
+                raise DomainLessonResultsError(
+                    f"{context} measured pass {pass_index} must be an object"
+                )
+            _require_keys(
+                pass_record,
+                (
+                    "pass_index",
+                    "energy_ev",
+                    "energy_ev_per_atom",
+                    "energy_dtype",
+                    "forces",
+                    "maximum_minimum_image_displacement_a",
+                ),
+                context=f"{context}.output.measured_passes[{pass_index - 1}]",
+            )
+            if pass_record["pass_index"] != pass_index:
+                raise DomainLessonResultsError(
+                    f"{context} measured pass indices are not ordered"
+                )
+            pass_displacement = _finite_number(
+                pass_record["maximum_minimum_image_displacement_a"],
+                name=(
+                    f"{context} pass {pass_index} maximum minimum-image displacement"
+                ),
+            )
+            if not math.isclose(
+                pass_displacement,
+                pass_displacements[pass_index - 1],
+                rel_tol=1.0e-12,
+                abs_tol=1.0e-12,
+            ):
+                raise DomainLessonResultsError(
+                    f"{context} pass {pass_index} position check is inconsistent"
+                )
+            pass_energy = _finite_number(
+                pass_record["energy_ev"],
+                name=f"{context} pass {pass_index} energy",
+            )
+            if str(pass_record["energy_dtype"]) != energy_dtype:
+                raise DomainLessonResultsError(
+                    f"{context} pass {pass_index} energy dtype is inconsistent"
+                )
+            pass_energy_values.append(pass_energy)
+            pass_energy_per_atom = _finite_number(
+                pass_record["energy_ev_per_atom"],
+                name=f"{context} pass {pass_index} energy per atom",
+            )
+            if not math.isclose(
+                pass_energy_per_atom,
+                pass_energy / FIXED_ATOM_COUNT,
+                rel_tol=1.0e-12,
+                abs_tol=1.0e-12,
+            ):
+                raise DomainLessonResultsError(
+                    f"{context} pass {pass_index} energy per atom is inconsistent"
+                )
+            pass_forces = pass_record["forces"]
+            if not isinstance(pass_forces, Mapping):
+                raise DomainLessonResultsError(
+                    f"{context} pass {pass_index} forces must be an object"
+                )
+            _check_force_summary(
+                pass_forces,
+                atom_count=FIXED_ATOM_COUNT,
+                context=f"{context} pass {pass_index} forces",
+            )
+        energy_span_per_atom = (
+            max(pass_energy_values) - min(pass_energy_values)
+        ) / FIXED_ATOM_COUNT
+        if world_size > 1 and energy_span_per_atom > (
+            DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
+        ):
+            raise DomainLessonResultsError(
+                f"{context} distributed measured energies are not repeatable"
+            )
+        comparison_energy = _finite_number(
+            csv_row["comparison_energy_ev"],
+            name=f"{context} comparison energy",
+        )
+        if not math.isclose(
+            comparison_energy,
+            float(np.median(pass_energy_values)),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise DomainLessonResultsError(
+                f"{context} comparison energy is not the measured-pass median"
+            )
+        final_pass = passes[-1]
+        if not math.isclose(
+            energy,
+            float(final_pass["energy_ev"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise DomainLessonResultsError(
+                f"{context} final energy does not match measured pass 3"
+            )
+        final_force_summary = final_pass["forces"]
+        if not math.isclose(
+            float(force_summary["rms_ev_a"]),
+            float(final_force_summary["rms_ev_a"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ) or not math.isclose(
+            float(force_summary["max_norm_ev_a"]),
+            float(final_force_summary["max_norm_ev_a"]),
+            rel_tol=1.0e-12,
+            abs_tol=1.0e-12,
+        ):
+            raise DomainLessonResultsError(
+                f"{context} final force summary does not match measured pass 3"
+            )
+        force_arrays[world_size] = _load_force_array(
+            root,
+            output,
+            checksums,
+            atom_count=FIXED_ATOM_COUNT,
+            context=context,
+        )
+
+        memory = _require_mapping(row, "memory", context=context)
+        _require_keys(
+            memory,
+            (
+                "measured_pass_max_allocated_bytes_per_rank",
+                "measured_pass_max_reserved_bytes_per_rank",
+                "max_allocated_bytes",
+                "max_reserved_bytes",
+            ),
+            context=f"{context}.memory",
+        )
+        allocated = _validate_pass_memory(
+            memory["measured_pass_max_allocated_bytes_per_rank"],
+            world_size=world_size,
+            context=(f"{context}.memory.measured_pass_max_allocated_bytes_per_rank"),
+        )
+        reserved = _validate_pass_memory(
+            memory["measured_pass_max_reserved_bytes_per_rank"],
+            world_size=world_size,
+            context=(f"{context}.memory.measured_pass_max_reserved_bytes_per_rank"),
+        )
+        if any(
+            reserved_value < allocated_value
+            for allocated_row, reserved_row in zip(
+                allocated,
+                reserved,
+                strict=True,
+            )
+            for allocated_value, reserved_value in zip(
+                allocated_row,
+                reserved_row,
+                strict=True,
+            )
+        ):
+            raise DomainLessonResultsError(
+                f"{context} reserved memory is smaller than allocated memory"
+            )
+        if (
+            int(memory["max_allocated_bytes"])
+            != max(value for values in allocated for value in values)
+            or int(memory["max_reserved_bytes"])
+            != max(value for values in reserved for value in values)
+            or int(csv_row["peak_memory_bytes_max_rank"])
+            != int(memory["max_allocated_bytes"])
+        ):
+            raise DomainLessonResultsError(
+                f"{context} memory summary differs from the per-pass values"
+            )
+
+        charges = _require_mapping(row, "charges", context=context)
+        if world_size == DOMAIN_METHODOLOGY.force_reference_world_size:
+            one_gpu_charge = _validate_charge_record(
+                charges,
+                atom_count=FIXED_ATOM_COUNT,
+                context=f"{context}.charges",
+            )
+        else:
+            _validate_unavailable_charges(
+                charges,
+                context=f"{context}.charges",
+            )
+        by_world[world_size] = row
+
+    if tuple(sorted(by_world)) != REQUIRED_WORLD_SIZES:
+        raise DomainLessonResultsError(
+            "raw fixed-input rows do not cover every declared GPU count"
+        )
+    if len(input_hashes) != 1:
+        raise DomainLessonResultsError(
+            "the fixed-input rows do not share one input tensor"
+        )
+    if one_gpu_charge is None:
+        raise DomainLessonResultsError(
+            "the one-GPU predicted-charge diagnostic is missing"
+        )
+    return by_world, force_arrays, one_gpu_charge
+
+
+def _layout_triplet(value: Any, *, context: str) -> tuple[int, int, int]:
+    if not isinstance(value, list) or len(value) != 3:
+        raise DomainLessonResultsError(f"{context} must have three integers")
+    result = tuple(_positive_integer(item, name=context) for item in value)
+    return result  # type: ignore[return-value]
+
+
+def _validate_pass_memory(
+    value: Any,
+    *,
+    world_size: int,
+    context: str,
+) -> tuple[tuple[int, ...], ...]:
+    if not isinstance(value, list) or len(value) != PASS_COUNT:
+        raise DomainLessonResultsError(
+            f"{context} must contain one row per measured pass"
+        )
+    rows: list[tuple[int, ...]] = []
+    for pass_index, raw_row in enumerate(value, start=1):
+        if not isinstance(raw_row, list) or len(raw_row) != world_size:
+            raise DomainLessonResultsError(
+                f"{context} pass {pass_index} must contain one value per rank"
+            )
+        row: list[int] = []
+        for raw in raw_row:
+            amount = _positive_integer(
+                raw,
+                name=f"{context} pass {pass_index}",
+            )
+            row.append(amount)
+        rows.append(tuple(row))
+    return tuple(rows)
+
+
+def _measured_energy_values(row: Mapping[str, Any]) -> tuple[float, ...]:
+    output = _require_mapping(row, "output", context="fixed result")
+    passes = output.get("measured_passes")
+    if not isinstance(passes, list) or len(passes) != PASS_COUNT:
+        raise DomainLessonResultsError(
+            "fixed result has the wrong measured-energy series"
+        )
+    return tuple(
+        _finite_number(
+            measured["energy_ev"],
+            name=f"fixed result measured energy {index}",
+        )
+        for index, measured in enumerate(passes, start=1)
+    )
+
+
+def _measured_energy_median(row: Mapping[str, Any]) -> float:
+    return float(np.median(_measured_energy_values(row)))
+
+
+def _measured_energy_span_per_atom(row: Mapping[str, Any]) -> float:
+    values = _measured_energy_values(row)
+    return (max(values) - min(values)) / FIXED_ATOM_COUNT
+
+
+def _output_agreement(
+    rows_by_world: Mapping[int, Mapping[str, Any]],
+    force_arrays: Mapping[int, np.ndarray],
+) -> pd.DataFrame:
+    force_reference_world = DOMAIN_METHODOLOGY.force_reference_world_size
+    energy_reference_world = DOMAIN_METHODOLOGY.energy_reference_world_size
+    force_reference = force_arrays[force_reference_world].astype(np.float64)
+    energy_reference = _measured_energy_median(rows_by_world[energy_reference_world])
+    one_gpu_energy = _measured_energy_median(rows_by_world[force_reference_world])
+    records: list[dict[str, Any]] = []
+    for world_size in REQUIRED_WORLD_SIZES:
+        forces = force_arrays[world_size].astype(np.float64)
+        difference = forces - force_reference
+        component_limit = (
+            DOMAIN_METHODOLOGY.evaluation_force_atol_ev_a
+            + DOMAIN_METHODOLOGY.evaluation_force_rtol * np.abs(force_reference)
+        )
+        force_passed = bool(np.less_equal(np.abs(difference), component_limit).all())
+        force_rms = float(np.sqrt(np.mean(difference * difference)))
+        force_max = float(np.linalg.norm(difference, axis=1).max())
+
+        energy = _measured_energy_median(rows_by_world[world_size])
+        energy_span_per_atom = _measured_energy_span_per_atom(rows_by_world[world_size])
+        repeatability_required = world_size > 1
+        repeatability_passed = bool(
+            energy_span_per_atom
+            <= (
+                DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
+            )
+        )
+        energy_difference_per_atom = abs(energy - energy_reference) / FIXED_ATOM_COUNT
+        energy_check_required = world_size in (
+            DOMAIN_METHODOLOGY.energy_comparison_world_sizes
+        )
+        energy_passed = (
+            bool(
+                energy_difference_per_atom
+                <= DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom
+            )
+            if energy_check_required
+            else None
+        )
+        required_checks_passed = (
+            force_passed
+            and (not repeatability_required or repeatability_passed)
+            and (
+                not energy_check_required
+                or energy_difference_per_atom
+                <= DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom
+            )
+        )
+        records.append(
+            {
+                "world_size": world_size,
+                "one_gpu_energy_offset_meV_atom": (
+                    1000.0 * (energy - one_gpu_energy) / FIXED_ATOM_COUNT
+                ),
+                "one_gpu_energy_offset_is_diagnostic": True,
+                "energy_statistic": "median_of_three_measured_passes",
+                "energy_dtype": str(
+                    rows_by_world[world_size]["output"]["energy_dtype"]
+                ),
+                "energy_repeatability_span_meV_atom": (1000.0 * energy_span_per_atom),
+                "energy_repeatability_tolerance_meV_atom": (
+                    1000.0
+                    * DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
+                ),
+                "energy_repeatability_check_required": repeatability_required,
+                "energy_repeatability_passed": (
+                    repeatability_passed if repeatability_required else None
+                ),
+                "energy_reference_world_size": energy_reference_world,
+                "energy_difference_meV_atom": (1000.0 * energy_difference_per_atom),
+                "energy_check_required": energy_check_required,
+                "force_reference_world_size": force_reference_world,
+                "force_rms_error_eV_A": force_rms,
+                "force_max_error_eV_A": force_max,
+                "energy_passed": energy_passed,
+                "force_passed": force_passed,
+                "passed": required_checks_passed,
+            }
+        )
+    result = pd.DataFrame.from_records(records)
+    if not result["passed"].eq(True).all():
+        raise DomainLessonResultsError(
+            "saved 1/2/4-GPU energies or forces exceed declared agreement limits"
+        )
+    return result
+
+
+def _validate_manifest_output_agreement(
+    manifest: Mapping[str, Any],
+    *,
+    rows_by_world: Mapping[int, Mapping[str, Any]],
+    force_arrays: Mapping[int, np.ndarray],
+) -> None:
+    record = _require_mapping(manifest, "output_agreement", context="manifest")
+    _require_keys(
+        record,
+        (
+            "force_reference_gpus",
+            "distributed_energy_reference_gpus",
+            "one_gpu_energy_offsets_are_diagnostics_only",
+            "position_check",
+            "comparisons",
+            "all_required_checks_passed",
+        ),
+        context="manifest.output_agreement",
+    )
+    force_reference_world = DOMAIN_METHODOLOGY.force_reference_world_size
+    energy_reference_world = DOMAIN_METHODOLOGY.energy_reference_world_size
+    if (
+        record["force_reference_gpus"] != force_reference_world
+        or record["distributed_energy_reference_gpus"] != energy_reference_world
+        or record["one_gpu_energy_offsets_are_diagnostics_only"] is not True
+        or record.get("energy_statistic") != "median_of_three_measured_passes"
+        or record["all_required_checks_passed"] is not True
+    ):
+        raise DomainLessonResultsError(
+            "manifest output-agreement references or status are incorrect"
+        )
+    position_check = _require_mapping(
+        record,
+        "position_check",
+        context="manifest.output_agreement",
+    )
+    _require_keys(
+        position_check,
+        ("method", "tolerance_a", "meaning"),
+        context="manifest.output_agreement.position_check",
+    )
+    if (
+        position_check["method"] != "maximum_minimum_image_displacement"
+        or not math.isclose(
+            _finite_number(
+                position_check["tolerance_a"],
+                name="manifest.output_agreement.position_check.tolerance_a",
+            ),
+            DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a,
+            rel_tol=0.0,
+            abs_tol=0.0,
+        )
+        or not str(position_check["meaning"]).strip()
+    ):
+        raise DomainLessonResultsError(
+            "manifest position check differs from the current methodology"
+        )
+    comparisons = _require_mapping(
+        record,
+        "comparisons",
+        context="manifest.output_agreement",
+    )
+    if set(comparisons) != {str(value) for value in REQUIRED_WORLD_SIZES}:
+        raise DomainLessonResultsError(
+            "manifest output agreement must contain the 1/2/4-GPU rows"
+        )
+
+    reference_forces = force_arrays[force_reference_world].astype(np.float64)
+    one_gpu_energy = _measured_energy_median(rows_by_world[force_reference_world])
+    energy_reference = _measured_energy_median(rows_by_world[energy_reference_world])
+    for world_size in REQUIRED_WORLD_SIZES:
+        context = f"manifest.output_agreement.comparisons.{world_size}"
+        comparison = _require_mapping(
+            comparisons,
+            str(world_size),
+            context="manifest.output_agreement.comparisons",
+        )
+        _require_keys(
+            comparison,
+            (
+                "one_gpu_energy_offset_ev",
+                "one_gpu_energy_abs_offset_ev_per_atom",
+                "one_gpu_energy_offset_is_diagnostic_only",
+                "energy_statistic",
+                "energy_dtype",
+                "energy_repeatability_span_ev_per_atom",
+                "energy_repeatability_tolerance_ev_per_atom",
+                "energy_repeatability_check_required",
+                "energy_repeatability_passed",
+                "distributed_energy_reference_gpus",
+                "distributed_energy_difference_ev",
+                "distributed_energy_abs_difference_ev_per_atom",
+                "distributed_energy_check_required",
+                "distributed_energy_passed",
+                "force_rms_difference_ev_per_a_vs_1gpu",
+                "force_max_difference_ev_per_a_vs_1gpu",
+                "force_max_component_difference_ev_per_a_vs_1gpu",
+                "distributed_energy_agreement_tolerance_ev_per_atom",
+                "force_atol_ev_per_a",
+                "force_rtol",
+                "force_passed",
+                "position_check",
+                "position_tolerance_a",
+                "maximum_minimum_image_displacement_a",
+                "positions_pbc_equivalent",
+                "required_checks_passed",
+            ),
+            context=context,
+        )
+        energy = _measured_energy_median(rows_by_world[world_size])
+        energy_span_per_atom = _measured_energy_span_per_atom(rows_by_world[world_size])
+        one_gpu_offset = energy - one_gpu_energy
+        distributed_difference = energy - energy_reference
+        force_difference = (
+            force_arrays[world_size].astype(np.float64) - reference_forces
+        )
+        expected_numbers = {
+            "one_gpu_energy_offset_ev": one_gpu_offset,
+            "one_gpu_energy_abs_offset_ev_per_atom": (
+                abs(one_gpu_offset) / FIXED_ATOM_COUNT
+            ),
+            "energy_repeatability_span_ev_per_atom": energy_span_per_atom,
+            "energy_repeatability_tolerance_ev_per_atom": (
+                DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
+            ),
+            "distributed_energy_difference_ev": distributed_difference,
+            "distributed_energy_abs_difference_ev_per_atom": (
+                abs(distributed_difference) / FIXED_ATOM_COUNT
+            ),
+            "force_rms_difference_ev_per_a_vs_1gpu": float(
+                np.sqrt(np.mean(force_difference * force_difference))
+            ),
+            "force_max_difference_ev_per_a_vs_1gpu": float(
+                np.linalg.norm(force_difference, axis=1).max()
+            ),
+            "force_max_component_difference_ev_per_a_vs_1gpu": float(
+                np.abs(force_difference).max()
+            ),
+            "distributed_energy_agreement_tolerance_ev_per_atom": (
+                DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom
+            ),
+            "force_atol_ev_per_a": (DOMAIN_METHODOLOGY.evaluation_force_atol_ev_a),
+            "force_rtol": DOMAIN_METHODOLOGY.evaluation_force_rtol,
+            "position_tolerance_a": (
+                DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
+            ),
+            "maximum_minimum_image_displacement_a": float(
+                rows_by_world[world_size]["output"]["position_invariance"][
+                    "maximum_minimum_image_displacement_a"
+                ]
+            ),
+        }
+        for name, expected in expected_numbers.items():
+            observed = _finite_number(comparison[name], name=f"{context}.{name}")
+            if not math.isclose(
+                observed,
+                expected,
+                rel_tol=1.0e-10,
+                abs_tol=1.0e-12,
+            ):
+                raise DomainLessonResultsError(
+                    f"{context}.{name} does not match the saved outputs"
+                )
+        required_energy_check = world_size in (
+            DOMAIN_METHODOLOGY.energy_comparison_world_sizes
+        )
+        repeatability_required = world_size > 1
+        repeatability_passed = bool(
+            energy_span_per_atom
+            <= (
+                DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
+            )
+        )
+        expected_energy_pass = (
+            abs(distributed_difference) / FIXED_ATOM_COUNT
+            <= DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom
+        )
+        force_limit = (
+            DOMAIN_METHODOLOGY.evaluation_force_atol_ev_a
+            + DOMAIN_METHODOLOGY.evaluation_force_rtol * np.abs(reference_forces)
+        )
+        expected_force_pass = bool(
+            np.less_equal(np.abs(force_difference), force_limit).all()
+        )
+        expected_required_pass = (
+            expected_force_pass
+            and (not repeatability_required or repeatability_passed)
+            and (not required_energy_check or expected_energy_pass)
+        )
+        if (
+            comparison["one_gpu_energy_offset_is_diagnostic_only"] is not True
+            or comparison["energy_statistic"] != "median_of_three_measured_passes"
+            or comparison["energy_dtype"]
+            != DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(world_size)
+            or comparison["energy_repeatability_check_required"]
+            is not repeatability_required
+            or comparison["energy_repeatability_passed"]
+            != (repeatability_passed if repeatability_required else None)
+            or comparison["distributed_energy_reference_gpus"] != energy_reference_world
+            or comparison["distributed_energy_check_required"]
+            is not required_energy_check
+            or comparison["distributed_energy_passed"]
+            != (expected_energy_pass if required_energy_check else None)
+            or comparison["force_passed"] is not expected_force_pass
+            or comparison["position_check"] != "maximum_minimum_image_displacement"
+            or comparison["positions_pbc_equivalent"] is not True
+            or comparison["required_checks_passed"] is not expected_required_pass
+        ):
+            raise DomainLessonResultsError(
+                f"{context} uses the wrong energy or force check"
+            )
+
+
+def _validate_electrostatics(
+    row: Mapping[str, Any],
+    *,
+    manifest: Mapping[str, Any],
+    source_identity: Mapping[str, Any],
+    settings_sha256: str,
+    checksums: Mapping[str, str],
+    root: Path,
+) -> tuple[pd.DataFrame, dict[str, Any]]:
+    context = "raw electrostatics result"
+    _require_keys(
+        row,
+        (
+            "schema",
+            "run_id",
+            "case_id",
+            "mode",
+            "measurement_role",
+            "status",
+            "success",
+            "world_size",
+            "pair_count",
+            "atom_count",
+            "source",
+            "input",
+            "charges",
+            "pme",
+            "ewald",
+            "comparison",
+            "bundle_settings_sha256",
+            "bundle_source",
+            "bundle_job_record",
+        ),
+        context=context,
+    )
+    if (
+        row["schema"] != RUNNER_SCHEMA
+        or row["mode"] != "electrostatics-validation"
+        or row["measurement_role"] != "electrostatics_validation"
+        or row["status"] != "complete"
+        or row["success"] is not True
+        or row["world_size"] != 1
+        or row["atom_count"] != ELECTROSTATICS_ATOM_COUNT
+    ):
+        raise DomainLessonResultsError(
+            "electrostatics result is not the declared successful 3,200-atom check"
+        )
+    if (
+        row["bundle_settings_sha256"] != settings_sha256
+        or row["bundle_source"] != "manifest.json#source"
+        or row["bundle_job_record"] != "manifest.json#job_records/1"
+        or "settings_sha256" in row
+    ):
+        raise DomainLessonResultsError(
+            "electrostatics result must link to, not claim, the fixed-input settings"
+        )
+    _validate_raw_source(
+        row,
+        expected=source_identity,
+        context=context,
+    )
+    _validate_raw_methodology(
+        row,
+        pair_count=ELECTROSTATICS_PAIRS,
+        context=context,
+    )
+    input_record = _require_mapping(row, "input", context=context)
+    _require_keys(
+        input_record,
+        ("path", "file_sha256", "file_size_bytes"),
+        context=f"{context}.input",
+    )
+    input_path = str(input_record["path"])
+    input_digest = _require_sha256(
+        input_record["file_sha256"],
+        name=f"{context}.input.file_sha256",
+    )
+    if checksums.get(input_path) != input_digest:
+        raise DomainLessonResultsError(
+            "electrostatics input checksum index and raw result disagree"
+        )
+    checked_input = _checked_file(root, input_path, input_digest)
+    if checked_input.stat().st_size != _positive_integer(
+        input_record["file_size_bytes"],
+        name=f"{context}.input.file_size_bytes",
+    ):
+        raise DomainLessonResultsError("electrostatics input file size does not match")
+
+    validation_metadata = _require_mapping(
+        manifest,
+        "electrostatics_validation",
+        context="manifest",
+    )
+    _require_keys(
+        validation_metadata,
+        ("file", "sha256", "passed"),
+        context="manifest.electrostatics_validation",
+    )
+    if (
+        validation_metadata["file"] != "electrostatics-validation.json"
+        or validation_metadata["passed"] is not True
+    ):
+        raise DomainLessonResultsError(
+            "manifest electrostatics validation is incomplete"
+        )
+    validation_digest = _require_sha256(
+        validation_metadata["sha256"],
+        name="manifest.electrostatics_validation.sha256",
+    )
+    files = _require_mapping(manifest, "files", context="manifest")
+    validation_file_metadata = _require_mapping(
+        files,
+        "electrostatics-validation.json",
+        context="manifest.files",
+    )
+    _require_keys(
+        validation_file_metadata,
+        ("sha256", "size_bytes"),
+        context="manifest.files.electrostatics-validation.json",
+    )
+    if (
+        validation_file_metadata["sha256"] != validation_digest
+        or checksums.get("electrostatics-validation.json") != validation_digest
+    ):
+        raise DomainLessonResultsError(
+            "electrostatics-validation.json checksums disagree"
+        )
+    validation_path = _checked_file(
+        root,
+        "electrostatics-validation.json",
+        validation_digest,
+    )
+    if validation_path.stat().st_size != _positive_integer(
+        validation_file_metadata["size_bytes"],
+        name="manifest.files.electrostatics-validation.json.size_bytes",
+    ):
+        raise DomainLessonResultsError(
+            "electrostatics-validation.json size does not match the manifest"
+        )
+    try:
+        saved_validation = json.loads(validation_path.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        raise DomainLessonResultsError(
+            "electrostatics-validation.json is not valid JSON"
+        ) from exc
+    if not isinstance(saved_validation, Mapping) or saved_validation != row:
+        raise DomainLessonResultsError(
+            "electrostatics-validation.json differs from raw-results.jsonl"
+        )
+    _reject_host_paths(
+        saved_validation,
+        context="electrostatics-validation.json",
+    )
+    charge = _validate_charge_record(
+        _require_mapping(row, "charges", context=context),
+        atom_count=ELECTROSTATICS_ATOM_COUNT,
+        context="raw electrostatics result.charges",
+    )
+    if abs(float(charge["residual_e"])) > DOMAIN_METHODOLOGY.charge_sum_tolerance_e:
+        raise DomainLessonResultsError(
+            "electrostatics charge residual exceeds the declared limit"
+        )
+    pme = _require_mapping(row, "pme", context=context)
+    ewald = _require_mapping(row, "ewald", context=context)
+    comparison = _require_mapping(row, "comparison", context=context)
+    _require_keys(pme, ("energy_ev", "forces"), context="electrostatics.pme")
+    _require_keys(ewald, ("energy_ev", "forces"), context="electrostatics.ewald")
+    _require_keys(
+        comparison,
+        (
+            "absolute_energy_difference_ev",
+            "absolute_energy_difference_ev_per_atom",
+            "force_difference_rms_ev_a",
+            "force_difference_max_norm_ev_a",
+            "acceptance",
+            "passed",
+        ),
+        context="electrostatics.comparison",
+    )
+    pme_energy = _finite_number(pme["energy_ev"], name="electrostatics PME energy")
+    ewald_energy = _finite_number(
+        ewald["energy_ev"],
+        name="electrostatics Ewald energy",
+    )
+    _check_force_summary(
+        _require_mapping(pme, "forces", context="electrostatics.pme"),
+        atom_count=ELECTROSTATICS_ATOM_COUNT,
+        context="electrostatics.pme.forces",
+    )
+    _check_force_summary(
+        _require_mapping(ewald, "forces", context="electrostatics.ewald"),
+        atom_count=ELECTROSTATICS_ATOM_COUNT,
+        context="electrostatics.ewald.forces",
+    )
+    energy_error = abs(pme_energy - ewald_energy)
+    energy_error_per_atom = energy_error / ELECTROSTATICS_ATOM_COUNT
+    if not math.isclose(
+        _finite_number(
+            comparison["absolute_energy_difference_ev"],
+            name="electrostatics absolute energy difference",
+        ),
+        energy_error,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-12,
+    ) or not math.isclose(
+        _finite_number(
+            comparison["absolute_energy_difference_ev_per_atom"],
+            name="electrostatics energy difference per atom",
+        ),
+        energy_error_per_atom,
+        rel_tol=1.0e-12,
+        abs_tol=1.0e-12,
+    ):
+        raise DomainLessonResultsError(
+            "electrostatics energy comparison is inconsistent"
+        )
+    force_rms = _finite_number(
+        comparison["force_difference_rms_ev_a"],
+        name="electrostatics force RMS difference",
+    )
+    force_max = _finite_number(
+        comparison["force_difference_max_norm_ev_a"],
+        name="electrostatics force maximum difference",
+    )
+    acceptance = _require_mapping(
+        comparison,
+        "acceptance",
+        context="electrostatics.comparison",
+    )
+    expected_acceptance = {
+        "declared_before_measurement": True,
+        "absolute_energy_difference_ev_per_atom_max": (
+            DOMAIN_METHODOLOGY.pme_ewald_energy_tolerance_ev_per_atom
+        ),
+        "force_difference_max_norm_ev_a_max": (
+            DOMAIN_METHODOLOGY.pme_ewald_force_max_tolerance_ev_a
+        ),
+        "absolute_charge_sum_e_max": DOMAIN_METHODOLOGY.charge_sum_tolerance_e,
+    }
+    if dict(acceptance) != expected_acceptance:
+        raise DomainLessonResultsError(
+            "electrostatics limits differ from the current methodology"
+        )
+    passed = (
+        energy_error_per_atom
+        <= DOMAIN_METHODOLOGY.pme_ewald_energy_tolerance_ev_per_atom
+        and force_max <= DOMAIN_METHODOLOGY.pme_ewald_force_max_tolerance_ev_a
+        and abs(float(charge["residual_e"]))
+        <= DOMAIN_METHODOLOGY.charge_sum_tolerance_e
+    )
+    if comparison["passed"] is not True or not passed:
+        raise DomainLessonResultsError("the saved PME-versus-Ewald check does not pass")
+    table = pd.DataFrame(
+        [
+            {
+                "atom_count": ELECTROSTATICS_ATOM_COUNT,
+                "charge_sum_e": charge["charge_sum_e"],
+                "charge_residual_e": charge["residual_e"],
+                "energy_abs_error_meV_per_atom": 1000.0 * energy_error_per_atom,
+                "force_rms_error_eV_A": force_rms,
+                "force_max_error_eV_A": force_max,
+                "passed": True,
+            }
+        ]
+    )
+    return table, charge
+
+
+def _settings_table(manifest: Mapping[str, Any]) -> pd.DataFrame:
+    settings = manifest["settings"]
+    model = settings["model"]
+    execution = manifest["execution"]
+    domain_cutoff = max(
+        DOMAIN_METHODOLOGY.aimnet_neighbor_cutoff_a,
+        float(model["pme_cutoff_a"]),
+        float(model["d3_cutoff_a"]),
+    )
+    return pd.DataFrame(
+        [
+            ("Fixed input", f"{FIXED_ATOM_COUNT:,} atoms"),
+            ("Molecular composition", "phenol + N-methylacetamide"),
+            ("Model", "AIMNet2 + PME electrostatics + D3(BJ)"),
+            ("Precision", "float32"),
+            ("Toolkit API", "DomainParallel"),
+            ("Domain cutoff", f"{domain_cutoff:g} Å"),
+            ("Domain skin", f"{DOMAIN_METHODOLOGY.domain_halo_skin_a:g} Å"),
+            ("GPU counts", ", ".join(map(str, REQUIRED_WORLD_SIZES))),
+            ("Untimed warmup passes", execution["warmup_count"]),
+            ("Measured passes", execution["measured_pass_count"]),
+            (
+                "Model evaluations per measured pass",
+                DOMAIN_METHODOLOGY.measured_model_evaluations_per_pass,
+            ),
+            ("Work per measured pass", execution["work_per_measured_pass"]),
+        ],
+        columns=("setting", "value"),
+    )
+
+
+def _learner_tables(
+    table: pd.DataFrame,
+    pass_times: Mapping[int, tuple[float, float, float]],
+) -> tuple[pd.DataFrame, pd.DataFrame, pd.DataFrame]:
+    ordered = table.sort_values("gpus").reset_index(drop=True)
+    layout = pd.DataFrame(
+        {
+            "world_size": ordered["gpus"].astype(int),
+            "nodes": ordered["nodes"].astype(int),
+            "ranks": ordered["ranks"].astype(int),
+            "spatial_grid": ordered["spatial_grid"].astype(str),
+            "owned_atoms_min": ordered["owned_atoms_min_rank"].astype(int),
+            "owned_atoms_max": ordered["owned_atoms_max_rank"].astype(int),
+        }
+    )
+    timing_records: list[dict[str, Any]] = []
+    reference_median = float(np.median(pass_times[REQUIRED_WORLD_SIZES[0]]))
+    for world_size in REQUIRED_WORLD_SIZES:
+        values = pass_times[world_size]
+        median = float(np.median(values))
+        speedup = reference_median / median
+        timing_records.append(
+            {
+                "world_size": world_size,
+                "pass_1_s": values[0],
+                "pass_2_s": values[1],
+                "pass_3_s": values[2],
+                "median_time_s": median,
+                "speedup_vs_1gpu": speedup,
+                "parallel_efficiency": speedup / world_size,
+            }
+        )
+    timing = pd.DataFrame.from_records(timing_records)
+    plot = timing[
+        [
+            "world_size",
+            "pass_1_s",
+            "pass_2_s",
+            "pass_3_s",
+            "median_time_s",
+        ]
+    ].merge(
+        layout[["world_size", "owned_atoms_min", "owned_atoms_max"]],
+        on="world_size",
+        validate="one_to_one",
+    )
+    plot = plot[list(PLOT_COLUMNS)]
+    return layout, timing, plot
 
 
 def _validate_declared_files(
     root: Path,
     manifest: Mapping[str, Any],
     checksums: Mapping[str, str],
-    artifact_paths: set[str],
 ) -> None:
-    data = _require_mapping(manifest, "data", context="manifest")
-    table_paths = {
-        str(_require_mapping(data, name, context="manifest.data")["file"])
-        for name in TABLE_NAMES
+    declared = {MANIFEST_NAME}
+    files = _require_mapping(manifest, "files", context="manifest")
+    required_top_files = {
+        "distributed.csv",
+        RAW_RESULTS_NAME,
+        "electrostatics-validation.json",
     }
-    raw_results = _require_mapping(manifest, "raw_results", context="manifest")
-    declared = {
-        MANIFEST_NAME,
-        str(raw_results["file"]),
-        *table_paths,
-        *artifact_paths,
-    }
-    checksum_paths = set(checksums)
-    missing_checksums = declared - checksum_paths
-    if missing_checksums:
+    if set(files) != required_top_files:
         raise DomainLessonResultsError(
-            f"SHA256SUMS is missing declared files: {sorted(missing_checksums)!r}"
-        )
-    undeclared_checksums = checksum_paths - declared
-    if undeclared_checksums:
-        raise DomainLessonResultsError(
-            f"SHA256SUMS lists undeclared files: {sorted(undeclared_checksums)!r}"
+            "manifest.files must contain the three learner result files"
         )
 
+    def validate_file_record(
+        filename: str,
+        record: Mapping[str, Any],
+        *,
+        context: str,
+    ) -> None:
+        _require_keys(record, ("sha256", "size_bytes"), context=context)
+        expected = _require_sha256(record["sha256"], name=f"{context}.sha256")
+        if checksums.get(filename) != expected:
+            raise DomainLessonResultsError(
+                f"{filename} checksum index and manifest disagree"
+            )
+        path = _checked_file(root, filename, expected)
+        expected_size = _positive_integer(
+            record["size_bytes"],
+            name=f"{context}.size_bytes",
+        )
+        if path.stat().st_size != expected_size:
+            raise DomainLessonResultsError(
+                f"{filename} size does not match the manifest"
+            )
+        if filename in declared:
+            raise DomainLessonResultsError(f"saved file is declared twice: {filename}")
+        declared.add(filename)
+
+    for filename, record in files.items():
+        if not isinstance(record, Mapping):
+            raise DomainLessonResultsError(
+                f"manifest.files.{filename} must be an object"
+            )
+        validate_file_record(
+            str(filename),
+            record,
+            context=f"manifest.files.{filename}",
+        )
+
+    job_records = _require_mapping(manifest, "job_records", context="manifest")
+    expected_job_keys = {str(value) for value in REQUIRED_WORLD_SIZES}
+    if set(job_records) != expected_job_keys:
+        raise DomainLessonResultsError(
+            "manifest.job_records must contain the 1/2/4-GPU jobs"
+        )
+    required_job_files = {
+        "plan.json",
+        "phase-summary.json",
+        "collection-summary.json",
+        "results.jsonl",
+        "part1-runtime.json",
+        "d3-cache.json",
+        "aimnet-checkpoint-preflight.json",
+        "gpu-names.txt",
+        "gpu-topology.txt",
+        "network-interfaces.txt",
+        "producer-SHA256SUMS",
+        "artifact-SHA256SUMS",
+    }
+    producer_maps: list[dict[str, str]] = []
+    for world_size in REQUIRED_WORLD_SIZES:
+        context = f"manifest.job_records.{world_size}"
+        record = _require_mapping(
+            job_records,
+            str(world_size),
+            context="manifest.job_records",
+        )
+        _require_keys(
+            record,
+            (
+                "world_size",
+                "files",
+                "producer_checksum_file_sha256",
+                "artifact_checksum_file_sha256",
+                "verified_producer_file_count",
+                "verified_artifact_file_count",
+                "producer_files",
+            ),
+            context=context,
+        )
+        if record["world_size"] != world_size:
+            raise DomainLessonResultsError(f"{context}.world_size is incorrect")
+        job_files = _require_mapping(record, "files", context=context)
+        if not required_job_files <= set(job_files):
+            raise DomainLessonResultsError(
+                f"{context}.files is missing required job records"
+            )
+        if not all(
+            any(str(name).startswith(f"{directory}/") for name in job_files)
+            for directory in ("inputs", "results", "ranks", "logs")
+        ):
+            raise DomainLessonResultsError(
+                f"{context}.files must retain inputs, results, ranks, and logs"
+            )
+        by_relative_name: dict[str, str] = {}
+        for job_relative, raw_file_record in job_files.items():
+            if not isinstance(raw_file_record, Mapping):
+                raise DomainLessonResultsError(
+                    f"{context}.files.{job_relative} must be an object"
+                )
+            _require_keys(
+                raw_file_record,
+                ("path", "sha256", "size_bytes"),
+                context=f"{context}.files.{job_relative}",
+            )
+            bundle_path = str(raw_file_record["path"])
+            expected_prefix = f"job-records/gpus-{world_size:02d}/"
+            if not bundle_path.startswith(expected_prefix) or bundle_path.removeprefix(
+                expected_prefix
+            ) != str(job_relative):
+                raise DomainLessonResultsError(
+                    f"{context}.files.{job_relative}.path is incorrect"
+                )
+            validate_file_record(
+                bundle_path,
+                raw_file_record,
+                context=f"{context}.files.{job_relative}",
+            )
+            by_relative_name[str(job_relative)] = bundle_path
+
+        producer_checksum = _require_sha256(
+            record["producer_checksum_file_sha256"],
+            name=f"{context}.producer_checksum_file_sha256",
+        )
+        artifact_checksum = _require_sha256(
+            record["artifact_checksum_file_sha256"],
+            name=f"{context}.artifact_checksum_file_sha256",
+        )
+        if (
+            _sha256_file(root / by_relative_name["producer-SHA256SUMS"])
+            != producer_checksum
+            or _sha256_file(root / by_relative_name["artifact-SHA256SUMS"])
+            != artifact_checksum
+        ):
+            raise DomainLessonResultsError(
+                f"{context} checksum-file hashes do not match"
+            )
+        producer_files = record["producer_files"]
+        if not isinstance(producer_files, Mapping) or not producer_files:
+            raise DomainLessonResultsError(
+                f"{context}.producer_files must be a nonempty object"
+            )
+        normalized_producers = {
+            str(name): _require_sha256(
+                digest,
+                name=f"{context}.producer_files.{name}",
+            )
+            for name, digest in producer_files.items()
+        }
+        if _positive_integer(
+            record["verified_producer_file_count"],
+            name=f"{context}.verified_producer_file_count",
+        ) != len(normalized_producers):
+            raise DomainLessonResultsError(
+                f"{context} producer file count is incorrect"
+            )
+        if (
+            _positive_integer(
+                record["verified_artifact_file_count"],
+                name=f"{context}.verified_artifact_file_count",
+            )
+            != len(job_files) - 1
+        ):
+            raise DomainLessonResultsError(f"{context} job file count is incorrect")
+        producer_maps.append(normalized_producers)
+    if any(value != producer_maps[0] for value in producer_maps[1:]):
+        raise DomainLessonResultsError(
+            "the 1/2/4-GPU jobs used different producer files"
+        )
+
+    if set(checksums) != declared:
+        missing = declared - set(checksums)
+        extra = set(checksums) - declared
+        raise DomainLessonResultsError(
+            f"checksum index does not match declared files; "
+            f"missing={sorted(missing)!r}, extra={sorted(extra)!r}"
+        )
     files_on_disk = {
         path.relative_to(root).as_posix() for path in root.rglob("*") if path.is_file()
     }
     expected_files = declared | {CHECKSUM_INDEX_NAME}
-    undeclared_files = files_on_disk - expected_files
-    if undeclared_files:
+    if files_on_disk != expected_files:
         raise DomainLessonResultsError(
-            f"bundle contains undeclared files: {sorted(undeclared_files)!r}"
+            "result directory contains missing or undeclared files"
         )
-
-
-def _validate_identity(
-    manifest: Mapping[str, Any],
-) -> tuple[dict[int, str], str]:
-    identity = _require_mapping(manifest, "identity", context="manifest")
-    hashes = _require_mapping(manifest, "identity_sha256", context="manifest")
-    _require_keys(
-        identity,
-        ("source", "hardware", "settings", "inputs"),
-        context="identity",
-    )
-    _require_keys(
-        hashes,
-        ("source", "hardware", "settings", "inputs"),
-        context="identity_sha256",
-    )
-    for name in ("source", "hardware", "settings", "inputs"):
-        record = _require_mapping(identity, name, context="identity")
-        observed = canonical_json_sha256(record)
-        expected = str(hashes[name])
-        if not _HEX64.fullmatch(expected) or observed != expected:
-            raise DomainLessonResultsError(f"{name} identity hash does not match")
-
-    source = _require_mapping(identity, "source", context="identity")
-    _require_keys(
-        source,
-        (
-            "repository_commit",
-            "repository_dirty",
-            "toolkit_commit",
-            "toolkit_ops_commit",
-            "toolkit_version",
-            "domain_methodology",
-            "producer_files_sha256",
-        ),
-        context="identity.source",
-    )
-    if not _HEX40.fullmatch(str(source["repository_commit"])):
-        raise DomainLessonResultsError("repository_commit must be a 40-digit SHA")
-    if not _HEX40.fullmatch(str(source["toolkit_commit"])):
-        raise DomainLessonResultsError("toolkit_commit must be a 40-digit SHA")
-    if not _HEX40.fullmatch(str(source["toolkit_ops_commit"])):
-        raise DomainLessonResultsError("toolkit_ops_commit must be a 40-digit SHA")
-    if not isinstance(source["repository_dirty"], bool):
-        raise DomainLessonResultsError("repository_dirty must be boolean")
-    if not str(source["toolkit_version"]).strip():
-        raise DomainLessonResultsError("toolkit_version must be reported")
-    producer_files = source["producer_files_sha256"]
-    if not isinstance(producer_files, Mapping) or not producer_files:
-        raise DomainLessonResultsError("producer_files_sha256 must be nonempty")
-    if any(
-        not str(path).strip() or not _HEX64.fullmatch(str(digest))
-        for path, digest in producer_files.items()
-    ):
-        raise DomainLessonResultsError("producer file hashes must be valid SHA-256")
-
-    expected_config_sha256 = _sha256_file(Path(__file__).with_name("config.py"))
-    expected_methodology_values = json.loads(
-        json.dumps(
-            DOMAIN_METHODOLOGY.resolved_values(json_compatible=True),
-            allow_nan=False,
-        )
-    )
-    expected_methodology_record = json.loads(
-        json.dumps(DOMAIN_METHODOLOGY.as_record(), allow_nan=False)
-    )
-    source_methodology = _require_mapping(
-        source,
-        "domain_methodology",
-        context="identity.source",
-    )
-    _require_keys(
-        source_methodology,
-        ("name", "version", "config_sha256", "record", "resolved_values"),
-        context="identity.source.domain_methodology",
-    )
-    if (
-        source_methodology["name"] != DOMAIN_METHODOLOGY.name
-        or source_methodology["version"] != DOMAIN_METHODOLOGY.version
-        or source_methodology["config_sha256"] != expected_config_sha256
-        or source_methodology["record"] != expected_methodology_record
-        or source_methodology["resolved_values"] != expected_methodology_values
-    ):
-        raise DomainLessonResultsError(
-            "saved results do not use the current methodology identity and values"
-        )
-    config_producer_digests = [
-        str(digest)
-        for path, digest in producer_files.items()
-        if PurePosixPath(str(path)).name == "config.py"
-    ]
-    if config_producer_digests != [expected_config_sha256]:
-        raise DomainLessonResultsError(
-            "producer files do not contain the current methodology config"
-        )
-
-    hardware = _require_mapping(identity, "hardware", context="identity")
-    _require_keys(
-        hardware,
-        (
-            "site",
-            "site_source",
-            "gpu_model",
-            "gpu_memory_bytes",
-            "gpus_available",
-            "nodes_available",
-            "resource_count_source",
-            "driver_version",
-            "cuda_version",
-            "interconnect",
-            "interconnect_source",
-        ),
-        context="identity.hardware",
-    )
-    if not _H100.search(str(hardware["gpu_model"])):
-        raise DomainLessonResultsError("saved lesson results must identify H100 GPUs")
-    for key in ("gpu_memory_bytes", "gpus_available", "nodes_available"):
-        try:
-            value = int(hardware[key])
-        except (TypeError, ValueError) as exc:
-            raise DomainLessonResultsError(
-                f"identity.hardware.{key} must be positive"
-            ) from exc
-        if value <= 0:
-            raise DomainLessonResultsError(f"identity.hardware.{key} must be positive")
-    for key in (
-        "site",
-        "site_source",
-        "resource_count_source",
-        "driver_version",
-        "cuda_version",
-        "interconnect",
-        "interconnect_source",
-    ):
-        if not str(hardware[key]).strip():
-            raise DomainLessonResultsError(f"identity.hardware.{key} is empty")
-
-    settings = _require_mapping(identity, "settings", context="identity")
-    _require_keys(
-        settings,
-        (
-            "model_components",
-            "domain_methodology",
-            "precision",
-            "aimnet_checkpoint_sha256",
-            "d3_parameters_sha256",
-            "pme",
-            "ewald_reference",
-            "domain",
-            "packmol",
-            "timing_boundary",
-            "timing_measurement_kind",
-            "timing_measurement_role",
-            "timing_world_sizes",
-            "timing_warmup_count",
-            "timing_sample_count",
-            "timing_model_evaluations_per_workflow",
-            "timing_one_rank_run_steps",
-            "timing_multi_rank_run_steps",
-            "timing_summary",
-            "timing_quartile_method",
-            "timing_max_relative_iqr",
-        ),
-        context="identity.settings",
-    )
-    components = settings["model_components"]
-    if not isinstance(components, list) or not components:
-        raise DomainLessonResultsError("model_components must be a nonempty list")
-    for key in ("aimnet_checkpoint_sha256", "d3_parameters_sha256"):
-        if not _HEX64.fullmatch(str(settings[key])):
-            raise DomainLessonResultsError(f"{key} must be a SHA-256")
-    for key in ("pme", "ewald_reference", "domain", "packmol"):
-        if not isinstance(settings[key], Mapping) or not settings[key]:
-            raise DomainLessonResultsError(f"identity.settings.{key} must be reported")
-    if (
-        not str(settings["precision"]).strip()
-        or not str(settings["timing_boundary"]).strip()
-    ):
-        raise DomainLessonResultsError("precision and timing_boundary must be reported")
-    if (
-        settings["timing_measurement_kind"] != "steady_partition_run_gather"
-        or settings["timing_measurement_role"] != "steady_timing"
-        or list(settings["timing_world_sizes"])
-        != list(DOMAIN_METHODOLOGY.steady_timing_world_sizes)
-        or settings["timing_warmup_count"]
-        != DOMAIN_METHODOLOGY.steady_timing_warmup_count
-        or settings["timing_sample_count"]
-        != DOMAIN_METHODOLOGY.steady_timing_sample_count
-        or settings["timing_model_evaluations_per_workflow"]
-        != DOMAIN_METHODOLOGY.steady_timing_model_evaluations_per_workflow
-        or settings["timing_one_rank_run_steps"]
-        != DOMAIN_METHODOLOGY.steady_timing_run_steps(1)
-        or settings["timing_multi_rank_run_steps"]
-        != DOMAIN_METHODOLOGY.steady_timing_run_steps(
-            DOMAIN_METHODOLOGY.distributed_world_sizes[0]
-        )
-        or not str(settings["timing_summary"]).strip()
-        or settings["timing_quartile_method"] != "inclusive linear interpolation"
-        or settings["timing_max_relative_iqr"]
-        != DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr
-    ):
-        raise DomainLessonResultsError(
-            "identity.settings steady timing differs from the current methodology"
-        )
-
-    settings_methodology = _require_mapping(
-        settings,
-        "domain_methodology",
-        context="identity.settings",
-    )
-    _require_keys(
-        settings_methodology,
-        ("name", "version", "config_sha256", "resolved_values"),
-        context="identity.settings.domain_methodology",
-    )
-    if (
-        settings_methodology["name"] != DOMAIN_METHODOLOGY.name
-        or settings_methodology["version"] != DOMAIN_METHODOLOGY.version
-        or settings_methodology["config_sha256"] != expected_config_sha256
-        or settings_methodology["resolved_values"] != expected_methodology_values
-    ):
-        raise DomainLessonResultsError(
-            "saved settings do not use the current methodology identity and values"
-        )
-
-    pme = settings["pme"]
-    expected_pme = {
-        "cutoff_a": DOMAIN_METHODOLOGY.pme_realspace_cutoff_a,
-        "mesh_safety_factor": DOMAIN_METHODOLOGY.pme_mesh_safety_factor,
-        "parameter_rule": (
-            "estimate_pme_parameters(accuracy, real_space_cutoff, "
-            "mesh_safety_factor)"
-        ),
-        "spline_order": DOMAIN_METHODOLOGY.pme_spline_order,
-        "accuracy": DOMAIN_METHODOLOGY.pme_accuracy,
-        "hybrid_forces": True,
-        "reciprocal_mesh_distribution": "replicated_per_rank",
-    }
-    if any(pme.get(key) != value for key, value in expected_pme.items()):
-        raise DomainLessonResultsError(
-            "identity.settings.pme differs from the current methodology"
-        )
-
-    ewald_reference = settings["ewald_reference"]
-    expected_ewald_reference = {
-        "accuracy": DOMAIN_METHODOLOGY.ewald_reference_accuracy,
-        "parameter_rule": "estimate_ewald_parameters(accuracy)",
-        "scope": "fixed-charge electrostatics validation only",
-    }
-    if any(
-        ewald_reference.get(key) != value
-        for key, value in expected_ewald_reference.items()
-    ):
-        raise DomainLessonResultsError(
-            "identity.settings.ewald_reference differs from the current methodology"
-        )
-
-    domain = settings["domain"]
-    expected_domain = {
-        "api": "DomainParallel",
-        "skin_a": DOMAIN_METHODOLOGY.domain_halo_skin_a,
-        "cutoff_a": max(
-            DOMAIN_METHODOLOGY.aimnet_neighbor_cutoff_a,
-            DOMAIN_METHODOLOGY.pme_realspace_cutoff_a,
-            DOMAIN_METHODOLOGY.d3_cutoff_a,
-        ),
-        "compile": False,
-        "require_nondegenerate": True,
-        "grid_dims": DOMAIN_METHODOLOGY.domain_grid_dims,
-        "rank_grid_policy": (
-            "Toolkit SpatialPartitioner derives cells_per_dim and rank_grid "
-            "from each input's actual cell shape and the domain cutoff"
-        ),
-        "recorded_layout_fields": ["cells_per_dim", "rank_grid"],
-    }
-    if any(domain.get(key) != value for key, value in expected_domain.items()):
-        raise DomainLessonResultsError(
-            "identity.settings.domain differs from the current methodology"
-        )
-
-    packmol = settings["packmol"]
-    expected_packmol = {
-        "construction_density_g_cm3": (
-            DOMAIN_METHODOLOGY.construction_density_g_cm3
-        ),
-        "tolerance_a": DOMAIN_METHODOLOGY.packmol_tolerance_a,
-        "precision_a": DOMAIN_METHODOLOGY.packmol_precision_a,
-        "base_seed": DOMAIN_METHODOLOGY.packmol_seed,
-        "periodic_boundary_check": True,
-    }
-    if any(packmol.get(key) != value for key, value in expected_packmol.items()):
-        raise DomainLessonResultsError(
-            "identity.settings.packmol differs from the current methodology"
-        )
-
-    parity_acceptance = _require_mapping(
-        settings,
-        "parity_acceptance",
-        context="identity.settings",
-    )
-    expected_parity_acceptance = {
-        "declared_before_measurement": True,
-        "energy_reference_world_size": (
-            DOMAIN_METHODOLOGY.energy_reference_world_size
-        ),
-        "energy_comparison_world_sizes": list(
-            DOMAIN_METHODOLOGY.energy_comparison_world_sizes
-        ),
-        "energy_one_gpu_comparison": (
-            "diagnostic_only_due_different_reduction_path"
-        ),
-        "energy_rule": (
-            "abs(delta_energy_eV) / atom_count <= tolerance_eV_per_atom"
-        ),
-        "energy_tolerance_ev_per_atom": (
-            DOMAIN_METHODOLOGY.parity_energy_tolerance_ev_per_atom
-        ),
-        "force_rule": (
-            "componentwise abs(delta) <= atol_eV_A + "
-            "rtol * abs(reference_component_eV_A)"
-        ),
-        "force_reference_world_size": (
-            DOMAIN_METHODOLOGY.force_reference_world_size
-        ),
-        "force_comparison_world_sizes": list(
-            DOMAIN_METHODOLOGY.force_comparison_world_sizes
-        ),
-        "force_atol_ev_a": DOMAIN_METHODOLOGY.parity_force_atol_ev_a,
-        "force_rtol": DOMAIN_METHODOLOGY.parity_force_rtol,
-    }
-    if dict(parity_acceptance) != expected_parity_acceptance:
-        raise DomainLessonResultsError(
-            "identity.settings.parity_acceptance differs from the current methodology"
-        )
-
-    inputs = _require_mapping(identity, "inputs", context="identity")
-    _require_keys(
-        inputs,
-        (
-            "structures_sha256_by_atom_count",
-            "nci_subset_sha256",
-            "molecule_pair",
-            "construction_density_g_cm3",
-        ),
-        context="identity.inputs",
-    )
-    if not _HEX64.fullmatch(str(inputs["nci_subset_sha256"])):
-        raise DomainLessonResultsError("nci_subset_sha256 must be a SHA-256")
-    raw_structure_hashes = inputs["structures_sha256_by_atom_count"]
-    if not isinstance(raw_structure_hashes, Mapping) or not raw_structure_hashes:
-        raise DomainLessonResultsError(
-            "structures_sha256_by_atom_count must be a nonempty object"
-        )
-    structure_hashes: dict[int, str] = {}
-    for raw_count, raw_digest in raw_structure_hashes.items():
-        try:
-            atom_count = int(raw_count)
-        except (TypeError, ValueError) as exc:
-            raise DomainLessonResultsError(
-                "structure hash keys must be positive atom counts"
-            ) from exc
-        digest = str(raw_digest)
-        if (
-            atom_count <= 0
-            or str(atom_count) != str(raw_count)
-            or not _HEX64.fullmatch(digest)
-        ):
-            raise DomainLessonResultsError("structures_sha256_by_atom_count is invalid")
-        structure_hashes[atom_count] = digest
-    if str(inputs["molecule_pair"]) != "phenol + N-methylacetamide":
-        raise DomainLessonResultsError("unexpected molecular pair")
-    try:
-        density = float(inputs["construction_density_g_cm3"])
-    except (TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            "construction_density_g_cm3 must be positive"
-        ) from exc
-    if not np.isfinite(density) or density <= 0.0:
-        raise DomainLessonResultsError("construction_density_g_cm3 must be positive")
-    return structure_hashes, str(hashes["settings"])
-
-
-def _coerce_boolean(series: pd.Series, *, name: str) -> pd.Series:
-    mapping = {
-        True: True,
-        False: False,
-        "true": True,
-        "false": False,
-        "True": True,
-        "False": False,
-        "1": True,
-        "0": False,
-    }
-    converted = series.map(mapping)
-    if converted.isna().any():
-        raise DomainLessonResultsError(f"{name} contains an invalid boolean")
-    return converted.astype(bool)
-
-
-def _require_sha256(value: Any, *, name: str) -> str:
-    digest = str(value)
-    if not _HEX64.fullmatch(digest):
-        raise DomainLessonResultsError(f"{name} must be a valid SHA-256")
-    return digest
-
-
-def _finite_charge_number(
-    record: Mapping[str, Any],
-    name: str,
-    *,
-    context: str,
-) -> float:
-    value = record.get(name)
-    if isinstance(value, bool):
-        raise DomainLessonResultsError(f"{context}.{name} must be finite")
-    try:
-        number = float(value)
-    except (TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(f"{context}.{name} must be finite") from exc
-    if not np.isfinite(number):
-        raise DomainLessonResultsError(f"{context}.{name} must be finite")
-    return number
-
-
-def _validated_charge_diagnostics(
-    value: Any,
-    *,
-    atom_count: int,
-    context: str,
-    target_sum_e: float = 0.0,
-) -> dict[str, Any]:
-    """Validate one unmodified float32 charge tensor summary.
-
-    The residual is recorded as a numerical diagnostic. This general check does
-    not turn it into a pass/fail threshold for large one-GPU calculations.
-    """
-
-    if not isinstance(value, Mapping):
-        raise DomainLessonResultsError(f"{context} must be an object")
-    required = (
-        "available",
-        "finite",
-        "dtype",
-        "target_sum_e",
-        "sum_e",
-        "residual_e",
-        "abs_residual_per_atom",
-        "sum_abs_e",
-        "max_abs_e",
-        "shape",
-        "sha256",
-    )
-    _require_keys(value, required, context=context)
-    if value["available"] is not True:
-        raise DomainLessonResultsError(f"{context} are not available")
-    if value["finite"] is not True:
-        raise DomainLessonResultsError(f"{context} contain non-finite charges")
-    if value["dtype"] != "float32":
-        raise DomainLessonResultsError(
-            f"{context}.dtype must identify the float32 PME charge tensor"
-        )
-    if atom_count <= 0:
-        raise DomainLessonResultsError(f"{context} atom count must be positive")
-
-    expected_target = float(target_sum_e)
-    if not np.isfinite(expected_target):
-        raise DomainLessonResultsError(
-            f"{context} expected total-charge target must be finite"
-        )
-    observed_target = _finite_charge_number(
-        value,
-        "target_sum_e",
-        context=context,
-    )
-    if observed_target != expected_target:
-        raise DomainLessonResultsError(
-            f"{context}.target_sum_e does not match the input total charge"
-        )
-
-    shape = value["shape"]
-    if (
-        not isinstance(shape, list)
-        or not shape
-        or any(
-            isinstance(size, bool) or not isinstance(size, int) or size <= 0
-            for size in shape
-        )
-        or math.prod(shape) != atom_count
-    ):
-        raise DomainLessonResultsError(
-            f"{context}.shape does not match the atom count"
-        )
-    digest = _require_sha256(
-        value["sha256"],
-        name=f"{context}.sha256",
-    )
-
-    charge_sum = _finite_charge_number(value, "sum_e", context=context)
-    residual = _finite_charge_number(value, "residual_e", context=context)
-    residual_per_atom = _finite_charge_number(
-        value,
-        "abs_residual_per_atom",
-        context=context,
-    )
-    sum_abs = _finite_charge_number(value, "sum_abs_e", context=context)
-    max_abs = _finite_charge_number(value, "max_abs_e", context=context)
-    if not math.isclose(
-        residual,
-        charge_sum - observed_target,
-        rel_tol=1.0e-12,
-        abs_tol=1.0e-15,
-    ):
-        raise DomainLessonResultsError(
-            f"{context}.residual_e is inconsistent with the charge sum"
-        )
-    if not math.isclose(
-        residual_per_atom,
-        abs(residual) / atom_count,
-        rel_tol=1.0e-12,
-        abs_tol=1.0e-18,
-    ):
-        raise DomainLessonResultsError(
-            f"{context}.abs_residual_per_atom is inconsistent"
-        )
-
-    magnitude_slack = 1.0e-12 * max(1.0, sum_abs, atom_count * max_abs)
-    if (
-        residual_per_atom < 0.0
-        or sum_abs < 0.0
-        or max_abs < 0.0
-        or sum_abs + magnitude_slack < abs(charge_sum)
-        or max_abs > sum_abs + magnitude_slack
-        or atom_count * max_abs + magnitude_slack < abs(charge_sum)
-        or sum_abs > atom_count * max_abs + magnitude_slack
-    ):
-        raise DomainLessonResultsError(
-            f"{context} contain inconsistent charge magnitudes"
-        )
-
-    return {
-        "available": True,
-        "finite": True,
-        "dtype": "float32",
-        "target_sum_e": observed_target,
-        "sum_e": charge_sum,
-        "residual_e": residual,
-        "abs_residual_per_atom": residual_per_atom,
-        "sum_abs_e": sum_abs,
-        "max_abs_e": max_abs,
-        "shape": list(shape),
-        "sha256": digest,
-    }
-
-
-def _raw_electrostatics_row(
-    raw_rows: Sequence[Mapping[str, Any]],
-) -> Mapping[str, Any]:
-    matches = [
-        row for row in raw_rows if row.get("mode") == "electrostatics-validation"
-    ]
-    if len(matches) != 1:
-        raise DomainLessonResultsError(
-            "raw results must contain exactly one electrostatics-validation row"
-        )
-    row = matches[0]
-    _require_keys(
-        row,
-        (
-            "status",
-            "success",
-            "atom_count",
-            "input",
-            "charges",
-            "pme",
-            "ewald",
-            "comparison",
-            "result_file_sha256",
-        ),
-        context="raw electrostatics row",
-    )
-    if row["status"] != "complete" or row["success"] is not True:
-        raise DomainLessonResultsError(
-            "raw electrostatics-validation row did not complete"
-        )
-    return row
-
-
-def _validate_electrostatics(
-    manifest: Mapping[str, Any],
-    *,
-    structure_sha256_by_atom_count: Mapping[int, str],
-    raw_rows: Sequence[Mapping[str, Any]],
-) -> None:
-    """Require the predeclared fixed-charge PME-versus-Ewald check."""
-
-    record = _require_mapping(
-        manifest,
-        "electrostatics_validation",
-        context="manifest",
-    )
-    required = (
-        "status",
-        "measurement_kind",
-        "fixed_charges",
-        "atom_count",
-        "structure_sha256",
-        "charge_diagnostics",
-        "charge_sum_e",
-        "charge_sum_tolerance_e",
-        "pme_energy_ev",
-        "ewald_energy_ev",
-        "energy_abs_difference_ev_per_atom",
-        "energy_tolerance_ev_per_atom",
-        "force_rms_difference_ev_per_a",
-        "force_max_difference_ev_per_a",
-        "force_tolerance_ev_per_a",
-        "charge_sha256",
-        "pme_force_sha256",
-        "ewald_force_sha256",
-        "result_file_sha256",
-    )
-    _require_keys(record, required, context="electrostatics_validation")
-    if record["status"] != "passed":
-        raise DomainLessonResultsError("PME-versus-Ewald validation did not pass")
-    if record["measurement_kind"] != "measured":
-        raise DomainLessonResultsError("PME-versus-Ewald validation must be measured")
-    if record["fixed_charges"] is not True:
-        raise DomainLessonResultsError(
-            "PME and Ewald must use the same fixed charge array"
-        )
-    try:
-        atom_count = int(record["atom_count"])
-    except (TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            "electrostatics_validation.atom_count must be positive"
-        ) from exc
-    if atom_count <= 0 or float(record["atom_count"]) != atom_count:
-        raise DomainLessonResultsError(
-            "electrostatics_validation.atom_count must be positive"
-        )
-    if atom_count != ELECTROSTATICS_VALIDATION_ATOM_COUNT:
-        raise DomainLessonResultsError(
-            "the strict charge-residual check is reserved for the "
-            f"{ELECTROSTATICS_VALIDATION_ATOM_COUNT:,}-atom "
-            "PME-versus-Ewald validation"
-        )
-    expected_structure = structure_sha256_by_atom_count.get(atom_count)
-    if expected_structure is None or record["structure_sha256"] != expected_structure:
-        raise DomainLessonResultsError(
-            "electrostatics validation structure does not match its atom count"
-        )
-
-    numeric_names = (
-        "charge_sum_e",
-        "charge_sum_tolerance_e",
-        "pme_energy_ev",
-        "ewald_energy_ev",
-        "energy_abs_difference_ev_per_atom",
-        "energy_tolerance_ev_per_atom",
-        "force_rms_difference_ev_per_a",
-        "force_max_difference_ev_per_a",
-        "force_tolerance_ev_per_a",
-    )
-    values: dict[str, float] = {}
-    for name in numeric_names:
-        try:
-            value = float(record[name])
-        except (TypeError, ValueError) as exc:
-            raise DomainLessonResultsError(
-                f"electrostatics_validation.{name} must be finite"
-            ) from exc
-        if not np.isfinite(value):
-            raise DomainLessonResultsError(
-                f"electrostatics_validation.{name} must be finite"
-            )
-        values[name] = value
-
-    expected_tolerances = {
-        "charge_sum_tolerance_e": CHARGE_SUM_TOLERANCE_E,
-        "energy_tolerance_ev_per_atom": PME_EWALD_ENERGY_TOLERANCE_EV_PER_ATOM,
-        "force_tolerance_ev_per_a": PME_EWALD_FORCE_TOLERANCE_EV_PER_A,
-    }
-    for name, expected in expected_tolerances.items():
-        if not math.isclose(values[name], expected, rel_tol=0.0, abs_tol=1.0e-15):
-            raise DomainLessonResultsError(
-                f"electrostatics_validation.{name} changed from the predeclared value"
-            )
-    manifest_charge_diagnostics = _validated_charge_diagnostics(
-        record["charge_diagnostics"],
-        atom_count=atom_count,
-        target_sum_e=0.0,
-        context="electrostatics_validation.charge_diagnostics",
-    )
-    if values["charge_sum_e"] != manifest_charge_diagnostics["sum_e"]:
-        raise DomainLessonResultsError(
-            "electrostatics_validation.charge_sum_e does not match "
-            "charge_diagnostics"
-        )
-    if (
-        abs(manifest_charge_diagnostics["residual_e"])
-        > CHARGE_SUM_TOLERANCE_E
-    ):
-        raise DomainLessonResultsError(
-            "the 3,200-atom PME-versus-Ewald charge residual exceeds "
-            "the predeclared limit"
-        )
-    if (
-        values["energy_abs_difference_ev_per_atom"] < 0.0
-        or values["energy_abs_difference_ev_per_atom"]
-        > PME_EWALD_ENERGY_TOLERANCE_EV_PER_ATOM
-    ):
-        raise DomainLessonResultsError("PME-versus-Ewald energy check failed")
-    for name in (
-        "force_rms_difference_ev_per_a",
-        "force_max_difference_ev_per_a",
-    ):
-        if values[name] < 0.0:
-            raise DomainLessonResultsError(
-                f"electrostatics_validation.{name} must be non-negative"
-            )
-    if values["force_max_difference_ev_per_a"] > PME_EWALD_FORCE_TOLERANCE_EV_PER_A:
-        raise DomainLessonResultsError("PME-versus-Ewald force check failed")
-
-    raw = _raw_electrostatics_row(raw_rows)
-    try:
-        raw_atom_count = int(raw["atom_count"])
-    except (TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            "raw electrostatics atom count must be a positive integer"
-        ) from exc
-    if (
-        raw_atom_count <= 0
-        or float(raw["atom_count"]) != raw_atom_count
-        or raw_atom_count != atom_count
-    ):
-        raise DomainLessonResultsError(
-            "raw electrostatics atom count does not match the manifest"
-        )
-
-    raw_input = _require_mapping(raw, "input", context="raw electrostatics row")
-    raw_charges = _require_mapping(
-        raw,
-        "charges",
-        context="raw electrostatics row",
-    )
-    raw_pme = _require_mapping(raw, "pme", context="raw electrostatics row")
-    raw_ewald = _require_mapping(raw, "ewald", context="raw electrostatics row")
-    raw_comparison = _require_mapping(
-        raw,
-        "comparison",
-        context="raw electrostatics row",
-    )
-    raw_pme_forces = _require_mapping(
-        raw_pme,
-        "forces",
-        context="raw electrostatics row.pme",
-    )
-    raw_ewald_forces = _require_mapping(
-        raw_ewald,
-        "forces",
-        context="raw electrostatics row.ewald",
-    )
-    _require_keys(
-        raw_input,
-        ("file_sha256",),
-        context="raw electrostatics row.input",
-    )
-    _require_keys(
-        raw_charges,
-        (
-            "available",
-            "finite",
-            "dtype",
-            "target_sum_e",
-            "sum_e",
-            "residual_e",
-            "abs_residual_per_atom",
-            "sum_abs_e",
-            "max_abs_e",
-            "shape",
-            "sha256",
-        ),
-        context="raw electrostatics row.charges",
-    )
-    _require_keys(
-        raw_pme,
-        ("energy_ev",),
-        context="raw electrostatics row.pme",
-    )
-    _require_keys(
-        raw_ewald,
-        ("energy_ev",),
-        context="raw electrostatics row.ewald",
-    )
-    _require_keys(
-        raw_pme_forces,
-        ("sha256",),
-        context="raw electrostatics row.pme.forces",
-    )
-    _require_keys(
-        raw_ewald_forces,
-        ("sha256",),
-        context="raw electrostatics row.ewald.forces",
-    )
-    _require_keys(
-        raw_comparison,
-        (
-            "absolute_energy_difference_ev_per_atom",
-            "force_difference_rms_ev_a",
-            "force_difference_max_norm_ev_a",
-            "passed",
-        ),
-        context="raw electrostatics row.comparison",
-    )
-    if raw_charges["available"] is not True:
-        raise DomainLessonResultsError(
-            "raw electrostatics-validation row must include predicted charges"
-        )
-    if raw_comparison["passed"] is not True:
-        raise DomainLessonResultsError(
-            "raw electrostatics-validation comparison did not pass"
-        )
-    raw_charge_diagnostics = _validated_charge_diagnostics(
-        raw_charges,
-        atom_count=atom_count,
-        target_sum_e=0.0,
-        context="raw electrostatics row.charges",
-    )
-
-    raw_structure_sha256 = _require_sha256(
-        raw_input["file_sha256"],
-        name="raw electrostatics input SHA-256",
-    )
-    if raw_structure_sha256 != str(record["structure_sha256"]):
-        raise DomainLessonResultsError(
-            "raw electrostatics input SHA-256 does not match the manifest"
-        )
-    hash_pairs = (
-        ("charge", record["charge_sha256"], raw_charges["sha256"]),
-        ("PME force", record["pme_force_sha256"], raw_pme_forces["sha256"]),
-        ("Ewald force", record["ewald_force_sha256"], raw_ewald_forces["sha256"]),
-        (
-            "original result file",
-            record["result_file_sha256"],
-            raw["result_file_sha256"],
-        ),
-    )
-    for label, manifest_digest, raw_digest in hash_pairs:
-        expected_digest = _require_sha256(
-            manifest_digest,
-            name=f"electrostatics_validation {label} SHA-256",
-        )
-        observed_digest = _require_sha256(
-            raw_digest,
-            name=f"raw electrostatics {label} SHA-256",
-        )
-        if observed_digest != expected_digest:
-            raise DomainLessonResultsError(
-                f"{label} SHA-256 does not match raw results"
-            )
-
-    raw_numeric_values = {
-        "charge_sum_e": raw_charges["sum_e"],
-        "pme_energy_ev": raw_pme["energy_ev"],
-        "ewald_energy_ev": raw_ewald["energy_ev"],
-        "energy_abs_difference_ev_per_atom": raw_comparison[
-            "absolute_energy_difference_ev_per_atom"
-        ],
-        "force_rms_difference_ev_per_a": raw_comparison["force_difference_rms_ev_a"],
-        "force_max_difference_ev_per_a": raw_comparison[
-            "force_difference_max_norm_ev_a"
-        ],
-    }
-    for name, raw_value in raw_numeric_values.items():
-        try:
-            observed = float(raw_value)
-        except (TypeError, ValueError) as exc:
-            raise DomainLessonResultsError(
-                f"raw electrostatics {name} must be finite"
-            ) from exc
-        if not np.isfinite(observed):
-            raise DomainLessonResultsError(f"raw electrostatics {name} must be finite")
-        if observed != values[name]:
-            raise DomainLessonResultsError(
-                f"electrostatics_validation.{name} does not match raw results"
-            )
-    if raw_charge_diagnostics != manifest_charge_diagnostics:
-        raise DomainLessonResultsError(
-            "electrostatics_validation.charge_diagnostics do not match raw results"
-        )
-
-
-def _read_table(
-    root: Path,
-    manifest: Mapping[str, Any],
-    table_name: str,
-    checksums: Mapping[str, str],
-) -> pd.DataFrame:
-    data = _require_mapping(manifest, "data", context="manifest")
-    metadata = _require_mapping(data, table_name, context="manifest.data")
-    _require_keys(
-        metadata,
-        ("file", "sha256", "row_count", "columns", "planned_case_ids"),
-        context=f"manifest.data.{table_name}",
-    )
-    filename = str(metadata["file"])
-    if checksums.get(filename) != str(metadata["sha256"]):
-        raise DomainLessonResultsError(
-            f"{table_name} checksum index and manifest disagree"
-        )
-    path = _validate_file(root, filename, str(metadata["sha256"]))
-    table = pd.read_csv(path, keep_default_na=False)
-    expected_columns = TABLE_COLUMNS[table_name]
-    if tuple(metadata["columns"]) != expected_columns:
-        raise DomainLessonResultsError(
-            f"{table_name} manifest columns do not match schema"
-        )
-    if tuple(table.columns) != expected_columns:
-        raise DomainLessonResultsError(f"{table_name} CSV columns do not match schema")
-    if len(table) != int(metadata["row_count"]):
-        raise DomainLessonResultsError(f"{table_name} row count does not match")
-    if table["case_id"].astype(str).duplicated().any():
-        raise DomainLessonResultsError(f"{table_name} case_id values must be unique")
-    planned = [str(item) for item in metadata["planned_case_ids"]]
-    if len(set(planned)) != len(planned) or set(table["case_id"].astype(str)) != set(
-        planned
-    ):
-        raise DomainLessonResultsError(
-            f"{table_name} rows do not match the complete planned case list"
-        )
-    table["success"] = _coerce_boolean(table["success"], name=f"{table_name}.success")
-    if "parity_passed" in table:
-        parity_values = table["parity_passed"].replace("", pd.NA)
-        nonempty = parity_values.notna()
-        parsed = pd.Series(pd.NA, index=table.index, dtype="boolean")
-        if nonempty.any():
-            parsed.loc[nonempty] = _coerce_boolean(
-                parity_values.loc[nonempty],
-                name="parity.parity_passed",
-            )
-        table["parity_passed"] = parsed
-    return table
-
-
-def _finite_numeric(
-    table: pd.DataFrame,
-    columns: Sequence[str],
-    *,
-    rows: pd.Series,
-    table_name: str,
-) -> None:
-    for column in columns:
-        values = pd.to_numeric(table.loc[rows, column], errors="coerce").to_numpy(
-            dtype=float
-        )
-        if not np.isfinite(values).all():
-            raise DomainLessonResultsError(
-                f"{table_name}.{column} must be finite for successful rows"
-            )
-
-
-def _validate_rows(
-    table_name: str,
-    table: pd.DataFrame,
-    *,
-    structure_sha256_by_atom_count: Mapping[int, str],
-    settings_sha256: str,
-) -> None:
-    roles = table["measurement_role"].astype(str)
-    kinds = table["measurement_kind"].astype(str)
-    expected_roles = {
-        "capacity": {"capacity"},
-        "parity": {"parity"},
-        "distributed": {"steady_timing", "rescue"},
-    }[table_name]
-    if not set(roles).issubset(expected_roles):
-        raise DomainLessonResultsError(f"{table_name} contains an invalid measurement role")
-    expected_kinds = roles.map(
-        {
-            "capacity": "cold_one_shot_partition_run_gather",
-            "parity": "cold_one_shot_partition_run_gather",
-            "rescue": "cold_one_shot_partition_run_gather",
-            "steady_timing": "steady_partition_run_gather",
-        }
-    )
-    if not kinds.eq(expected_kinds).all():
-        raise DomainLessonResultsError(
-            f"{table_name} measurement kind does not match its role"
-        )
-    if not table["settings_sha256"].astype(str).eq(settings_sha256).all():
-        raise DomainLessonResultsError(
-            f"{table_name}.settings_sha256 does not match the manifest identity"
-        )
-    successes = table["success"]
-    if not table.loc[successes, "status"].astype(str).eq("complete").all():
-        raise DomainLessonResultsError(
-            f"{table_name} successful rows must have status complete"
-        )
-    failed = ~successes
-    if failed.any():
-        if not table.loc[failed, "status"].astype(str).eq("failed").all():
-            raise DomainLessonResultsError(
-                f"{table_name} failed rows must have status failed"
-            )
-        for column in ("failure_type", "failure_stage", "error"):
-            if table.loc[failed, column].astype(str).str.strip().eq("").any():
-                raise DomainLessonResultsError(
-                    f"{table_name} failed rows must report {column}"
-                )
-    for column in ("failure_type", "failure_stage", "error"):
-        if table.loc[successes, column].astype(str).str.strip().ne("").any():
-            raise DomainLessonResultsError(
-                f"{table_name} successful rows must leave {column} empty"
-            )
-
-    integer_columns = {
-        "capacity": ("atom_count", "molecules_per_species", "gpus"),
-        "parity": (
-            "atom_count",
-            "force_reference_gpus",
-            "energy_reference_gpus",
-            "gpus",
-        ),
-        "distributed": (
-            "atom_count",
-            "molecules_per_species",
-            "nodes",
-            "gpus",
-            "ranks",
-        ),
-    }[table_name]
-    for column in integer_columns:
-        values = pd.to_numeric(table[column], errors="coerce").to_numpy(dtype=float)
-        if (
-            not np.isfinite(values).all()
-            or not np.equal(values, np.rint(values)).all()
-            or np.any(values <= 0)
-        ):
-            raise DomainLessonResultsError(
-                f"{table_name}.{column} must contain positive integers"
-            )
-        table[column] = values.astype(np.int64)
-    expected_structure_hashes = table["atom_count"].map(structure_sha256_by_atom_count)
-    if (
-        expected_structure_hashes.isna().any()
-        or not table["structure_sha256"]
-        .astype(str)
-        .eq(expected_structure_hashes.astype(str))
-        .all()
-    ):
-        raise DomainLessonResultsError(
-            f"{table_name}.structure_sha256 does not match its atom count"
-        )
-
-    successful_numeric = {
-        "capacity": (
-            "elapsed_s",
-            "peak_memory_bytes_max_rank",
-            "energy_ev",
-            "force_rms_ev_per_a",
-            "force_max_ev_per_a",
-        ),
-        "parity": (
-            "one_gpu_energy_abs_offset_ev",
-            "one_gpu_energy_abs_offset_ev_per_atom",
-            "distributed_energy_difference_ev",
-            "distributed_energy_difference_ev_per_atom",
-            "force_rms_difference_ev_per_a",
-            "force_max_difference_ev_per_a",
-            "energy_tolerance_ev_per_atom",
-            "force_tolerance_ev_per_a",
-        ),
-        "distributed": (
-            "elapsed_s",
-            "warmup_count",
-            "sample_count",
-            "elapsed_median_s",
-            "elapsed_q1_s",
-            "elapsed_q3_s",
-            "elapsed_iqr_s",
-            "peak_memory_bytes_max_rank",
-            "owned_atoms_min_rank",
-            "owned_atoms_max_rank",
-            "energy_ev",
-            "force_rms_ev_per_a",
-            "force_max_ev_per_a",
-        ),
-    }[table_name]
-    _finite_numeric(
-        table,
-        successful_numeric,
-        rows=successes,
-        table_name=table_name,
-    )
-    if table_name == "capacity" and not table["gpus"].eq(1).all():
-        raise DomainLessonResultsError("capacity rows must use one GPU")
-    if table_name == "parity":
-        if not (
-            table.loc[
-                successes,
-                ["distributed_energy_passed", "force_passed", "parity_passed"],
-            ]
-            .eq(True)
-            .all()
-            .all()
-        ):
-            raise DomainLessonResultsError("successful parity rows must pass")
-        nonnegative_columns = (
-            "one_gpu_energy_abs_offset_ev",
-            "one_gpu_energy_abs_offset_ev_per_atom",
-            "distributed_energy_difference_ev",
-            "distributed_energy_difference_ev_per_atom",
-            "force_rms_difference_ev_per_a",
-            "force_max_difference_ev_per_a",
-        )
-        if any(
-            (
-                pd.to_numeric(table.loc[successes, column], errors="coerce") < 0.0
-            ).any()
-            for column in nonnegative_columns
-        ):
-            raise DomainLessonResultsError(
-                "parity energy and force differences must be non-negative"
-            )
-        if not (
-            pd.to_numeric(
-                table.loc[
-                    successes,
-                    "distributed_energy_difference_ev_per_atom",
-                ],
-                errors="coerce",
-            )
-            <= pd.to_numeric(
-                table.loc[successes, "energy_tolerance_ev_per_atom"],
-                errors="coerce",
-            )
-        ).all():
-            raise DomainLessonResultsError(
-                "distributed energy difference exceeds tolerance"
-            )
-        if not (
-            pd.to_numeric(
-                table.loc[successes, "force_max_difference_ev_per_a"],
-                errors="coerce",
-            )
-            <= pd.to_numeric(
-                table.loc[successes, "force_tolerance_ev_per_a"], errors="coerce"
-            )
-        ).all():
-            raise DomainLessonResultsError("parity force difference exceeds tolerance")
-    if table_name == "distributed":
-        matching_topology = table["nodes"].eq(table["gpus"]) & table["gpus"].eq(
-            table["ranks"]
-        )
-        if not matching_topology.all():
-            raise DomainLessonResultsError(
-                "distributed rows must satisfy nodes == gpus == ranks"
-            )
-        for index, row in table.loc[successes].iterrows():
-            try:
-                samples = json.loads(str(row["elapsed_samples_s"]))
-                values = np.asarray(samples, dtype=float)
-                warmup_count = int(row["warmup_count"])
-                sample_count = int(row["sample_count"])
-            except (TypeError, ValueError, json.JSONDecodeError) as exc:
-                raise DomainLessonResultsError(
-                    "distributed timing samples and counts are invalid"
-                ) from exc
-            if (
-                not isinstance(samples, list)
-                or values.ndim != 1
-                or len(values) != sample_count
-                or not np.isfinite(values).all()
-                or np.any(values <= 0.0)
-            ):
-                raise DomainLessonResultsError(
-                    "distributed elapsed_samples_s must contain every positive sample"
-                )
-            role = str(row["measurement_role"])
-            expected_counts = (
-                (
-                    DOMAIN_METHODOLOGY.steady_timing_warmup_count,
-                    DOMAIN_METHODOLOGY.steady_timing_sample_count,
-                )
-                if role == "steady_timing"
-                else (0, 1)
-            )
-            if (warmup_count, sample_count) != expected_counts:
-                raise DomainLessonResultsError(
-                    "distributed timing counts do not match the measurement role"
-                )
-            q1, median_value, q3 = np.quantile(
-                values,
-                (0.25, 0.5, 0.75),
-                method="linear",
-            )
-            expected = {
-                "elapsed_s": median_value,
-                "elapsed_median_s": median_value,
-                "elapsed_q1_s": q1,
-                "elapsed_q3_s": q3,
-                "elapsed_iqr_s": q3 - q1,
-            }
-            if any(
-                not math.isclose(
-                    float(row[name]),
-                    float(value),
-                    rel_tol=1.0e-12,
-                    abs_tol=1.0e-12,
-                )
-                for name, value in expected.items()
-            ):
-                raise DomainLessonResultsError(
-                    f"distributed timing statistics do not match samples at row {index}"
-                )
-            relative_iqr = float(q3 - q1) / float(median_value)
-            if (
-                role == "steady_timing"
-                and relative_iqr
-                > DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr + 1.0e-12
-            ):
-                raise DomainLessonResultsError(
-                    "steady timing is too variable to report: relative IQR "
-                    f"{relative_iqr:.1%} exceeds "
-                    f"{DOMAIN_METHODOLOGY.steady_timing_max_relative_iqr:.1%} "
-                    f"at row {index}"
-                )
-        for world_size, success, grid_text in zip(
-            table["gpus"].astype(int),
-            table["success"].astype(bool),
-            table["spatial_grid"],
-            strict=True,
-        ):
-            _parse_spatial_grid(
-                grid_text,
-                world_size=world_size,
-                context="successful distributed row",
-                required=success,
-            )
-
-
-def _case_kinds(
-    table: pd.DataFrame,
-    *,
-    pattern: re.Pattern[str],
-    table_name: str,
-    default_kind: str | None = None,
-) -> pd.Series:
-    """Check case IDs against their row values and return each case kind."""
-
-    kinds: list[str] = []
-    for row in table.itertuples(index=False):
-        case_id = str(row.case_id)
-        match = pattern.fullmatch(case_id)
-        if match is None:
-            raise DomainLessonResultsError(
-                f"{table_name} case_id {case_id!r} does not match the campaign plan"
-            )
-        if int(match.group("gpus")) != int(row.gpus):
-            raise DomainLessonResultsError(
-                f"{table_name} case_id GPU count does not match its gpus column"
-            )
-        pair_count = int(match.group("pair_count"))
-        if pair_count * ATOMS_PER_COMPOSITION_UNIT != int(row.atom_count):
-            raise DomainLessonResultsError(
-                f"{table_name} rows have a case_id pair count that does not match "
-                "atom_count"
-            )
-        if hasattr(row, "molecules_per_species") and pair_count != int(
-            row.molecules_per_species
-        ):
-            raise DomainLessonResultsError(
-                f"{table_name} case_id pair count does not match molecules_per_species"
-            )
-        kinds.append(
-            default_kind if default_kind is not None else str(match.group("kind"))
-        )
-    return pd.Series(kinds, index=table.index, dtype="string")
-
-
-def _has_exact_gpu_rows(table: pd.DataFrame, required: frozenset[int]) -> bool:
-    observed = table["gpus"].astype(int)
-    return len(observed) == len(required) and set(observed) == set(required)
-
-
-def _validate_measurement_completeness(
-    parity: pd.DataFrame,
-    distributed: pd.DataFrame,
-) -> None:
-    """Require every saved row used by the recorded multi-GPU lesson."""
-
-    _case_kinds(
-        parity,
-        pattern=_PARITY_CASE_ID,
-        table_name="parity",
-        default_kind="parity",
-    )
-    if not _has_exact_gpu_rows(parity, _REQUIRED_PARITY_GPUS):
-        raise DomainLessonResultsError(
-            "parity measurements require exactly one row for each declared "
-            "multi-GPU size"
-        )
-    if not parity["force_reference_gpus"].eq(
-        DOMAIN_METHODOLOGY.force_reference_world_size
-    ).all():
-        raise DomainLessonResultsError(
-            "parity force rows must use a one-GPU reference"
-        )
-    if not parity["energy_reference_gpus"].eq(
-        DOMAIN_METHODOLOGY.energy_reference_world_size
-    ).all():
-        raise DomainLessonResultsError(
-            "parity energy rows must use a two-GPU distributed reference"
-        )
-    if parity["atom_count"].nunique() != 1:
-        raise DomainLessonResultsError(
-            "parity measurements must use the same structure size"
-        )
-    if not parity["success"].eq(True).all() or not (
-        parity["parity_passed"].eq(True).fillna(False).all()
-    ):
-        raise DomainLessonResultsError(
-            "all declared multi-GPU parity measurements must succeed and pass"
-        )
-
-    kinds = _case_kinds(
-        distributed,
-        pattern=_DISTRIBUTED_CASE_ID,
-        table_name="distributed",
-    )
-    steady = distributed.loc[kinds.eq("steady-timing")]
-    if not _has_exact_gpu_rows(steady, _REQUIRED_STEADY_TIMING_GPUS):
-        raise DomainLessonResultsError(
-            "steady timing requires exactly one row for each declared GPU size"
-        )
-    if not steady["success"].all():
-        raise DomainLessonResultsError("all steady-timing rows must succeed")
-    if steady["atom_count"].nunique() != 1:
-        raise DomainLessonResultsError(
-            "steady-timing measurements must use the same structure"
-        )
-    if not steady["measurement_role"].astype(str).eq("steady_timing").all():
-        raise DomainLessonResultsError("steady-timing case IDs need steady_timing roles")
-
-    rescue = distributed.loc[kinds.eq("rescue")]
-    if not _has_exact_gpu_rows(rescue, _REQUIRED_RESCUE_GPUS):
-        raise DomainLessonResultsError(
-            "rescue measurements require exactly one attempt for each declared "
-            "multi-GPU size"
-        )
-    if not rescue["success"].any():
-        raise DomainLessonResultsError("at least one rescue attempt must succeed")
-    if rescue["atom_count"].nunique() != 1:
-        raise DomainLessonResultsError(
-            "rescue attempts must use the same structure size"
-        )
-    if not rescue["measurement_role"].astype(str).eq("rescue").all():
-        raise DomainLessonResultsError("rescue case IDs need rescue roles")
-
-
-def _validate_selection(
-    manifest: Mapping[str, Any],
-    capacity: pd.DataFrame,
-    parity: pd.DataFrame,
-    distributed: pd.DataFrame,
-    raw_by_case: Mapping[str, Mapping[str, Any]],
-) -> Mapping[str, Any]:
-    selection = _require_mapping(manifest, "selection", context="manifest")
-    required = (
-        "largest_success_pair_count",
-        "first_cuda_oom_pair_count",
-        "parity_pair_count",
-        "capacity_charge_diagnostics",
-        "parity_charge_diagnostics",
-        "successful_rescue_gpu_counts",
-    )
-    _require_keys(selection, required, context="manifest.selection")
-    try:
-        largest_pairs = _positive_integer(
-            selection["largest_success_pair_count"],
-            name="manifest largest-success 1:1 composition count",
-        )
-        oom_pairs = _positive_integer(
-            selection["first_cuda_oom_pair_count"],
-            name="manifest first-CUDA-OOM 1:1 composition count",
-        )
-        parity_pairs = _positive_integer(
-            selection["parity_pair_count"],
-            name="manifest parity 1:1 composition count",
-        )
-    except ValueError as exc:
-        raise DomainLessonResultsError(str(exc)) from exc
-
-    successful_capacity = capacity.loc[capacity["success"].eq(True)]
-    if successful_capacity.empty:
-        raise DomainLessonResultsError("capacity sweep has no successful row")
-    largest_success_atoms = int(successful_capacity["atom_count"].max())
-    oom_capacity = capacity.loc[
-        ~capacity["success"] & capacity["failure_type"].astype(str).isin(_OOM_TYPES)
-    ]
-    if oom_capacity.empty:
-        raise DomainLessonResultsError("capacity sweep has no CUDA OOM row")
-    first_oom_atoms = int(oom_capacity.iloc[0]["atom_count"])
-    if largest_pairs * ATOMS_PER_COMPOSITION_UNIT != largest_success_atoms:
-        raise DomainLessonResultsError(
-            "manifest largest successful size does not match the capacity ladder"
-        )
-    if oom_pairs * ATOMS_PER_COMPOSITION_UNIT != first_oom_atoms:
-        raise DomainLessonResultsError(
-            "manifest first CUDA OOM size does not match the capacity ladder"
-        )
-    if not parity["atom_count"].eq(
-        parity_pairs * ATOMS_PER_COMPOSITION_UNIT
-    ).all():
-        raise DomainLessonResultsError(
-            "manifest parity size does not match measured parity rows"
-        )
-
-    kinds = _case_kinds(
-        distributed,
-        pattern=_DISTRIBUTED_CASE_ID,
-        table_name="distributed",
-    )
-    steady = distributed.loc[kinds.eq("steady-timing")]
-    rescue = distributed.loc[kinds.eq("rescue")]
-    if not steady["atom_count"].eq(largest_success_atoms).all():
-        raise DomainLessonResultsError(
-            "steady-timing rows must use the largest successful one-GPU input"
-        )
-    if not rescue["atom_count"].eq(first_oom_atoms).all():
-        raise DomainLessonResultsError(
-            "rescue rows must use the first one-GPU CUDA OOM input"
-        )
-
-    raw_rescue_gpus = selection["successful_rescue_gpu_counts"]
-    if not isinstance(raw_rescue_gpus, list):
-        raise DomainLessonResultsError(
-            "manifest.selection.successful_rescue_gpu_counts must be a list"
-        )
-    try:
-        declared_rescue_gpus = [
-            _positive_integer(
-                value,
-                name="manifest successful rescue GPU count",
-            )
-            for value in raw_rescue_gpus
-        ]
-    except ValueError as exc:
-        raise DomainLessonResultsError(str(exc)) from exc
-    observed_rescue_gpus = sorted(
-        int(value)
-        for value in rescue.loc[rescue["success"].eq(True), "gpus"].tolist()
-    )
-    if (
-        declared_rescue_gpus != sorted(set(declared_rescue_gpus))
-        or declared_rescue_gpus != observed_rescue_gpus
-    ):
-        raise DomainLessonResultsError(
-            "manifest successful rescue GPU counts do not match measured rows"
-        )
-
-    raw_capacity_diagnostics = selection["capacity_charge_diagnostics"]
-    if not isinstance(raw_capacity_diagnostics, list):
-        raise DomainLessonResultsError(
-            "manifest.selection.capacity_charge_diagnostics must be a list"
-        )
-    expected_capacity_rows = successful_capacity.reset_index(drop=True)
-    if len(raw_capacity_diagnostics) != len(expected_capacity_rows):
-        raise DomainLessonResultsError(
-            "manifest.selection.capacity_charge_diagnostics must describe every "
-            "successful one-GPU capacity row"
-        )
-
-    validated_by_pair_count: dict[int, dict[str, Any]] = {}
-    for index, expected_row in expected_capacity_rows.iterrows():
-        context = f"manifest.selection.capacity_charge_diagnostics[{index}]"
-        item = raw_capacity_diagnostics[index]
-        if not isinstance(item, Mapping):
-            raise DomainLessonResultsError(f"{context} must be an object")
-        _require_keys(
-            item,
-            ("case_id", "pair_count", "atom_count", "charge_diagnostics"),
-            context=context,
-        )
-        case_id = str(item["case_id"])
-        expected_case_id = str(expected_row["case_id"])
-        if case_id != expected_case_id:
-            raise DomainLessonResultsError(
-                "manifest.selection.capacity_charge_diagnostics must follow the "
-                "successful capacity rows in order"
-            )
-        try:
-            atom_count = _positive_integer(
-                item["atom_count"],
-                name=f"{context}.atom_count",
-            )
-            pair_count = _positive_integer(
-                item["pair_count"],
-                name=f"{context}.pair_count",
-            )
-        except ValueError as exc:
-            raise DomainLessonResultsError(str(exc)) from exc
-        if (
-            atom_count != int(expected_row["atom_count"])
-            or pair_count * ATOMS_PER_COMPOSITION_UNIT != atom_count
-        ):
-            raise DomainLessonResultsError(
-                f"{context} does not match its successful capacity row"
-            )
-
-        selected_diagnostics = _validated_charge_diagnostics(
-            item["charge_diagnostics"],
-            atom_count=atom_count,
-            target_sum_e=0.0,
-            context=f"{context}.charge_diagnostics",
-        )
-        raw_row = raw_by_case.get(case_id)
-        if raw_row is None:
-            raise DomainLessonResultsError(
-                f"{context} has no matching raw capacity row"
-            )
-        raw_charges = _require_mapping(
-            raw_row,
-            "charges",
-            context=f"raw capacity row {case_id!r}",
-        )
-        observed_diagnostics = _validated_charge_diagnostics(
-            raw_charges,
-            atom_count=atom_count,
-            target_sum_e=0.0,
-            context=f"raw capacity row {case_id!r}.charges",
-        )
-        if selected_diagnostics != observed_diagnostics:
-            raise DomainLessonResultsError(
-                f"{context}.charge_diagnostics do not match raw results"
-            )
-        if pair_count in validated_by_pair_count:
-            raise DomainLessonResultsError(
-                "capacity charge diagnostics contain a duplicate pair count"
-            )
-        validated_by_pair_count[pair_count] = selected_diagnostics
-
-    expected_parity_diagnostics = validated_by_pair_count.get(parity_pairs)
-    if expected_parity_diagnostics is None:
-        raise DomainLessonResultsError(
-            "manifest parity size has no successful one-GPU charge diagnostics"
-        )
-    parity_diagnostics = _validated_charge_diagnostics(
-        selection["parity_charge_diagnostics"],
-        atom_count=parity_pairs * ATOMS_PER_COMPOSITION_UNIT,
-        target_sum_e=0.0,
-        context="manifest.selection.parity_charge_diagnostics",
-    )
-    if parity_diagnostics != expected_parity_diagnostics:
-        raise DomainLessonResultsError(
-            "manifest.selection.parity_charge_diagnostics do not match the "
-            "selected one-GPU capacity row"
-        )
-    return selection
-
-
-def _raw_failure_peak_memory(row: Mapping[str, Any]) -> int | None:
-    values = [
-        int(memory["max_allocated_bytes"])
-        for record in row.get("rank_records", ())
-        if isinstance(record, Mapping)
-        and isinstance((memory := record.get("memory")), Mapping)
-        and memory.get("max_allocated_bytes") is not None
-    ]
-    return max(values) if values else None
-
-
-def _same_number(left: Any, right: Any) -> bool:
-    try:
-        left_value = float(left)
-        right_value = float(right)
-    except (TypeError, ValueError):
-        return False
-    return bool(
-        np.isfinite(left_value)
-        and np.isfinite(right_value)
-        and math.isclose(left_value, right_value, rel_tol=1.0e-12, abs_tol=1.0e-12)
-    )
-
-
-def _layout_triplet(value: Any, *, name: str, context: str) -> tuple[int, int, int]:
-    """Read one three-dimensional integer layout from saved JSON."""
-
-    if not isinstance(value, list) or len(value) != 3:
-        raise DomainLessonResultsError(
-            f"{context}.{name} must contain three positive integers"
-        )
-    if any(
-        isinstance(item, bool) or not isinstance(item, int) or item <= 0
-        for item in value
-    ):
-        raise DomainLessonResultsError(
-            f"{context}.{name} must contain three positive integers"
-        )
-    return value[0], value[1], value[2]
-
-
-def _validate_recorded_layout(
-    distributed: Mapping[str, Any],
-    *,
-    world_size: int,
-    context: str,
-) -> tuple[tuple[int, int, int], tuple[int, int, int]]:
-    """Check a layout selected for one input by Toolkit SpatialPartitioner."""
-
-    cells_per_dim = _layout_triplet(
-        distributed.get("cells_per_dim"),
-        name="cells_per_dim",
-        context=context,
-    )
-    rank_grid = _layout_triplet(
-        distributed.get("rank_grid"),
-        name="rank_grid",
-        context=context,
-    )
-    if math.prod(rank_grid) != world_size:
-        raise DomainLessonResultsError(
-            f"{context}.rank_grid does not match {world_size} ranks"
-        )
-    if any(
-        ranks > cells
-        for ranks, cells in zip(rank_grid, cells_per_dim, strict=True)
-    ):
-        raise DomainLessonResultsError(
-            f"{context}.rank_grid exceeds cells_per_dim"
-        )
-    if any(
-        cells % ranks != 0
-        for ranks, cells in zip(rank_grid, cells_per_dim, strict=True)
-    ):
-        raise DomainLessonResultsError(
-            f"{context}.rank_grid does not divide cells_per_dim"
-        )
-    return cells_per_dim, rank_grid
-
-
-def _raw_recorded_layout(
-    raw: Mapping[str, Any],
-    *,
-    world_size: int,
-    context: str,
-    required: bool = True,
-) -> tuple[tuple[int, int, int], tuple[int, int, int]] | None:
-    """Read one consistent layout from a successful row or failed rank records."""
-
-    distributed = raw.get("distributed")
-    if isinstance(distributed, Mapping):
-        return _validate_recorded_layout(
-            distributed,
-            world_size=world_size,
-            context=f"{context}.distributed",
-        )
-
-    records = raw.get("rank_records")
-    if not isinstance(records, list):
-        if not required:
-            return None
-        raise DomainLessonResultsError(
-            f"{context} does not report its Toolkit spatial layout"
-        )
-    layouts: list[tuple[tuple[int, int, int], tuple[int, int, int]]] = []
-    for index, record in enumerate(records):
-        if not isinstance(record, Mapping):
-            continue
-        if record.get("cells_per_dim") is None and record.get("rank_grid") is None:
-            continue
-        layouts.append(
-            _validate_recorded_layout(
-                record,
-                world_size=world_size,
-                context=f"{context}.rank_records[{index}]",
-            )
-        )
-    if not layouts:
-        if not required:
-            return None
-        raise DomainLessonResultsError(
-            f"{context} does not report its Toolkit spatial layout"
-        )
-    if any(layout != layouts[0] for layout in layouts[1:]):
-        raise DomainLessonResultsError(
-            f"{context} rank records disagree on the Toolkit spatial layout"
-        )
-    return layouts[0]
-
-
-def _parse_spatial_grid(
-    value: Any,
-    *,
-    world_size: int,
-    context: str,
-    required: bool,
-) -> tuple[int, int, int] | None:
-    """Read the compact rank-grid column while allowing pre-layout failures."""
-
-    if pd.isna(value) or not str(value).strip():
-        if required:
-            raise DomainLessonResultsError(
-                f"{context} must report its spatial_grid"
-            )
-        return None
-    text = str(value)
-    try:
-        dimensions = tuple(int(item) for item in text.split("x"))
-    except ValueError as exc:
-        raise DomainLessonResultsError(
-            f"invalid distributed spatial_grid {text!r}"
-        ) from exc
-    if (
-        len(dimensions) != 3
-        or any(item <= 0 for item in dimensions)
-        or math.prod(dimensions) != world_size
-    ):
-        raise DomainLessonResultsError(
-            f"spatial_grid {text!r} does not match {world_size} ranks"
-        )
-    return dimensions[0], dimensions[1], dimensions[2]
-
-
-def _reconcile_raw_row(
-    table_name: str,
-    row: pd.Series,
-    raw: Mapping[str, Any],
-    *,
-    compare_case_id: bool = True,
-    compare_distributed_details: bool = True,
-) -> None:
-    context = f"{table_name} row {row['case_id']!r}"
-    required = (
-        "status",
-        "success",
-        "world_size",
-        "pair_count",
-        "atom_count",
-        "input",
-    )
-    _require_keys(raw, required, context=f"raw {context}")
-    raw_input = _require_mapping(raw, "input", context=f"raw {context}")
-    _require_keys(raw_input, ("file_sha256",), context=f"raw {context}.input")
-    expected_pair_count = int(row["atom_count"]) // ATOMS_PER_COMPOSITION_UNIT
-    if "molecules_per_species" in row:
-        expected_pair_count = int(row["molecules_per_species"])
-    exact_pairs = (
-        ("status", str(row["status"]), str(raw["status"])),
-        ("success", bool(row["success"]), raw["success"]),
-        ("world_size", int(row["gpus"]), raw["world_size"]),
-        ("atom_count", int(row["atom_count"]), raw["atom_count"]),
-        (
-            "molecules_per_species",
-            expected_pair_count,
-            raw["pair_count"],
-        ),
-        (
-            "structure_sha256",
-            str(row["structure_sha256"]),
-            raw_input["file_sha256"],
-        ),
-        (
-            "measurement_role",
-            str(row["measurement_role"]),
-            raw.get("measurement_role"),
-        ),
-    )
-    if compare_case_id:
-        exact_pairs = (
-            ("case_id", str(row["case_id"]), raw.get("case_id")),
-            *exact_pairs,
-        )
-    for name, expected, observed in exact_pairs:
-        if observed != expected:
-            raise DomainLessonResultsError(
-                f"{context} does not match raw measurement field {name}"
-            )
-
-    if table_name == "parity":
-        _raw_recorded_layout(
-            raw,
-            world_size=int(row["gpus"]),
-            context=f"raw {context}",
-        )
-        return
-
-    if bool(row["success"]):
-        timing = _require_mapping(raw, "timing", context=f"raw {context}")
-        memory = _require_mapping(raw, "memory", context=f"raw {context}")
-        output = _require_mapping(raw, "output", context=f"raw {context}")
-        forces = _require_mapping(
-            output,
-            "forces_source_atom_order",
-            context=f"raw {context}.output",
-        )
-        numeric_pairs = (
-            ("elapsed_s", row["elapsed_s"], timing.get("wall_s_max_rank")),
-            (
-                "peak_memory_bytes_max_rank",
-                row["peak_memory_bytes_max_rank"],
-                memory.get("max_allocated_bytes"),
-            ),
-            ("energy_ev", row["energy_ev"], output.get("energy_ev")),
-            (
-                "force_rms_ev_per_a",
-                row["force_rms_ev_per_a"],
-                forces.get("rms_ev_a"),
-            ),
-            (
-                "force_max_ev_per_a",
-                row["force_max_ev_per_a"],
-                forces.get("max_norm_ev_a"),
-            ),
-        )
-        for name, expected, observed in numeric_pairs:
-            if not _same_number(expected, observed):
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw measurement field {name}"
-                )
-        if table_name == "distributed" and compare_distributed_details:
-            raw_samples = timing.get("samples_s_max_rank")
-            try:
-                csv_samples = json.loads(str(row["elapsed_samples_s"]))
-            except json.JSONDecodeError as exc:
-                raise DomainLessonResultsError(
-                    f"{context} has invalid elapsed sample JSON"
-                ) from exc
-            if raw_samples != csv_samples:
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw timing samples"
-                )
-            for name, raw_name in (
-                ("warmup_count", "warmup_count"),
-                ("sample_count", "sample_count"),
-                ("elapsed_median_s", "median_s"),
-                ("elapsed_q1_s", "q1_s"),
-                ("elapsed_q3_s", "q3_s"),
-                ("elapsed_iqr_s", "iqr_s"),
-            ):
-                if not _same_number(row[name], timing.get(raw_name)):
-                    raise DomainLessonResultsError(
-                        f"{context} does not match raw timing field {raw_name}"
-                    )
-            if str(row["measurement_role"]) == "steady_timing":
-                world_size = int(row["gpus"])
-                methodology = DOMAIN_METHODOLOGY
-                expected_run_steps = methodology.steady_timing_run_steps(world_size)
-                multi_rank_initial = (
-                    methodology.domain_parallel_multi_rank_initial_force_evaluations
-                )
-                expected_initial_evaluations = (
-                    multi_rank_initial if world_size > 1 else 0
-                )
-                expected_model_evaluations = (
-                    methodology.steady_timing_model_evaluations_per_workflow
-                )
-                if (
-                    timing.get("run_steps") != expected_run_steps
-                    or timing.get("automatic_multi_rank_force_prime")
-                    is not (world_size > 1)
-                    or timing.get("automatic_initial_force_evaluations")
-                    != expected_initial_evaluations
-                    or timing.get("model_evaluations_per_workflow")
-                    != expected_model_evaluations
-                ):
-                    raise DomainLessonResultsError(
-                        f"{context} does not record equal steady-timing work"
-                    )
-            distributed = _require_mapping(
-                raw,
-                "distributed",
-                context=f"raw {context}",
-            )
-            owned = distributed.get("owned_atom_counts")
-            if not isinstance(owned, list) or not owned:
-                raise DomainLessonResultsError(
-                    f"raw {context}.distributed.owned_atom_counts must be nonempty"
-                )
-            if (
-                int(row["owned_atoms_min_rank"]) != min(int(value) for value in owned)
-                or int(row["owned_atoms_max_rank"])
-                != max(int(value) for value in owned)
-            ):
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw measurement owned atom counts"
-                )
-            raw_grid = distributed.get("rank_grid")
-            csv_grid = _parse_spatial_grid(
-                row["spatial_grid"],
-                world_size=int(row["gpus"]),
-                context=context,
-                required=True,
-            )
-            raw_layout = _raw_recorded_layout(
-                raw,
-                world_size=int(row["gpus"]),
-                context=f"raw {context}",
-            )
-            if raw_layout is None:
-                raise DomainLessonResultsError(
-                    f"raw {context} does not report its Toolkit spatial layout"
-                )
-            _cells_per_dim, validated_grid = raw_layout
-            if (
-                not isinstance(raw_grid, list)
-                or validated_grid != csv_grid
-            ):
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw measurement spatial grid"
-                )
-    else:
-        failure = _require_mapping(raw, "failure", context=f"raw {context}")
-        for name, column in (
-            ("type", "failure_type"),
-            ("stage", "failure_stage"),
-            ("message", "error"),
-        ):
-            if str(failure.get(name, "")) != str(row[column]):
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw measurement failure {name}"
-                )
-        peak = _raw_failure_peak_memory(raw)
-        reported_peak = str(row["peak_memory_bytes_max_rank"]).strip()
-        if peak is None:
-            if reported_peak:
-                raise DomainLessonResultsError(
-                    f"{context} reports peak memory absent from raw measurement"
-                )
-        elif not _same_number(row["peak_memory_bytes_max_rank"], peak):
-            raise DomainLessonResultsError(
-                f"{context} does not match raw measurement peak memory"
-            )
-        if table_name == "distributed":
-            raw_layout = _raw_recorded_layout(
-                raw,
-                world_size=int(row["gpus"]),
-                context=f"raw {context}",
-                required=False,
-            )
-            csv_grid = _parse_spatial_grid(
-                row["spatial_grid"],
-                world_size=int(row["gpus"]),
-                context=context,
-                required=False,
-            )
-            if raw_layout is None and csv_grid is None:
-                return
-            if raw_layout is None or csv_grid is None:
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw measurement spatial grid"
-                )
-            _cells_per_dim, raw_grid = raw_layout
-            if raw_grid != csv_grid:
-                raise DomainLessonResultsError(
-                    f"{context} does not match raw measurement spatial grid"
-                )
-
-
-def _reconcile_raw_measurements(
-    tables: Mapping[str, pd.DataFrame],
-    raw_rows: Sequence[Mapping[str, Any]],
-) -> dict[str, Mapping[str, Any]]:
-    measurement_rows = [
-        row for row in raw_rows if row.get("mode") != "electrostatics-validation"
-    ]
-    raw_by_case: dict[str, Mapping[str, Any]] = {}
-    for row in measurement_rows:
-        case_id = str(row.get("case_id", "")).strip()
-        if not case_id or case_id in raw_by_case:
-            raise DomainLessonResultsError(
-                "raw capacity/parity/distributed case IDs must be nonempty and unique"
-            )
-        raw_by_case[case_id] = row
-
-    expected_case_ids = set(tables["capacity"]["case_id"].astype(str))
-    expected_case_ids.update(tables["parity"]["case_id"].astype(str))
-    distributed = tables["distributed"]
-    expected_case_ids.update(distributed["case_id"].astype(str))
-    if set(raw_by_case) != expected_case_ids:
-        raise DomainLessonResultsError(
-            "raw capacity/parity/distributed rows do not match the complete CSV case set"
-        )
-
-    for table_name in ("capacity", "parity", "distributed"):
-        for _, row in tables[table_name].iterrows():
-            case_id = str(row["case_id"])
-            raw = raw_by_case[case_id]
-            if table_name == "distributed":
-                expected_mode = (
-                    "steady-timing"
-                    if row["measurement_role"] == "steady_timing"
-                    else "distributed"
-                )
-            else:
-                expected_mode = table_name
-            if raw.get("mode") != expected_mode:
-                raise DomainLessonResultsError(
-                    f"{table_name} row {case_id!r} has the wrong raw measurement mode"
-                )
-            if table_name == "parity":
-                _reconcile_raw_row(table_name, row, raw)
-            else:
-                _reconcile_raw_row(table_name, row, raw)
-    return raw_by_case
-
-
-def _load_raw_force_array(
-    root: Path,
-    checksums: Mapping[str, str],
-    raw: Mapping[str, Any],
-    *,
-    context: str,
-) -> np.ndarray:
-    output = _require_mapping(raw, "output", context=context)
-    record = _require_mapping(
-        output,
-        "forces_source_atom_order_npy",
-        context=f"{context}.output",
-    )
-    _require_keys(record, ("path", "sha256", "shape"), context=f"{context} force array")
-    filename = str(record["path"])
-    digest = _require_sha256(
-        record["sha256"],
-        name=f"{context} force array SHA-256",
-    )
-    if checksums.get(filename) != digest:
-        raise DomainLessonResultsError(
-            f"{context} force array checksum index and raw result disagree"
-        )
-    path = _validate_file(root, filename, digest)
-    try:
-        values = np.load(path, allow_pickle=False)
-    except (OSError, ValueError) as exc:
-        raise DomainLessonResultsError(f"{context} force array is not valid NPY") from exc
-    if (
-        values.ndim != 2
-        or values.shape[1:] != (3,)
-        or list(values.shape) != list(record["shape"])
-        or not np.isfinite(values).all()
-    ):
-        raise DomainLessonResultsError(
-            f"{context} force array shape or values are invalid"
-        )
-    return values.astype(np.float64, copy=False)
-
-
-def _validate_raw_parity(
-    root: Path,
-    checksums: Mapping[str, str],
-    parity: pd.DataFrame,
-    raw_by_case: Mapping[str, Mapping[str, Any]],
-) -> None:
-    atom_count = int(parity.iloc[0]["atom_count"])
-    one_gpu_references = [
-        raw
-        for raw in raw_by_case.values()
-        if raw.get("mode") == "capacity"
-        and raw.get("success") is True
-        and int(raw.get("atom_count", -1)) == atom_count
-    ]
-    if len(one_gpu_references) != 1:
-        raise DomainLessonResultsError(
-            "parity rows need exactly one same-input raw one-GPU reference"
-        )
-    one_gpu_reference = one_gpu_references[0]
-    one_gpu_forces = _load_raw_force_array(
-        root,
-        checksums,
-        one_gpu_reference,
-        context="raw one-GPU parity reference",
-    )
-    if one_gpu_forces.shape != (atom_count, 3):
-        raise DomainLessonResultsError(
-            "raw one-GPU parity reference force shape does not match atom count"
-        )
-    one_gpu_output = _require_mapping(
-        one_gpu_reference,
-        "output",
-        context="raw one-GPU parity reference",
-    )
-    try:
-        one_gpu_energy = float(one_gpu_output["energy_ev"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            "raw one-GPU parity reference energy must be finite"
-        ) from exc
-    if not np.isfinite(one_gpu_energy):
-        raise DomainLessonResultsError(
-            "raw one-GPU parity reference energy must be finite"
-        )
-
-    energy_reference_world_size = DOMAIN_METHODOLOGY.energy_reference_world_size
-    energy_comparison_world_sizes = frozenset(
-        DOMAIN_METHODOLOGY.energy_comparison_world_sizes
-    )
-    energy_reference_rows = parity.loc[
-        parity["gpus"].eq(energy_reference_world_size)
-    ]
-    if len(energy_reference_rows) != 1:
-        raise DomainLessonResultsError(
-            "parity rows need exactly one declared distributed energy reference"
-        )
-    energy_reference_case_id = str(energy_reference_rows.iloc[0]["case_id"])
-    distributed_energy_reference = raw_by_case[energy_reference_case_id]
-    distributed_energy_output = _require_mapping(
-        distributed_energy_reference,
-        "output",
-        context="raw distributed energy reference",
-    )
-    try:
-        distributed_reference_energy = float(distributed_energy_output["energy_ev"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            "raw distributed reference energy must be finite"
-        ) from exc
-    if not np.isfinite(distributed_reference_energy):
-        raise DomainLessonResultsError(
-            "raw distributed reference energy must be finite"
-        )
-
-    expected_energy_tolerance_per_atom = (
-        DOMAIN_METHODOLOGY.parity_energy_tolerance_ev_per_atom
-    )
-    component_tolerances = (
-        DOMAIN_METHODOLOGY.parity_force_atol_ev_a
-        + DOMAIN_METHODOLOGY.parity_force_rtol * np.abs(one_gpu_forces)
-    )
-    expected_force_tolerance = float(component_tolerances.max())
-    for _, row in parity.iterrows():
-        case_id = str(row["case_id"])
-        raw = raw_by_case[case_id]
-        observed_forces = _load_raw_force_array(
-            root,
-            checksums,
-            raw,
-            context=f"raw parity row {case_id!r}",
-        )
-        if observed_forces.shape != one_gpu_forces.shape:
-            raise DomainLessonResultsError(
-                f"raw parity row {case_id!r} force shape differs from its reference"
-            )
-        difference = observed_forces - one_gpu_forces
-        force_passed = bool(
-            np.less_equal(np.abs(difference), component_tolerances).all()
-        )
-        if not force_passed:
-            raise DomainLessonResultsError(
-                f"raw parity row {case_id!r} fails componentwise force parity"
-            )
-        observed_output = _require_mapping(
-            raw,
-            "output",
-            context=f"raw parity row {case_id!r}",
-        )
-        try:
-            observed_energy = float(observed_output["energy_ev"])
-        except (KeyError, TypeError, ValueError) as exc:
-            raise DomainLessonResultsError(
-                f"raw parity row {case_id!r} energy must be finite"
-            ) from exc
-        if not np.isfinite(observed_energy):
-            raise DomainLessonResultsError(
-                f"raw parity row {case_id!r} energy must be finite"
-            )
-        one_gpu_energy_offset = abs(observed_energy - one_gpu_energy)
-        one_gpu_energy_offset_per_atom = one_gpu_energy_offset / atom_count
-        distributed_energy_difference = abs(
-            observed_energy - distributed_reference_energy
-        )
-        distributed_energy_difference_per_atom = (
-            distributed_energy_difference / atom_count
-        )
-        force_rms = float(np.sqrt(np.mean(difference * difference)))
-        force_max = float(np.abs(difference).max())
-        expected_values = {
-            "one_gpu_energy_abs_offset_ev": one_gpu_energy_offset,
-            "one_gpu_energy_abs_offset_ev_per_atom": (
-                one_gpu_energy_offset_per_atom
-            ),
-            "distributed_energy_difference_ev": distributed_energy_difference,
-            "distributed_energy_difference_ev_per_atom": (
-                distributed_energy_difference_per_atom
-            ),
-            "force_rms_difference_ev_per_a": force_rms,
-            "force_max_difference_ev_per_a": force_max,
-            "energy_tolerance_ev_per_atom": expected_energy_tolerance_per_atom,
-            "force_tolerance_ev_per_a": expected_force_tolerance,
-        }
-        for name, expected in expected_values.items():
-            try:
-                observed = float(row[name])
-            except (TypeError, ValueError) as exc:
-                raise DomainLessonResultsError(
-                    f"parity row {case_id!r}.{name} must be finite"
-                ) from exc
-            if not math.isclose(
-                observed,
-                expected,
-                rel_tol=1.0e-6,
-                abs_tol=1.0e-12,
-            ):
-                raise DomainLessonResultsError(
-                    f"parity row {case_id!r}.{name} does not match raw measurement"
-                )
-        if (
-            int(row["gpus"]) in energy_comparison_world_sizes
-            and distributed_energy_difference_per_atom
-            > expected_energy_tolerance_per_atom
-        ):
-            raise DomainLessonResultsError(
-                f"raw parity row {case_id!r} fails distributed energy agreement"
-            )
-        expected_flags = {
-            "force_passed": force_passed,
-            "distributed_energy_passed": True,
-            "parity_passed": force_passed,
-        }
-        for name, expected in expected_flags.items():
-            if bool(row[name]) is not expected:
-                raise DomainLessonResultsError(
-                    f"parity row {case_id!r}.{name} does not match raw measurement"
-                )
-
-
-def _validate_raw_output_agreement(
-    root: Path,
-    checksums: Mapping[str, str],
-    reference: Mapping[str, Any],
-    observed: Mapping[str, Any],
-    *,
-    context: str,
-    require_energy: bool = True,
-    require_forces: bool = True,
-) -> None:
-    """Check selected outputs for two runs of the identical saved input."""
-
-    reference_input = _require_mapping(
-        reference,
-        "input",
-        context=f"{context} reference",
-    )
-    observed_input = _require_mapping(
-        observed,
-        "input",
-        context=f"{context} observed",
-    )
-    if reference_input.get("file_sha256") != observed_input.get("file_sha256"):
-        raise DomainLessonResultsError(f"{context} uses different input structures")
-
-    reference_forces = _load_raw_force_array(
-        root,
-        checksums,
-        reference,
-        context=f"{context} reference",
-    )
-    observed_forces = _load_raw_force_array(
-        root,
-        checksums,
-        observed,
-        context=f"{context} observed",
-    )
-    if observed_forces.shape != reference_forces.shape:
-        raise DomainLessonResultsError(f"{context} force shapes differ")
-
-    reference_output = _require_mapping(
-        reference,
-        "output",
-        context=f"{context} reference",
-    )
-    observed_output = _require_mapping(
-        observed,
-        "output",
-        context=f"{context} observed",
-    )
-    try:
-        reference_energy = float(reference_output["energy_ev"])
-        observed_energy = float(observed_output["energy_ev"])
-    except (KeyError, TypeError, ValueError) as exc:
-        raise DomainLessonResultsError(
-            f"{context} energies must be finite"
-        ) from exc
-    if not np.isfinite(reference_energy) or not np.isfinite(observed_energy):
-        raise DomainLessonResultsError(f"{context} energies must be finite")
-
-    atom_count = int(reference_forces.shape[0])
-    if atom_count <= 0:
-        raise DomainLessonResultsError(f"{context} has no atoms")
-    energy_difference_per_atom = (
-        abs(observed_energy - reference_energy) / atom_count
-    )
-    component_tolerances = (
-        DOMAIN_METHODOLOGY.parity_force_atol_ev_a
-        + DOMAIN_METHODOLOGY.parity_force_rtol * np.abs(reference_forces)
-    )
-    if require_energy and (
-        energy_difference_per_atom
-        > DOMAIN_METHODOLOGY.parity_energy_tolerance_ev_per_atom
-    ):
-        raise DomainLessonResultsError(f"{context} fails energy agreement")
-    force_agrees = np.less_equal(
-            np.abs(observed_forces - reference_forces),
-            component_tolerances,
-        ).all()
-    if require_forces and not force_agrees:
-        raise DomainLessonResultsError(f"{context} fails componentwise force agreement")
-
-
-def _validate_raw_distributed_output_agreement(
-    root: Path,
-    checksums: Mapping[str, str],
-    distributed: pd.DataFrame,
-    raw_by_case: Mapping[str, Mapping[str, Any]],
-) -> None:
-    """Check the actual timing input and comparable successful OOM retries."""
-
-    steady = distributed.loc[
-        distributed["measurement_role"].astype(str).eq("steady_timing")
-    ].sort_values("gpus")
-    force_reference_world_size = DOMAIN_METHODOLOGY.force_reference_world_size
-    one_gpu = steady.loc[steady["gpus"].eq(force_reference_world_size)]
-    if len(one_gpu) != 1:
-        raise DomainLessonResultsError(
-            "steady timing output agreement needs one one-GPU reference"
-        )
-    one_gpu_reference = raw_by_case[str(one_gpu.iloc[0]["case_id"])]
-    energy_reference_world_size = DOMAIN_METHODOLOGY.energy_reference_world_size
-    energy_reference = steady.loc[
-        steady["gpus"].eq(energy_reference_world_size)
-    ]
-    if len(energy_reference) != 1:
-        raise DomainLessonResultsError(
-            "steady timing output agreement needs one distributed energy reference"
-        )
-    distributed_energy_reference = raw_by_case[
-        str(energy_reference.iloc[0]["case_id"])
-    ]
-    for world_size in DOMAIN_METHODOLOGY.force_comparison_world_sizes:
-        row = steady.loc[steady["gpus"].eq(world_size)].iloc[0]
-        case_id = str(row["case_id"])
-        _validate_raw_output_agreement(
-            root,
-            checksums,
-            one_gpu_reference,
-            raw_by_case[case_id],
-            context=f"steady timing force row {case_id!r}",
-            require_energy=False,
-            require_forces=True,
-        )
-    for world_size in DOMAIN_METHODOLOGY.energy_comparison_world_sizes:
-        row = steady.loc[steady["gpus"].eq(world_size)].iloc[0]
-        case_id = str(row["case_id"])
-        _validate_raw_output_agreement(
-            root,
-            checksums,
-            distributed_energy_reference,
-            raw_by_case[case_id],
-            context=f"steady timing distributed energy row {case_id!r}",
-            require_energy=True,
-            require_forces=False,
-        )
-
-    successful_rescue = distributed.loc[
-        distributed["measurement_role"].astype(str).eq("rescue")
-        & distributed["success"].eq(True)
-    ].sort_values("gpus")
-    if len(successful_rescue) < 2:
-        return
-    rescue_reference = raw_by_case[str(successful_rescue.iloc[0]["case_id"])]
-    for _, row in successful_rescue.iloc[1:].iterrows():
-        case_id = str(row["case_id"])
-        _validate_raw_output_agreement(
-            root,
-            checksums,
-            rescue_reference,
-            raw_by_case[case_id],
-            context=f"successful rescue row {case_id!r}",
-        )
-
-
-def _capacity_view(table: pd.DataFrame) -> pd.DataFrame:
-    """Return the short capacity table shown in the notebook."""
-
-    view = pd.DataFrame(
-        {
-            "atom_count": table["atom_count"],
-            "success": table["success"],
-            "world_size": table["gpus"],
-            "torch_peak_allocated_gb": pd.to_numeric(
-                table["peak_memory_bytes_max_rank"], errors="coerce"
-            )
-            / 1.0e9,
-            "failure_type": table["failure_type"],
-            "failure_stage": table["failure_stage"],
-        }
-    )
-    return view.reset_index(drop=True)
-
-
-def _charge_diagnostics_view(
-    records: Sequence[Mapping[str, Any]],
-) -> pd.DataFrame:
-    """Return the compact one-GPU charge summary shown to learners."""
-
-    columns = (
-        "atom_count",
-        "dtype",
-        "target_sum_e",
-        "charge_sum_e",
-        "residual_e",
-        "abs_residual_per_atom_e",
-    )
-    rows = []
-    for record in records:
-        diagnostics = record["charge_diagnostics"]
-        rows.append(
-            {
-                "atom_count": int(record["atom_count"]),
-                "dtype": str(diagnostics["dtype"]),
-                "target_sum_e": float(diagnostics["target_sum_e"]),
-                "charge_sum_e": float(diagnostics["sum_e"]),
-                "residual_e": float(diagnostics["residual_e"]),
-                "abs_residual_per_atom_e": float(
-                    diagnostics["abs_residual_per_atom"]
-                ),
-            }
-        )
-    return pd.DataFrame(rows, columns=columns)
-
-
-def _electrostatics_view(
-    record: Mapping[str, Any] | None,
-) -> pd.DataFrame:
-    """Return the fixed-charge PME-versus-Ewald check shown in the notebook."""
-
-    columns = (
-        "atom_count",
-        "charge_sum_e",
-        "pme_energy_eV",
-        "ewald_energy_eV",
-        "energy_abs_error_meV_per_atom",
-        "force_rms_error_eV_A",
-        "force_max_error_eV_A",
-        "passed",
-    )
-    if record is None:
-        return pd.DataFrame(columns=columns)
-    return pd.DataFrame(
-        [
-            {
-                "atom_count": int(record["atom_count"]),
-                "charge_sum_e": float(record["charge_sum_e"]),
-                "pme_energy_eV": float(record["pme_energy_ev"]),
-                "ewald_energy_eV": float(record["ewald_energy_ev"]),
-                "energy_abs_error_meV_per_atom": (
-                    1.0e3 * float(record["energy_abs_difference_ev_per_atom"])
-                ),
-                "force_rms_error_eV_A": float(record["force_rms_difference_ev_per_a"]),
-                "force_max_error_eV_A": float(record["force_max_difference_ev_per_a"]),
-                "passed": record["status"] == "passed",
-            }
-        ],
-        columns=columns,
-    )
-
-
-def _parity_view(table: pd.DataFrame) -> pd.DataFrame:
-    """Return the split force, energy, and diagnostic comparison table."""
-
-    view = pd.DataFrame(
-        {
-            "atom_count": table["atom_count"],
-            "world_size": table["gpus"],
-            "one_gpu_energy_abs_offset_meV_atom": 1.0e3
-            * pd.to_numeric(
-                table["one_gpu_energy_abs_offset_ev_per_atom"], errors="coerce"
-            ),
-            "distributed_energy_error_meV_atom": 1.0e3
-            * pd.to_numeric(
-                table["distributed_energy_difference_ev_per_atom"],
-                errors="coerce",
-            ),
-            "force_max_abs_error_eV_A": pd.to_numeric(
-                table["force_max_difference_ev_per_a"], errors="coerce"
-            ),
-            "force_rms_error_eV_A": pd.to_numeric(
-                table["force_rms_difference_ev_per_a"], errors="coerce"
-            ),
-            "force_passed": table["force_passed"],
-            "distributed_energy_passed": table["distributed_energy_passed"],
-            "passed": table["parity_passed"],
-        }
-    )
-    return view.reset_index(drop=True)
-
-
-def _distributed_view(table: pd.DataFrame) -> pd.DataFrame:
-    """Return the short domain-decomposition table shown in the notebook."""
-
-    wall_time = pd.to_numeric(table["elapsed_s"], errors="coerce")
-    steady_mask = table["measurement_role"].astype(str).eq("steady_timing")
-    steady = table.loc[steady_mask & table["success"].eq(True)]
-    complete = (
-        len(steady) == len(_REQUIRED_STEADY_TIMING_GPUS)
-        and set(steady["gpus"].astype(int)) == set(_REQUIRED_STEADY_TIMING_GPUS)
-        and steady["atom_count"].nunique() == 1
-    )
-    speedup = pd.Series(np.nan, index=table.index, dtype=float)
-    relative_iqr = pd.to_numeric(
-        table["elapsed_iqr_s"], errors="coerce"
-    ) / wall_time
-    if complete:
-        baseline = steady.loc[steady["gpus"].eq(1)]
-        if len(baseline) != 1:
-            raise DomainLessonResultsError(
-                "complete steady timing needs exactly one one-GPU baseline"
-            )
-        baseline_time = float(wall_time.loc[baseline.index[0]])
-        speedup.loc[steady.index] = baseline_time / wall_time.loc[steady.index]
-
-    view = pd.DataFrame(
-        {
-            "atom_count": table["atom_count"],
-            "world_size": table["gpus"],
-            "success": table["success"],
-            "measurement_role": table["measurement_role"],
-            "wall_time_s": wall_time,
-            "wall_time_q1_s": pd.to_numeric(
-                table["elapsed_q1_s"], errors="coerce"
-            ),
-            "wall_time_q3_s": pd.to_numeric(
-                table["elapsed_q3_s"], errors="coerce"
-            ),
-            "wall_time_iqr_s": pd.to_numeric(
-                table["elapsed_iqr_s"], errors="coerce"
-            ),
-            "relative_iqr": relative_iqr,
-            "speedup_vs_1gpu": speedup,
-            "parallel_efficiency": speedup / table["gpus"],
-            "torch_peak_allocated_gb": pd.to_numeric(
-                table["peak_memory_bytes_max_rank"], errors="coerce"
-            )
-            / 1.0e9,
-            "owned_atoms_min": pd.to_numeric(
-                table["owned_atoms_min_rank"], errors="coerce"
-            ),
-            "owned_atoms_max": pd.to_numeric(
-                table["owned_atoms_max_rank"], errors="coerce"
-            ),
-            "spatial_grid": table["spatial_grid"],
-            "failure_type": table["failure_type"],
-            "failure_stage": table["failure_stage"],
-            "error": table["error"],
-        }
-    )
-    return view.reset_index(drop=True)
-
-
-def _plot_data(
-    capacity: pd.DataFrame,
-    distributed: pd.DataFrame,
-) -> pd.DataFrame:
-    rows: list[pd.DataFrame] = []
-    if not capacity.empty:
-        capacity_plot = capacity[
-            [
-                "case_id",
-                "atom_count",
-                "gpus",
-                "success",
-                "status",
-                "failure_type",
-                "elapsed_s",
-                "peak_memory_bytes_max_rank",
-            ]
-        ].copy()
-        capacity_plot.insert(0, "series", "single GPU capacity")
-        rows.append(capacity_plot)
-    if not distributed.empty:
-        distributed_plot = distributed[
-            [
-                "case_id",
-                "atom_count",
-                "gpus",
-                "success",
-                "status",
-                "failure_type",
-                "elapsed_s",
-                "peak_memory_bytes_max_rank",
-            ]
-        ].copy()
-        distributed_plot.insert(0, "series", "domain decomposition")
-        rows.append(distributed_plot)
-    if not rows:
-        return pd.DataFrame(
-            columns=(
-                "series",
-                "case_id",
-                "atom_count",
-                "gpus",
-                "success",
-                "status",
-                "failure_type",
-                "elapsed_s",
-                "peak_memory_bytes_max_rank",
-            )
-        )
-    return pd.concat(rows, ignore_index=True)
 
 
 def load_domain_lesson_view(
-    path: str | Path,
+    root: str | Path,
     *,
-    planned_atom_counts: Sequence[int],
-    expected_parity_atom_count: int | None = None,
+    expected_atom_count: int = FIXED_ATOM_COUNT,
+    expected_world_sizes: Sequence[int] = REQUIRED_WORLD_SIZES,
 ) -> DomainLessonView:
-    """Load strict saved results or return an explicit not-reported view."""
+    """Load one complete v4 fixed-input result set."""
 
-    root = Path(path)
-    planned_counts = _planned_counts(planned_atom_counts)
-    expected_parity_atoms = (
-        None
-        if expected_parity_atom_count is None
-        else _positive_integer(
-            expected_parity_atom_count,
-            name="expected_parity_atom_count",
+    root_path = Path(root)
+    if (
+        isinstance(expected_atom_count, bool)
+        or int(expected_atom_count) != FIXED_ATOM_COUNT
+    ):
+        raise ValueError(f"v4 records one fixed atom count: {FIXED_ATOM_COUNT}")
+    worlds = tuple(int(value) for value in expected_world_sizes)
+    if worlds != REQUIRED_WORLD_SIZES:
+        raise ValueError("v4 records the configured 1/2/4-GPU world sizes")
+    if not root_path.exists():
+        return _empty_view(
+            root_path,
+            "recorded H100 results have not been reported",
         )
-    )
-    if not root.exists():
-        return _not_reported(
-            root,
-            planned_counts,
-            "Compute Lab domain-decomposition results have not been reported.",
+    if not root_path.is_dir():
+        raise DomainLessonResultsError(
+            "domain result path exists but is not a directory"
         )
-    if not root.is_dir():
-        raise DomainLessonResultsError("domain lesson result path must be a directory")
-    manifest_path = root / MANIFEST_NAME
+    manifest_path = root_path / MANIFEST_NAME
     if not manifest_path.is_file():
-        if not any(root.iterdir()):
-            return _not_reported(
-                root,
-                planned_counts,
-                "Compute Lab domain-decomposition results have not been reported.",
-            )
-        raise DomainLessonResultsError("result directory exists without manifest.json")
+        raise DomainLessonResultsError(f"missing {MANIFEST_NAME}")
     try:
         manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    except (OSError, json.JSONDecodeError) as exc:
+    except json.JSONDecodeError as exc:
         raise DomainLessonResultsError("manifest.json is not valid JSON") from exc
     if not isinstance(manifest, Mapping):
         raise DomainLessonResultsError("manifest.json must contain an object")
     if manifest.get("schema") != BUNDLE_SCHEMA:
-        raise DomainLessonResultsError("unexpected domain lesson bundle schema")
-    status = str(manifest.get("status", ""))
-    if status == "not_reported":
-        reason = str(manifest.get("reason", "")).strip()
-        if not reason:
-            raise DomainLessonResultsError("not_reported manifest needs a reason")
-        return _not_reported(root, planned_counts, reason, manifest)
-    if status != "complete":
-        raise DomainLessonResultsError("bundle status must be complete or not_reported")
-    if not str(manifest.get("created_utc", "")).strip():
-        raise DomainLessonResultsError("complete bundle must report created_utc")
-
-    failure_policy = _require_mapping(manifest, "failure_policy", context="manifest")
-    expected_policy = {
-        "failed_rows_retained": True,
-        "estimates_allowed": False,
-        "capacity_stop_condition": "first_single_gpu_oom",
-    }
-    if dict(failure_policy) != expected_policy:
+        raise DomainLessonResultsError(f"manifest schema must be {BUNDLE_SCHEMA}")
+    if manifest.get("status") == "not reported":
+        return _empty_view(
+            root_path,
+            str(manifest.get("reason") or "recorded H100 results are not reported"),
+        )
+    if manifest.get("status") != "complete":
         raise DomainLessonResultsError(
-            "failure policy does not retain measured failures"
+            "existing v4 result sets must have status complete"
         )
 
-    checksums = _read_checksum_index(root)
-    if checksums.get(MANIFEST_NAME) != _sha256_file(manifest_path):
-        raise DomainLessonResultsError("manifest checksum is missing or incorrect")
-    raw_rows = _read_raw_results(root, manifest, checksums)
-    artifact_paths = _validate_artifacts(root, manifest, checksums)
-    structure_hashes, settings_sha256 = _validate_identity(manifest)
-    _validate_electrostatics(
-        manifest,
-        structure_sha256_by_atom_count=structure_hashes,
-        raw_rows=raw_rows,
+    checksums = _read_checksum_index(root_path)
+    manifest_checksum = checksums.get(MANIFEST_NAME)
+    if manifest_checksum is None:
+        raise DomainLessonResultsError("SHA256SUMS is missing manifest.json")
+    _checked_file(root_path, MANIFEST_NAME, manifest_checksum)
+    settings_sha256, source_identity, structure_sha256 = _validate_identity(manifest)
+    table = _read_table(root_path, manifest, checksums)
+    pass_times = _validate_table(
+        table,
+        settings_sha256=settings_sha256,
+        structure_sha256=structure_sha256,
     )
-    tables = {
-        name: _read_table(root, manifest, name, checksums) for name in TABLE_NAMES
-    }
-    _validate_declared_files(
-        root,
-        manifest,
-        checksums,
-        artifact_paths,
-    )
-    for name, table in tables.items():
-        _validate_rows(
-            name,
-            table,
-            structure_sha256_by_atom_count=structure_hashes,
-            settings_sha256=settings_sha256,
-        )
-    capacity = tables["capacity"]
-    observed_counts = tuple(capacity["atom_count"].astype(int))
-    planned_prefix = planned_counts[: len(observed_counts)]
-    if observed_counts != planned_prefix:
-        raise DomainLessonResultsError(
-            "capacity rows must be an in-order prefix of planned_atom_counts"
-        )
-    oom_rows = capacity.loc[
-        ~capacity["success"] & capacity["failure_type"].astype(str).isin(_OOM_TYPES)
+    raw_rows = _read_raw_results(root_path, manifest, checksums)
+    fixed_raw = [row for row in raw_rows if row.get("mode") == "distributed"]
+    electrostatics_raw = [
+        row for row in raw_rows if row.get("mode") == "electrostatics-validation"
     ]
-    if oom_rows.empty:
+    if len(electrostatics_raw) != 1:
         raise DomainLessonResultsError(
-            "complete capacity sweep must retain the first measured single-GPU OOM"
+            "raw results require one electrostatics-validation row"
         )
-    first_oom_index = int(oom_rows.index[0])
-    if first_oom_index != len(capacity) - 1:
+    if any(not str(row.get("run_id", "")).strip() for row in raw_rows):
         raise DomainLessonResultsError(
-            "capacity sweep must stop after the first measured single-GPU OOM"
+            "all four raw results must identify their source job"
         )
-    if not capacity.loc[: first_oom_index - 1, "success"].all():
-        raise DomainLessonResultsError(
-            "capacity sweep contains a failure before the reported OOM"
-        )
-    if tables["parity"].empty or tables["distributed"].empty:
-        raise DomainLessonResultsError(
-            "complete bundle needs parity and distributed measurements"
-        )
-    _validate_measurement_completeness(
-        tables["parity"],
-        tables["distributed"],
+    rows_by_world, force_arrays, fixed_charge = _validate_raw_distributed(
+        fixed_raw,
+        table=table,
+        source_identity=source_identity,
+        settings_sha256=settings_sha256,
+        structure_sha256=structure_sha256,
+        checksums=checksums,
+        root=root_path,
     )
-    raw_by_case = _reconcile_raw_measurements(tables, raw_rows)
-    selection = _validate_selection(
+    if electrostatics_raw[0]["run_id"] != rows_by_world[1]["run_id"]:
+        raise DomainLessonResultsError(
+            "electrostatics validation must come from the one-GPU job"
+        )
+    output_agreement = _output_agreement(rows_by_world, force_arrays)
+    _validate_manifest_output_agreement(
         manifest,
-        capacity,
-        tables["parity"],
-        tables["distributed"],
-        raw_by_case,
+        rows_by_world=rows_by_world,
+        force_arrays=force_arrays,
     )
-    _validate_raw_parity(
-        root,
-        checksums,
-        tables["parity"],
-        raw_by_case,
+    electrostatics, _ = _validate_electrostatics(
+        electrostatics_raw[0],
+        manifest=manifest,
+        source_identity=source_identity,
+        settings_sha256=settings_sha256,
+        checksums=checksums,
+        root=root_path,
     )
-    _validate_raw_distributed_output_agreement(
-        root,
-        checksums,
-        tables["distributed"],
-        raw_by_case,
-    )
-    if expected_parity_atoms is not None:
-        try:
-            parity_pairs = _positive_integer(
-                selection["parity_pair_count"],
-                name="manifest parity 1:1 composition count",
-            )
-        except ValueError as exc:
-            raise DomainLessonResultsError(str(exc)) from exc
-        if parity_pairs * ATOMS_PER_COMPOSITION_UNIT != expected_parity_atoms:
-            raise DomainLessonResultsError(
-                "manifest parity size does not match expected_parity_atom_count"
-            )
-        if not tables["parity"]["atom_count"].eq(expected_parity_atoms).all():
-            raise DomainLessonResultsError(
-                "parity rows do not match expected_parity_atom_count"
-            )
-
-    plot_data = _plot_data(capacity, tables["distributed"])
+    _validate_declared_files(root_path, manifest, checksums)
+    layout, timing, plot = _learner_tables(table, pass_times)
     return DomainLessonView(
         available=True,
         reason="",
-        root=root,
+        root=root_path,
         manifest=manifest,
-        capacity_table=_capacity_view(capacity),
-        charge_diagnostics_table=_charge_diagnostics_view(
-            selection["capacity_charge_diagnostics"]
-        ),
-        electrostatics_table=_electrostatics_view(
-            _require_mapping(
-                manifest,
-                "electrostatics_validation",
-                context="manifest",
-            )
-        ),
-        parity_table=_parity_view(tables["parity"]),
-        distributed_table=_distributed_view(tables["distributed"]),
-        plot_data=plot_data.reset_index(drop=True),
+        run_settings_table=_settings_table(manifest),
+        layout_table=layout,
+        timing_table=timing,
+        output_agreement_table=output_agreement,
+        charge_diagnostics_table=pd.DataFrame([fixed_charge]),
+        electrostatics_table=electrostatics,
+        distributed_table=table.sort_values("gpus").reset_index(drop=True),
+        plot_data=plot,
     )
 
 
 __all__ = (
     "BUNDLE_SCHEMA",
-    "CAPACITY_COLUMNS",
-    "CHARGE_SUM_TOLERANCE_E",
-    "CHECKSUM_INDEX_NAME",
     "DISTRIBUTED_COLUMNS",
     "DomainLessonResultsError",
     "DomainLessonView",
-    "MANIFEST_NAME",
-    "PARITY_COLUMNS",
-    "PME_EWALD_ENERGY_TOLERANCE_EV_PER_ATOM",
-    "PME_EWALD_FORCE_TOLERANCE_EV_PER_A",
+    "PLOT_COLUMNS",
     "canonical_json_sha256",
     "load_domain_lesson_view",
 )

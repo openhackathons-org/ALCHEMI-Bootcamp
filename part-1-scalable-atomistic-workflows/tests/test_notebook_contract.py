@@ -211,20 +211,21 @@ def test_notebook_has_seven_stylized_sequential_stage_cards() -> None:
     assert "earlier six-cell form using the current Toolkit versions" in stage_3
     assert "current eight-cell stage not timed" in stage_3
     roadmap = _source(by_id["roadmap"])
-    assert "22.643 s" in roadmap
-    assert "earlier six-cell form" in roadmap
-    assert "current eight-cell Stage 3 have not been timed" in roadmap
-    assert "Stage 7: scaling paths" in roadmap
-    assert "**Not measured**" in roadmap
-    assert "**Choose a scaling path:**" in roadmap
-    assert "exercise `DomainParallel` on one GPU without decomposition" in roadmap
+    roadmap_text = " ".join(roadmap.split())
+    assert "22.643 s" in roadmap_text
+    assert "earlier six-cell form" in roadmap_text
+    assert "current eight-cell Stage 3 have not been timed" in roadmap_text
+    assert "Stage 7: scaling paths" in roadmap_text
+    assert "**Not measured**" in roadmap_text
+    assert "**Choose a scaling path:**" in roadmap_text
+    assert "exercise `DomainParallel` on one GPU without decomposition" in roadmap_text
     assert "`DomainParallel`" in roadmap
     for depth in (
-            "work directly with `AtomicData`, `Batch`, model composition",
-            "PME and `DomainParallel` are",
-            "walked through live on one GPU without decomposition",
-            "`DistributedPipeline` is an API preview",
-            "reported correctness or timing result",
+        "work directly with `AtomicData`, `Batch`, model composition",
+        "PME and `DomainParallel` are",
+        "walked through live on one GPU without decomposition",
+        "`DistributedPipeline` is an API preview",
+        "reported correctness or timing result",
     ):
         assert depth in roadmap
 
@@ -977,11 +978,11 @@ def test_notebook_discovers_and_switches_sevennet_tasks() -> None:
         "torch.isfinite(energies).all()",
         "torch.isfinite(forces).all()",
         "sevennet_task_outputs",
-            "summarize_sevennet_task_outputs(",
-            "sevennet_task_summary",
-            "method sensitivity, not accuracy",
-            "energies remain available",
-            "main calculation uses mpa",
+        "summarize_sevennet_task_outputs(",
+        "sevennet_task_summary",
+        "method sensitivity, not accuracy",
+        "energies remain available",
+        "main calculation uses mpa",
     ):
         assert term in run
 
@@ -989,15 +990,9 @@ def test_notebook_discovers_and_switches_sevennet_tasks() -> None:
     assert "raw total energies / eV" not in run
     assert "surface_d3(" not in run
     assert "PipelineModelWrapper(" not in run
-    assert order.index("pack-adsorption-batches") < order.index(
-        "sevennet-tasks"
-    )
-    assert order.index("sevennet-tasks") < order.index(
-        "compare-sevennet-tasks"
-    )
-    assert order.index("compare-sevennet-tasks") < order.index(
-        "view-adsorption-panel"
-    )
+    assert order.index("pack-adsorption-batches") < order.index("sevennet-tasks")
+    assert order.index("sevennet-tasks") < order.index("compare-sevennet-tasks")
+    assert order.index("compare-sevennet-tasks") < order.index("view-adsorption-panel")
 
 
 def test_notebook_builds_and_displays_a_live_sevennet_model_card() -> None:
@@ -1263,8 +1258,9 @@ def test_stage_7_keeps_each_scaling_api_with_the_right_workload_shape() -> None:
     ):
         assert workload in stage_7
         assert api in stage_7
-    assert "one-GPU walkthrough with no decomposition" in stage_7
-    assert "checked H100 capacity, OOM recovery, and speed" in stage_7
+    assert "live one-GPU walkthrough" in stage_7
+    assert "three saved fixed-structure passes" in stage_7
+    assert "same 51,200-atom input on 1, 2, and 4 H100s" in stage_7
     assert "otherwise `NOT REPORTED`" in stage_7
     assert "API sketch only" in stage_7
 
@@ -1378,9 +1374,7 @@ def test_inflight_lesson_registers_and_validates_an_actual_refill_trace() -> Non
     assert "atom and structure limits only" in intro
     assert "chosen so refills are visible" in intro
     assert "not a\nmeasured GPU capacity" in intro
-    assert "result hook observes the run without changing it" in " ".join(
-        intro.split()
-    )
+    assert "result hook observes the run without changing it" in " ".join(intro.split())
     assert "actual active count" in " ".join(intro.split())
     assert "`NaNDetectorHook` stops this teaching run" in intro
     assert "zero observed failures" in intro
@@ -1393,9 +1387,8 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
     model_intro = _source(by_id["domain-model-intro"])
     build = _source(by_id["build-domain-box"])
     convert = _source(by_id["convert-domain-box"])
-    compose = (
-        _source(by_id["configure-domain-pme"])
-        + _source(by_id["compose-domain-model"])
+    compose = _source(by_id["configure-domain-pme"]) + _source(
+        by_id["compose-domain-model"]
     )
     configure = _source(by_id["configure-domain-parallel"])
     run = _source(by_id["run-domain-single-gpu"])
@@ -1460,7 +1453,7 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
     ):
         assert construction in build + convert
     for forbidden_live_setup in (
-        "which(\"packmol\")",
+        'which("packmol")',
         "plan_nci_molecular_box(",
         "build_nci_molecular_box(",
         "make_ovito_widget(",
@@ -1513,22 +1506,21 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
     ):
         assert charge_diagnostic in molecule_charge_text
 
-    api_preview = " ".join(_source(by_id["domain-parallel-api"]).split())
+    api_preview = " ".join(_source(by_id["domain-parallel-api"]).casefold().split())
     for boundary in (
-        "total energy is summed across GPUs",
-        "`gather` collects atom-level fields on rank 0",
+        "sums total energy across gpus",
+        "`gather` collects atom-level fields, including forces, on rank 0",
         "process mesh | assigns one worker process to each GPU",
         "spatial grid | assigns atoms to GPU regions",
         "PME grid | defines the electrostatics FFT repeated on every GPU",
         "restricts this example to an input total-charge target of zero",
         "passes AIMNet2 charges to PME unchanged",
-        "`gather` collects forces",
         "does not emit predicted atomic charges",
         "Rank consistency is checked through source-ordered forces and distributed energies",
         "rebuilds neighbors inside each region",
         "one-GPU path uses the model's ordinary neighbor hooks",
     ):
-        assert boundary in api_preview
+        assert boundary.casefold() in api_preview
 
     inspect_text = " ".join(inspect.split())
     for result_check in (
@@ -1557,76 +1549,74 @@ def test_domain_parallel_lesson_preserves_periodic_science_and_public_api() -> N
 
 def test_domain_results_require_same_input_agreement_and_stable_timings() -> None:
     by_id = {cell.get("id"): cell for cell in _notebook()["cells"]}
-    methodology = (
-        _source(by_id["display-domain-methodology"])
-        + _source(by_id["display-domain-scaling-methodology"])
+    methodology = _source(by_id["display-domain-methodology"]) + _source(
+        by_id["display-domain-scaling-methodology"]
     )
     plan = _source(by_id["domain-scaling-plan"])
     loader = _source(by_id["domain-parallel-results"])
     display_results = _source(by_id["display-domain-parallel-results"])
 
     for methodology_field in (
-        "steady_timing_warmup_count",
-        "steady_timing_sample_count",
-        "steady_timing_model_evaluations_per_workflow",
-        "steady_timing_max_relative_iqr",
+        "fixed_molecules_per_species",
+        "evaluation_warmup_count",
+        "evaluation_pass_count",
+        "measured_model_evaluations_per_pass",
         "charge_sum_tolerance_e",
-        "parity_energy_tolerance_ev_per_atom",
-        "parity_force_atol_ev_a",
-        "parity_force_rtol",
+        "evaluation_energy_tolerance_ev_per_atom",
+        "evaluation_force_atol_ev_a",
+        "evaluation_force_rtol",
     ):
         assert methodology_field in methodology
 
     plan_text = " ".join(plan.split())
     for safeguard in (
-        "integer supercells",
+        "one checked 51,200-atom supercell",
         "Packmol is not rerun",
-        "three different questions",
-        "notebook never triggers an out-of-memory failure live",
-        "first natural CUDA OOM",
-        "exact first-OOM input, unchanged",
-        "separate input that already fits one H100",
-        "Nodes = ranks = GPUs",
-        "Four GPUs means four nodes, each with one worker and one H100",
-        "1-GPU forces against 2/4 GPUs",
+        "structure, composed AIMNet2 + PME + D3 model, precision, cutoffs",
+        "one warm-up, then three measured energy/force evaluations",
+        "partitioned once and gathered once",
+        "one `run(..., n_steps=1)` call",
+        "not a trajectory or a general scaling benchmark",
+        "Four GPUs means four one-H100 nodes",
+        "checks 1-GPU forces against 2/4 GPUs",
         "2-GPU distributed energy against 4",
-        "raw 1-to-multi energy offset is diagnostic",
-        "slowest-rank median and interquartile range (IQR)",
-        "actual float32 charges passed to PME",
+        "1-to-multi energy offset is diagnostic",
+        "three slowest-rank times and their median",
+        "records the float32 charges passed to PME",
         "residual is reported, not limited",
-        "only to the separate 3,200-atom fixed-charge PME-versus-Ewald validation",
-        "first OOM and its unchanged retries measure capacity",
-        "separate one-GPU-fit input measures speed",
+        "applies only to the separate 3,200-atom PME-versus-Ewald",
         "Missing files produce `NOT REPORTED`, never an estimate",
     ):
         assert safeguard in plan_text
+    assert "first-OOM" not in plan_text
+    assert "capacity ladder" not in plan_text
 
     for loader_check in (
         "load_domain_lesson_view(",
-        "planned_atom_counts=DOMAIN_PLANNED_ATOM_COUNTS",
-        "expected_parity_atom_count=DOMAIN_PARITY_ATOM_COUNT",
+        "expected_atom_count=DOMAIN_FIXED_ATOM_COUNT",
+        "expected_world_sizes=DOMAIN_REQUIRED_WORLD_SIZES",
         "if not domain_view.available:",
         "NOT REPORTED:",
     ):
         assert loader_check in loader
     assert "if domain_view.available:" in display_results
     for split_check in (
-        'domain_takeaway["all_one_gpu_force_checks_passed"]',
-        'domain_takeaway["all_distributed_energy_checks_passed"]',
-        'domain_takeaway["timed_one_gpu_force_checks_passed"]',
-        'domain_takeaway["timed_distributed_energy_checks_passed"]',
+        'domain_takeaway["all_fixed_evaluations_succeeded"]',
+        'domain_takeaway["positions_pbc_equivalent"]',
+        'domain_takeaway["all_output_checks_passed"]',
     ):
         assert split_check in display_results
-    assert "only as a diagnostic" in display_results
-    assert "speedup_by_gpu" in display_results
     for lesson_result in (
-        "One-H100 capacity, including the first natural OOM",
+        "domain_view.run_settings_table",
+        "domain_view.layout_table",
+        "domain_view.timing_table.round(3)",
+        "domain_view.output_agreement_table.round(6)",
         "domain_view.charge_diagnostics_table.round(9)",
-        "One-H100 charge residuals passed to PME",
-        '"measurement_role"].eq("rescue")',
-        "The same first-OOM input on 2 and 4 H100s",
-        '"measurement_role"].eq("steady_timing")',
-        "A separate one-H100-fit input on 1, 2, and 4 H100s",
+        "domain_view.electrostatics_table.round(6)",
+        "plot_domain_decomposition(domain_view.plot_data)",
+        "three raw energy/force passes",
+        "they do not measure a ",
+        "trajectory or a memory limit.",
     ):
         assert lesson_result in display_results
     assert 'result_state="not_reported"' in display_results
@@ -2020,9 +2010,7 @@ def test_nci_partial_models_and_reference_levels_stay_distinct() -> None:
     assert '"same-D3 bookkeeping identity"' in analyze
     assert '"complete vs DFT-D3": ("full", "dft_full")' in analyze
     assert '"complete vs CC": ("full", "ccsd_t_cbs")' in analyze
-    assert "bookkeeping, not accuracy" in _source(
-        by_id["display-nci-curves"]
-    )
+    assert "bookkeeping, not accuracy" in _source(by_id["display-nci-curves"])
     all_source = "\n".join(_source(cell) for cell in _notebook()["cells"])
     assert "learned short-range output" not in all_source
     assert "AIMNet residual" not in all_source
@@ -2159,17 +2147,21 @@ def test_notebook_uses_one_compact_reporting_helper_and_safe_display() -> None:
     assert "Other values are labeled NOT REPORTED" in spectrum
 
     summary_note = _source(by_id["results-summary-note"])
-    assert "live one-GPU `DomainParallel` row records the API call" in summary_note
-    assert "one GPU means one domain" in summary_note
-    assert "it does not claim spatial decomposition" in summary_note
-    assert "recovery of the exact first-OOM input" in summary_note
-    assert "separate one-GPU-fit input are **RECORDED**" in summary_note
-    assert (
-        "`DistributedPipeline`\ncorrectness, overlap, and timing are "
-        "**NOT REPORTED**" in summary_note
+    summary_note_text = " ".join(summary_note.split())
+    assert "live one-GPU `DomainParallel` row records the API call" in summary_note_text
+    assert "one GPU means one domain" in summary_note_text
+    assert "it does not claim spatial decomposition" in summary_note_text
+    assert "same 51,200-atom input on 1, 2, and 4 H100s is **RECORDED**" in (
+        summary_note_text
     )
-    assert "**RECORDED**" in summary_note
-    assert "**NOT REPORTED**" in summary_note
+    assert "one warm-up and three measured energy/force passes" in summary_note_text
+    assert "not a trajectory or a capacity search" in summary_note_text
+    assert (
+        "`DistributedPipeline` correctness, overlap, and timing are "
+        "**NOT REPORTED**" in summary_note_text
+    )
+    assert "**RECORDED**" in summary_note_text
+    assert "**NOT REPORTED**" in summary_note_text
 
     mode_mapping = _source(by_id["mode-mapping"])
     assert "monomer_mode_mapping_display_table(mode_mapping)" in mode_mapping

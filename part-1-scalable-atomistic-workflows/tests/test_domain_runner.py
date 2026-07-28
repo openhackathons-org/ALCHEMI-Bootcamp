@@ -1,11 +1,10 @@
-"""Static and CPU-only checks for the Part 1 domain campaign scripts."""
+"""Static and CPU-only checks for the Part 1 fixed-input domain scripts."""
 
 from __future__ import annotations
 
 import argparse
 import importlib.util
 import inspect
-import json
 import math
 from pathlib import Path
 import subprocess
@@ -36,81 +35,12 @@ PLAN = _load_script("part1_domain_plan.py")
 RUNNER = _load_script("part1_domain_run.py")
 
 
-def _charge_diagnostics(
-    *,
-    atom_count: int,
-    sum_e: float,
-) -> dict[str, object]:
-    residual_e = sum_e
-    return {
-        "available": True,
-        "finite": True,
-        "dtype": "float32",
-        "target_sum_e": 0.0,
-        "sum_e": sum_e,
-        "residual_e": residual_e,
-        "abs_residual_per_atom": abs(residual_e) / atom_count,
-        "sum_abs_e": max(1.0, abs(sum_e)),
-        "max_abs_e": 0.25,
-        "shape": [atom_count],
-        "sha256": "a" * 64,
-    }
-
-
 def _plan() -> dict[str, object]:
     return PLAN.build_plan(
         run_id="domain-test",
-        world_sizes=(1,),
-        capacity_pair_counts=PLAN.DEFAULT_CAPACITY_PAIR_COUNTS,
-        validation_pairs=PLAN.DEFAULT_VALIDATION_PAIRS,
-        density_g_cm3=PLAN.DEFAULT_DENSITY_G_CM3,
-        pme_cutoff_a=PLAN.DEFAULT_PME_CUTOFF_A,
-        pme_mesh_safety_factor=PLAN.DEFAULT_PME_MESH_SAFETY_FACTOR,
-        pme_spline_order=PLAN.DEFAULT_PME_SPLINE_ORDER,
-        pme_accuracy=PLAN.DEFAULT_PME_ACCURACY,
-        ewald_reference_accuracy=PLAN.DEFAULT_EWALD_REFERENCE_ACCURACY,
-        d3_cutoff_a=PLAN.DEFAULT_D3_CUTOFF_A,
-        d3_smoothing_fraction=PLAN.DEFAULT_D3_SMOOTHING_FRACTION,
-        domain_skin_a=PLAN.DEFAULT_DOMAIN_SKIN_A,
-        packmol_tolerance_a=PLAN.DEFAULT_PACKMOL_TOLERANCE_A,
-        packmol_precision_a=PLAN.DEFAULT_PACKMOL_PRECISION_A,
-        packmol_seed=PLAN.DEFAULT_PACKMOL_SEED,
+        tutorial_commit="1" * 40,
+        world_size=1,
     )
-
-
-def _selected_input(count: int) -> dict[str, object]:
-    return {
-        "pair_count": count,
-        "atom_count": count * PLAN.ATOMS_PER_PAIR,
-        "structure": {"path": f"/tmp/input-{count}.extxyz", "sha256": "a" * 64},
-    }
-
-
-def _campaign_selection() -> dict[str, object]:
-    return {
-        "largest_success": {"input": _selected_input(4_096)},
-        "first_cuda_oom": {"input": _selected_input(8_192)},
-    }
-
-
-def _campaign_rows(
-    selection: dict[str, object],
-    *,
-    successful_rescue_gpus: tuple[int, ...] = (),
-) -> dict[str, dict[str, object]]:
-    largest = selection["largest_success"]["input"]["pair_count"]  # type: ignore[index]
-    first_oom = selection["first_cuda_oom"]["input"]["pair_count"]  # type: ignore[index]
-    rows: dict[str, dict[str, object]] = {}
-    for world_size in (1, 2, 4):
-        rows[PLAN.steady_timing_case_id(largest, world_size)] = {
-            "success": True,
-            "measurement_role": "steady_timing",
-        }
-    for world_size in (2, 4):
-        rows[PLAN.rescue_case_id(first_oom, world_size)] = {
-            "success": world_size in successful_rescue_gpus
-        }
-    return rows
 
 
 def _clean_git_checkout(path: Path) -> str:
@@ -136,61 +66,33 @@ def _clean_git_checkout(path: Path) -> str:
     ).strip()
 
 
-def test_plan_uses_equal_independent_molecule_counts() -> None:
+def test_plan_uses_one_fixed_input_and_three_short_passes() -> None:
     plan = _plan()
+    fixed_case = plan["fixed_case"]  # type: ignore[index]
 
-    assert (
-        tuple(
-            case["pair_count"]
-            for case in plan["capacity_cases"]  # type: ignore[index]
-        )
-        == PLAN.DEFAULT_CAPACITY_PAIR_COUNTS
+    assert fixed_case["pair_count"] == PLAN.DEFAULT_FIXED_PAIR_COUNT
+    assert fixed_case["atom_count"] == (
+        PLAN.DEFAULT_FIXED_PAIR_COUNT * DOMAIN_METHODOLOGY.atoms_per_composition_unit
     )
-    assert plan["capacity_cases"][-1]["atom_count"] == (  # type: ignore[index]
-        PLAN.DEFAULT_CAPACITY_PAIR_COUNTS[-1]
-        * DOMAIN_METHODOLOGY.atoms_per_composition_unit
-    )
-    assert all(
-        case["molecules_per_species"] == case["pair_count"]
-        for case in plan["capacity_cases"]  # type: ignore[index]
-    )
+    assert fixed_case["atom_count"] == 51_200
+    assert fixed_case["molecules_per_species"] == fixed_case["pair_count"]
+    assert fixed_case["world_size"] == 1
+    assert fixed_case["measurement_role"] == "fixed_evaluation"
+    assert fixed_case["repeat_factors_xyz"] == [2, 2, 4]
     count_definition = plan["input"]["count_definition"]  # type: ignore[index]
     assert "independent phenol molecules" in count_definition
     assert "not a count of pre-bound dimers" in count_definition
-    assert (
-        plan["input"]["packmol_precision_a"]  # type: ignore[index]
-        == PLAN.DEFAULT_PACKMOL_PRECISION_A
-    )
     assert plan["source"]["aimnet_checkpoint"] == "aimnet2-wb97m-d3_0"  # type: ignore[index]
     assert plan["model"]["neighbor_adaptation"] == "never"  # type: ignore[index]
     assert plan["distributed"]["grid_dims"] is None  # type: ignore[index]
-    assert "actual cell shape" in plan["distributed"]["rank_grid_policy"]  # type: ignore[index]
-    assert all(
-        case["rank_grid_policy"] == "automatic_from_actual_cell"
-        for case in plan["capacity_cases"]  # type: ignore[index]
-    )
-    two_box_case = plan["capacity_cases"][1]  # type: ignore[index]
-    base_length_a = PLAN.equivalent_cubic_length_angstrom(
-        PLAN.BASE_PAIR_COUNT,
-        PLAN.DEFAULT_DENSITY_G_CM3,
-    )
-    assert two_box_case["cell_geometry"] == "orthorhombic"
-    assert two_box_case["cell_lengths_a"] == pytest.approx(
-        [base_length_a, base_length_a, 2.0 * base_length_a]
-    )
-    assert two_box_case["minimum_cell_length_a"] == pytest.approx(base_length_a)
-    assert two_box_case["equivalent_cubic_length_a"] == pytest.approx(
-        base_length_a * 2.0 ** (1.0 / 3.0)
-    )
-    assert two_box_case["volume_a3"] == pytest.approx(2.0 * base_length_a**3)
-    assert "box_length_a" not in two_box_case
+    assert plan["timing"]["warmup_count"] == 1  # type: ignore[index]
+    assert plan["timing"]["pass_count"] == 3  # type: ignore[index]
+    assert plan["timing"]["measured_model_evaluations_per_pass"] == 1  # type: ignore[index]
+    assert plan["timing"]["publishable_benchmark"] is False  # type: ignore[index]
     assert plan["model"]["pme_cutoff_a"] == 12.0  # type: ignore[index]
     assert (  # type: ignore[index]
         plan["model"]["pme_mesh_safety_factor"]
         == DOMAIN_METHODOLOGY.pme_mesh_safety_factor
-    )
-    assert plan["model"]["pme_parameter_rule"] == (  # type: ignore[index]
-        "estimate_pme_parameters(accuracy, real_space_cutoff, mesh_safety_factor)"
     )
     assert (  # type: ignore[index]
         plan["model"]["pme_accuracy"] == DOMAIN_METHODOLOGY.pme_accuracy
@@ -200,15 +102,12 @@ def test_plan_uses_equal_independent_molecule_counts() -> None:
         == DOMAIN_METHODOLOGY.ewald_reference_accuracy
     )
     assert plan["methodology"]["source"] == DOMAIN_METHODOLOGY.as_record()
-    assert (
-        plan["methodology"]["source_identity"]["sha256"]
-        == PLAN.sha256_file(PLAN.DOMAIN_METHODOLOGY_CONFIG_PATH)
+    assert plan["methodology"]["source_identity"]["sha256"] == PLAN.sha256_file(
+        PLAN.DOMAIN_METHODOLOGY_CONFIG_PATH
     )
     assert (
-        plan["methodology"]["resolved_values"][
-            "capacity_molecules_per_species"
-        ]
-        == list(PLAN.DEFAULT_CAPACITY_PAIR_COUNTS)
+        plan["methodology"]["resolved_values"]["fixed_molecules_per_species"]
+        == PLAN.DEFAULT_FIXED_PAIR_COUNT
     )
 
 
@@ -216,12 +115,9 @@ def test_planner_and_runner_defaults_come_from_domain_settings() -> None:
     assert PLAN.NCI_SYSTEM_ID == DOMAIN_METHODOLOGY.nci_system_id
     assert PLAN.NCI_SCALE == DOMAIN_METHODOLOGY.nci_scale
     assert (
-        PLAN.DEFAULT_CAPACITY_PAIR_COUNTS
-        == DOMAIN_METHODOLOGY.capacity_molecules_per_species
-    )
-    assert (
-        PLAN.DEFAULT_PARITY_PAIR_COUNT
-        == DOMAIN_METHODOLOGY.parity_molecules_per_species
+        PLAN.DEFAULT_FIXED_PAIR_COUNT
+        == DOMAIN_METHODOLOGY.fixed_molecules_per_species
+        == 2_048
     )
     assert PLAN.DEFAULT_D3_CUTOFF_A == RUNNER.DEFAULT_D3_CUTOFF_A
     assert PLAN.DEFAULT_DOMAIN_SKIN_A == RUNNER.DEFAULT_DOMAIN_SKIN_A
@@ -252,20 +148,26 @@ def test_planner_and_runner_defaults_come_from_domain_settings() -> None:
         == DOMAIN_METHODOLOGY.atoms_per_composition_unit
     )
     assert (
-        PLAN.AIMNET_NEIGHBOR_CUTOFF_A
-        == RUNNER.EXPECTED_AIMNET_NEIGHBOR_CUTOFF_A
+        RUNNER.EXPECTED_AIMNET_NEIGHBOR_CUTOFF_A
         == DOMAIN_METHODOLOGY.aimnet_neighbor_cutoff_a
     )
     assert (
-        PLAN.DEFAULT_STEADY_TIMING_WARMUP_COUNT
-        == RUNNER.DEFAULT_STEADY_TIMING_WARMUP_COUNT
-        == DOMAIN_METHODOLOGY.steady_timing_warmup_count
+        PLAN.DEFAULT_WARMUP_COUNT
+        == RUNNER.DEFAULT_EVALUATION_WARMUP_COUNT
+        == DOMAIN_METHODOLOGY.evaluation_warmup_count
     )
     assert (
-        PLAN.DEFAULT_STEADY_TIMING_SAMPLE_COUNT
-        == RUNNER.DEFAULT_STEADY_TIMING_SAMPLE_COUNT
-        == DOMAIN_METHODOLOGY.steady_timing_sample_count
+        PLAN.DEFAULT_PASS_COUNT
+        == RUNNER.DEFAULT_EVALUATION_PASS_COUNT
+        == DOMAIN_METHODOLOGY.evaluation_pass_count
     )
+    assert (
+        RUNNER.DEFAULT_EVALUATION_POSITION_MIC_TOLERANCE_A
+        == DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
+        == 1.0e-4
+    )
+
+
 def test_runner_matches_the_nci_member_and_declared_d3() -> None:
     assert PLAN.AIMNET_CHECKPOINT == "aimnet2-wb97m-d3_0"
     assert PLAN.AIMNET_CHECKPOINT_SHA256 == RUNNER.CHECKPOINT_SHA256
@@ -309,33 +211,14 @@ def test_expected_ewald_setup_uses_actual_cell_volume() -> None:
         volume_a3=volume_a3,
         accuracy=PLAN.DEFAULT_EWALD_REFERENCE_ACCURACY,
     )
-    eta = (volume_a3**2 / 6_400) ** (1.0 / 6.0) / math.sqrt(
-        2.0 * math.pi
-    )
-    error_factor = math.sqrt(
-        -2.0 * math.log(PLAN.DEFAULT_EWALD_REFERENCE_ACCURACY)
-    )
+    eta = (volume_a3**2 / 6_400) ** (1.0 / 6.0) / math.sqrt(2.0 * math.pi)
+    error_factor = math.sqrt(-2.0 * math.log(PLAN.DEFAULT_EWALD_REFERENCE_ACCURACY))
 
     assert setup["real_space_cutoff_a"] == pytest.approx(error_factor * eta)
     assert setup["reciprocal_space_cutoff_a_inverse"] == pytest.approx(
         error_factor / eta
     )
-    assert setup["alpha_a_inverse"] == pytest.approx(
-        1.0 / (math.sqrt(2.0) * eta)
-    )
-
-
-def test_domain_partition_check_defers_to_the_actual_toolkit_partition() -> None:
-    check = PLAN.domain_partition_check(
-        cell_lengths_a=(65.0, 90.0, 120.0),
-        ghost_width_a=19.0,
-    )
-
-    assert check["cell_lengths_a"] == [65.0, 90.0, 120.0]
-    assert check["ghost_width_a"] == 19.0
-    assert check["checked_during_each_multi_gpu_run"] is True
-    assert check["box_length_only_precheck"] == "not_used"
-    assert "require_nondegenerate=True" in check["acceptance_rule"]
+    assert setup["alpha_a_inverse"] == pytest.approx(1.0 / (math.sqrt(2.0) * eta))
 
 
 def test_recorded_rank_layout_uses_the_actual_rectangular_cell() -> None:
@@ -361,14 +244,13 @@ def test_recorded_rank_layout_uses_the_actual_rectangular_cell() -> None:
 
 
 def test_runner_and_loader_table_schemas_match() -> None:
-    assert PLAN.CAPACITY_COLUMNS == lesson_results.CAPACITY_COLUMNS
-    assert PLAN.PARITY_COLUMNS == lesson_results.PARITY_COLUMNS
     assert PLAN.DISTRIBUTED_COLUMNS == lesson_results.DISTRIBUTED_COLUMNS
     assert "molecules_per_species" in PLAN.DISTRIBUTED_COLUMNS
     assert "measurement_role" in PLAN.DISTRIBUTED_COLUMNS
-    assert "elapsed_samples_s" in PLAN.DISTRIBUTED_COLUMNS
-    assert "elapsed_iqr_s" in PLAN.DISTRIBUTED_COLUMNS
-    assert "atom_evaluations_per_s" not in PLAN.DISTRIBUTED_COLUMNS
+    assert "pass_times_s" in PLAN.DISTRIBUTED_COLUMNS
+    assert "median_s" in PLAN.DISTRIBUTED_COLUMNS
+    assert "owned_atoms_min_rank" in PLAN.DISTRIBUTED_COLUMNS
+    assert "owned_atoms_max_rank" in PLAN.DISTRIBUTED_COLUMNS
     assert "molecule_pairs" not in PLAN.DISTRIBUTED_COLUMNS
     assert "atom_steps_per_s" not in PLAN.DISTRIBUTED_COLUMNS
 
@@ -376,16 +258,17 @@ def test_runner_and_loader_table_schemas_match() -> None:
 def test_runner_keeps_global_energy_separate_from_gathered_atom_fields(
     tmp_path: Path,
 ) -> None:
-    source = inspect.getsource(RUNNER.run_capacity)
+    source = inspect.getsource(RUNNER.run_fixed_evaluation)
     order_source = inspect.getsource(RUNNER.source_order_from_gathered_ids)
+    diagnostics_source = inspect.getsource(RUNNER.evaluation_output_diagnostics)
 
     assert "replicated_energy = result_owned.energy.detach().clone()" in source
     assert "gathered = domain.gather(result_owned, dst=0)" in source
     assert "energy_ev = float(replicated_energy.reshape(-1)[0].item())" in source
     assert "sorted_forces = gathered.forces[order]" in source
     assert "float(gathered.energy" not in source
-    assert "torch.isfinite(result_owned.energy)" in source
-    assert "torch.isfinite(result_owned.forces)" in source
+    assert "torch.isfinite(energy)" in diagnostics_source
+    assert "torch.isfinite(forces)" in diagnostics_source
     assert "torch.isfinite(gathered.positions)" in source
     assert "torch.isfinite(gathered.forces)" in source
     assert "source_order_from_gathered_ids(" in source
@@ -398,19 +281,13 @@ def test_runner_keeps_global_energy_separate_from_gathered_atom_fields(
     assert not output.exists()
 
 
-def test_large_finite_charge_residual_is_recorded_without_a_capacity_gate() -> None:
+def test_large_finite_charge_residual_is_recorded_per_atom() -> None:
     torch = pytest.importorskip("torch")
     atom_count = 51_200
     charges = torch.zeros(atom_count, dtype=torch.float32)
     charges[0] = -0.00467
 
-    raw = RUNNER.charge_diagnostics(charges, target_sum_e=0.0)
-    checked = PLAN.validated_charge_diagnostics(
-        raw,
-        atom_count=atom_count,
-        target_sum_e=0.0,
-        context="large-system test",
-    )
+    checked = RUNNER.charge_diagnostics(charges, target_sum_e=0.0)
 
     assert checked["dtype"] == "float32"
     assert checked["shape"] == [atom_count]
@@ -422,78 +299,49 @@ def test_large_finite_charge_residual_is_recorded_without_a_capacity_gate() -> N
     assert abs(checked["residual_e"]) > PLAN.DEFAULT_CHARGE_SUM_TOL_E
 
 
-@pytest.mark.parametrize(
-    ("change", "message"),
-    (
-        ({"available": False}, "unavailable"),
-        ({"finite": False}, "non-finite"),
-        ({"residual_e": 0.1}, "inconsistent charge residual"),
-        ({"shape": [51_199]}, "inconsistent tensor shape"),
-        ({"sha256": "not-a-hash"}, "invalid tensor SHA-256"),
-    ),
-)
-def test_capacity_charge_diagnostics_reject_invalid_metadata(
-    change: dict[str, object],
-    message: str,
-) -> None:
-    record = {**_charge_diagnostics(atom_count=51_200, sum_e=-0.00467), **change}
+def test_evaluation_output_diagnostics_uses_the_world_size_dtype() -> None:
+    torch = pytest.importorskip("torch")
 
-    with pytest.raises(ValueError, match=message):
-        PLAN.validated_charge_diagnostics(
-            record,
-            atom_count=51_200,
-            target_sum_e=0.0,
-            context="capacity test",
-        )
-
-
-def test_strict_charge_limit_is_only_for_the_3200_atom_solver_check() -> None:
-    accepted = PLAN.validated_charge_diagnostics(
-        _charge_diagnostics(atom_count=PLAN.BASE_ATOM_COUNT, sum_e=5.0e-5),
-        atom_count=PLAN.BASE_ATOM_COUNT,
+    single_rank = RUNNER.evaluation_output_diagnostics(
+        SimpleNamespace(
+            energy=torch.tensor([[1.0]], dtype=torch.float32),
+            forces=torch.zeros((2, 3), dtype=torch.float32),
+        ),
+        world_size=1,
     )
-    PLAN.require_fixed_charge_validation_residual(
-        accepted,
-        atom_count=PLAN.BASE_ATOM_COUNT,
-        max_abs_residual_e=PLAN.DEFAULT_CHARGE_SUM_TOL_E,
+    assert single_rank["valid"] is True
+    assert single_rank["expected_energy_dtype"] == "torch.float32"
+    assert single_rank["energy"]["shape"] == [1, 1]
+    assert single_rank["forces"]["shape"] == [2, 3]
+
+    multi_rank = RUNNER.evaluation_output_diagnostics(
+        SimpleNamespace(
+            energy=torch.tensor([[1.0]], dtype=torch.float64),
+            forces=torch.zeros((2, 3), dtype=torch.float32),
+        ),
+        world_size=2,
     )
+    assert multi_rank["valid"] is True
+    assert multi_rank["expected_energy_dtype"] == "torch.float64"
 
-    too_large = PLAN.validated_charge_diagnostics(
-        _charge_diagnostics(atom_count=PLAN.BASE_ATOM_COUNT, sum_e=2.0e-4),
-        atom_count=PLAN.BASE_ATOM_COUNT,
+    wrong_single_rank = RUNNER.evaluation_output_diagnostics(
+        SimpleNamespace(
+            energy=torch.tensor([[1.0]], dtype=torch.float64),
+            forces=torch.zeros((2, 3), dtype=torch.float32),
+        ),
+        world_size=1,
     )
-    with pytest.raises(ValueError, match="exceeds the declared"):
-        PLAN.require_fixed_charge_validation_residual(
-            too_large,
-            atom_count=PLAN.BASE_ATOM_COUNT,
-            max_abs_residual_e=PLAN.DEFAULT_CHARGE_SUM_TOL_E,
-        )
-
-    large_system = PLAN.validated_charge_diagnostics(
-        _charge_diagnostics(atom_count=51_200, sum_e=-0.00467),
-        atom_count=51_200,
+    wrong_multi_rank = RUNNER.evaluation_output_diagnostics(
+        SimpleNamespace(
+            energy=torch.tensor([[1.0]], dtype=torch.float32),
+            forces=torch.zeros((2, 3), dtype=torch.float32),
+        ),
+        world_size=4,
     )
-    with pytest.raises(ValueError, match="reserved for the checked 3,200-atom"):
-        PLAN.require_fixed_charge_validation_residual(
-            large_system,
-            atom_count=51_200,
-            max_abs_residual_e=PLAN.DEFAULT_CHARGE_SUM_TOL_E,
-        )
-
-
-def test_selection_and_bundle_archive_charge_diagnostics() -> None:
-    selection_source = inspect.getsource(PLAN.select_capacity)
-    bundle_source = inspect.getsource(PLAN.build_bundle)
-
-    assert "capacity_charge_diagnostic_records(successful)" in selection_source
-    assert '"capacity_charge_diagnostics": capacity_charge_diagnostics' in (
-        selection_source
-    )
-    assert '"charge_diagnostics": parity_charge_diagnostics' in selection_source
-    assert "abs(float(parity_charges" not in selection_source
-    assert "expected_capacity_charge_diagnostics" in bundle_source
-    assert "expected_parity_charge_diagnostics" in bundle_source
-    assert "validation_charge_diagnostics" in bundle_source
+    assert wrong_single_rank["valid"] is False
+    assert wrong_multi_rank["valid"] is False
+    assert wrong_single_rank["forces"]["finite"] is True
+    assert wrong_multi_rank["forces"]["finite"] is True
 
 
 def test_external_source_ids_restore_toolkit_rank_contiguous_order() -> None:
@@ -558,13 +406,100 @@ def test_source_input_checksum_includes_ids_kept_outside_batch() -> None:
     assert checksum != RUNNER.source_input_checksum(batch, source_ids.flip(0))
 
     make_batch_source = inspect.getsource(RUNNER.make_batch)
-    capacity_source = inspect.getsource(RUNNER.run_capacity)
+    evaluation_source = inspect.getsource(RUNNER.run_fixed_evaluation)
+    assert "add_node_property" not in make_batch_source
     assert "source_atom_id" not in make_batch_source
-    assert "predict_gathered_source_ids(" in capacity_source
-    assert "partitioner=derived_layout" in capacity_source
-    assert "world_size > 1 and run_steps != 1" in capacity_source
-    assert '"gathered_atom_order"' in capacity_source
-    assert "SpatialPartitioner.assign_atoms_to_ranks" in capacity_source
+    assert "fixed_reference_positions" not in make_batch_source
+    assert "gathered.source_atom_id" not in evaluation_source
+    assert ".fixed_reference_positions" not in evaluation_source
+    assert "predict_gathered_source_ids(" in evaluation_source
+    assert "partitioner=derived_layout" in evaluation_source
+    assert "owned_reference_positions = owned.positions.detach().clone()" in (
+        evaluation_source
+    )
+    assert evaluation_source.count("owned_reference_positions,") == 2
+    assert "diagnostics_by_rank" in evaluation_source
+    assert '"gathered_atom_order"' in evaluation_source
+    assert "SpatialPartitioner assigns the fixed input to ranks" in evaluation_source
+
+
+def test_minimum_image_displacement_accepts_periodic_images_and_roundoff() -> None:
+    torch = pytest.importorskip("torch")
+    cell = torch.diag(torch.tensor([10.0, 11.0, 12.0], dtype=torch.float64)).unsqueeze(
+        0
+    )
+    pbc = torch.tensor([[True, True, True]])
+    reference = torch.tensor(
+        [[1.0, 2.0, 3.0], [9.0, 10.0, 11.0]],
+        dtype=torch.float64,
+    )
+    lattice_shifts = torch.tensor(
+        [[10.0, -11.0, 12.0], [-10.0, 22.0, -12.0]],
+        dtype=torch.float64,
+    )
+    roundoff = torch.tensor(
+        [[2.0e-5, -3.0e-5, 4.0e-5], [-1.0e-5, 2.0e-5, -2.0e-5]],
+        dtype=torch.float64,
+    )
+    periodic_image = reference + lattice_shifts + roundoff
+
+    maximum = RUNNER.maximum_minimum_image_displacement_a(
+        reference,
+        periodic_image,
+        cell=cell,
+        pbc=pbc,
+    )
+
+    assert not torch.equal(periodic_image, reference)
+    assert float(maximum.item()) == pytest.approx(
+        math.sqrt(2.0**2 + 3.0**2 + 4.0**2) * 1.0e-5,
+        abs=1.0e-12,
+    )
+    assert float(maximum.item()) < (
+        DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
+    )
+
+
+def test_minimum_image_displacement_rejects_real_or_nonperiodic_motion() -> None:
+    torch = pytest.importorskip("torch")
+    cell = torch.diag(torch.tensor([10.0, 11.0, 12.0], dtype=torch.float64)).unsqueeze(
+        0
+    )
+    reference = torch.zeros((1, 3), dtype=torch.float64)
+
+    real_motion = RUNNER.maximum_minimum_image_displacement_a(
+        reference,
+        torch.tensor([[2.0e-4, 0.0, 0.0]], dtype=torch.float64),
+        cell=cell,
+        pbc=torch.tensor([[True, True, True]]),
+    )
+    nonperiodic_shift = RUNNER.maximum_minimum_image_displacement_a(
+        reference,
+        torch.tensor([[0.0, 11.0, 0.0]], dtype=torch.float64),
+        cell=cell,
+        pbc=torch.tensor([[True, False, True]]),
+    )
+
+    assert float(real_motion.item()) > (
+        DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a
+    )
+    assert float(nonperiodic_shift.item()) == pytest.approx(11.0)
+
+
+def test_fixed_evaluation_records_pbc_equivalent_position_invariance() -> None:
+    source = inspect.getsource(RUNNER.run_fixed_evaluation)
+
+    assert '"position_invariance"' in source
+    assert '"method": "maximum_minimum_image_displacement"' in source
+    assert '"warmup_maximum_minimum_image_displacement_a"' in source
+    assert '"measured_pass_maximum_minimum_image_displacements_a"' in source
+    assert '"final_gather_maximum_minimum_image_displacement_a"' in source
+    assert '"maximum_minimum_image_displacement_a"' in source
+    assert '"all_within_tolerance": True' in source
+    assert '"source_input_sha256": input_tensor_hash' in source
+    assert "positions_source_atom_order_sha256" not in source
+    assert "positions_unchanged" not in source
+    assert "source_input_sha256_after" not in source
 
 
 def test_runtime_gpu_uuid_is_written_as_json_text() -> None:
@@ -574,43 +509,38 @@ def test_runtime_gpu_uuid_is_written_as_json_text() -> None:
     assert '"gpu_uuid": None if gpu_uuid is None else str(gpu_uuid)' in runtime_source
 
 
-def test_steady_timer_covers_repeated_fresh_public_workflows() -> None:
-    source = inspect.getsource(RUNNER.run_capacity)
+def test_fixed_timer_uses_one_context_partition_and_gather() -> None:
+    source = inspect.getsource(RUNNER.run_fixed_evaluation)
 
     context_start = source.index("with DomainParallel(")
-    timer_start = source.index("start = perf_counter()", context_start)
-    partition = source.index("owned = domain.partition(")
-    model_run = source.index("result_owned = domain.run(")
-    gather = source.index("domain.gather(")
-    final_sync = source.index("torch.cuda.synchronize(device)", gather)
-    timer_end = source.index("local_elapsed_s = perf_counter() - start")
-    reduction = source.index("dist.all_reduce(max_elapsed", timer_end)
-    input_check = source.index("observed_hash = source_input_checksum", timer_end)
-    file_write = source.index("# Shared-filesystem writes happen only after")
-    energy_snapshot = source.index(
-        "replicated_energy = result_owned.energy.detach().clone()"
+    partition = source.index("owned = domain.partition(", context_start)
+    warmup = source.index("result_owned = domain.run(owned, n_steps=1)", partition)
+    measured_loop = source.index(
+        "for pass_index in range(1, args.sample_count + 1)",
+        warmup,
     )
+    timer_start = source.index("started = perf_counter()", measured_loop)
+    measured_run = source.index(
+        "result_owned = domain.run(result_owned, n_steps=1)",
+        timer_start,
+    )
+    final_sync = source.index("torch.cuda.synchronize(device)", measured_run)
+    timer_end = source.index("local_elapsed_s = perf_counter() - started")
+    reduction = source.index("dist.all_reduce(max_elapsed", timer_end)
+    gather = source.index("gathered = domain.gather(result_owned, dst=0)", reduction)
 
-    assert context_start < timer_start < partition < model_run < gather
-    assert gather < final_sync < timer_end < reduction < file_write
-    assert timer_end < input_check
-    assert timer_end < energy_snapshot
-    assert "for warmup_index in range(args.warmup_count)" in source
-    assert "for sample_index in range(args.sample_count)" in source
+    assert context_start < partition < warmup < measured_loop
+    assert measured_loop < timer_start < measured_run < final_sync < timer_end
+    assert timer_end < reduction < gather
     assert source.count("with DomainParallel(") == 1
-    assert "inner = BaseDynamics(" in source
-    assert "DOMAIN_METHODOLOGY.steady_timing_run_steps(world_size)" in source
-    assert (
-        "DOMAIN_METHODOLOGY"
-        ".domain_parallel_multi_rank_initial_force_evaluations"
-    ) in source
-    assert (
-        "model_evaluations_per_workflow = run_steps + "
-        "automatic_initial_evaluations"
-    ) in source
-    assert "result_owned = domain.run(owned, n_steps=run_steps)" in source
-    assert '"model_evaluations_per_workflow": model_evaluations_per_workflow' in source
-    assert '"samples_s_max_rank": samples_s_max_rank' in source
+    assert source.count("domain.partition(") == 1
+    assert source.count("domain.gather(") == 1
+    assert "evaluator = BaseDynamics(" in source
+    assert '"measured_model_evaluations_per_pass"' in source
+    assert '"pass_times_s": pass_times_s' in source
+    assert '"partition_count": 1' in source
+    assert '"gather_count": 1' in source
+    assert "n_steps=0" not in source
 
 
 def test_referenced_files_have_portable_identity_records(tmp_path: Path) -> None:
@@ -640,7 +570,7 @@ def test_referenced_files_have_portable_identity_records(tmp_path: Path) -> None
 
 def test_case_rows_keep_every_generated_file_verifiable() -> None:
     pipeline_source = inspect.getsource(RUNNER.build_complete_pipeline)
-    capacity_source = inspect.getsource(RUNNER.run_capacity)
+    evaluation_source = inspect.getsource(RUNNER.run_fixed_evaluation)
     main_source = inspect.getsource(RUNNER.main)
 
     assert '"parameter_file_identity": file_identity(d3_parameter_file)' in (
@@ -648,8 +578,8 @@ def test_case_rows_keep_every_generated_file_verifiable() -> None:
     )
     assert '"aimnet_checkpoint_file"' in main_source
     assert '"runner_file"' in main_source
-    assert '"forces_source_atom_order_npy"' in capacity_source
-    assert "force_file = file_identity(force_path)" in capacity_source
+    assert '"forces_source_atom_order_npy"' in evaluation_source
+    assert "force_file = file_identity(force_path)" in evaluation_source
     assert "**previous_rank_record" in main_source
 
 
@@ -736,110 +666,78 @@ def test_runtime_rows_must_use_the_same_software_and_gpu() -> None:
 
 
 def test_timing_summary_and_role_counts_are_explicit() -> None:
-    summary = RUNNER.summarize_timing_samples([1.0, 2.0, 3.0, 4.0, 5.0])
-    assert summary == {"median_s": 3.0, "q1_s": 2.0, "q3_s": 4.0, "iqr_s": 2.0}
+    summary = RUNNER.summarize_timing_samples([1.0, 2.0, 3.0])
+    assert summary == {"median_s": 2.0, "min_s": 1.0, "max_s": 3.0}
     args = argparse.Namespace(
-        mode="steady-timing",
-        measurement_role="steady_timing",
-        warmup_count=1,
-        sample_count=5,
+        mode="distributed",
+        world_size=2,
+        pair_count=DOMAIN_METHODOLOGY.fixed_molecules_per_species,
     )
     RUNNER.validate_measurement_args(args)
-    args.sample_count = 4
-    with pytest.raises(ValueError, match="at least five"):
-        RUNNER.validate_measurement_args(args)
+    assert args.measurement_role == "fixed_evaluation"
+    assert args.warmup_count == 1
+    assert args.sample_count == 3
+
+    wrong_size = argparse.Namespace(
+        mode="distributed",
+        world_size=8,
+        pair_count=DOMAIN_METHODOLOGY.fixed_molecules_per_species,
+    )
+    with pytest.raises(ValueError, match="world size"):
+        RUNNER.validate_measurement_args(wrong_size)
+
+    wrong_input = argparse.Namespace(
+        mode="distributed",
+        world_size=1,
+        pair_count=128,
+    )
+    with pytest.raises(ValueError, match="fixed 2048-pair input"):
+        RUNNER.validate_measurement_args(wrong_input)
 
 
-def test_derive_uses_parity_on_two_and_four_gpus(tmp_path: Path) -> None:
-    selection = {
-        "schema": PLAN.SELECTION_SCHEMA,
-        "run_id": "domain-test",
-        "parity_reference": {
-            "input": _selected_input(2_048),
-            "acceptance": {"energy_atol_ev": 0.1},
-        },
-        "largest_success": {"input": _selected_input(4_096)},
-        "first_cuda_oom": {"input": _selected_input(8_192)},
-        "settings": {
-            "timing": {
-                "steady": {
-                    "warmup_count": DOMAIN_METHODOLOGY.steady_timing_warmup_count,
-                    "sample_count": DOMAIN_METHODOLOGY.steady_timing_sample_count,
-                }
-            }
-        },
-        "methodology": {
-            "source": DOMAIN_METHODOLOGY.as_record(),
-            "source_identity": PLAN.methodology_source_identity(),
-            "resolved_values": DOMAIN_METHODOLOGY.resolved_values(
-                json_compatible=True
-            ),
-        },
-        "source": {},
-    }
-    selection_path = tmp_path / "selection.json"
-    selection_path.write_text(json.dumps(selection), encoding="utf-8")
+def test_runner_cli_has_only_the_two_fixed_work_modes() -> None:
+    source = inspect.getsource(RUNNER.parse_args)
 
-    observed: dict[int, list[str]] = {}
-    for world_size in (2, 4):
-        output = tmp_path / f"plan-{world_size}.json"
-        plan = PLAN.derive_distributed_plan(
-            argparse.Namespace(
-                selection=selection_path,
-                world_size=world_size,
-                output=output,
-            )
+    assert 'choices=("distributed", "electrostatics-validation")' in source
+    assert "--measurement-role" not in source
+    assert "--warmup-count" not in source
+    assert "--sample-count" not in source
+    for removed in ("capacity", "parity", "rescue", "steady-timing"):
+        assert removed not in source
+
+
+def test_planner_builds_one_fixed_case_for_each_gpu_count() -> None:
+    plans = {
+        world_size: PLAN.build_plan(
+            run_id=f"domain-{world_size}",
+            tutorial_commit="1" * 40,
+            world_size=world_size,
         )
-        observed[world_size] = [case["series"] for case in plan["cases"]]
-
-    assert observed == {
-        2: ["parity", "steady_timing", "rescue"],
-        4: ["parity", "steady_timing", "rescue"],
+        for world_size in PLAN.DEFAULT_WORLD_SIZES
     }
 
-    with pytest.raises(ValueError, match="distributed world size"):
-        PLAN.derive_distributed_plan(
-            argparse.Namespace(
-                selection=selection_path,
-                world_size=3,
-                output=tmp_path / "plan-3.json",
-            )
+    for world_size, plan in plans.items():
+        fixed = plan["fixed_case"]
+        assert fixed["case_id"] == PLAN.fixed_case_id(2_048, world_size)
+        assert fixed["world_size"] == world_size
+        assert fixed["pair_count"] == 2_048
+        assert fixed["atom_count"] == 51_200
+        assert plan["planned_case_count"] == (2 if world_size == 1 else 1)
+        assert bool(plan["validation_cases"]) is (world_size == 1)
+
+    with pytest.raises(ValueError, match="world_size must be one of"):
+        PLAN.build_plan(
+            run_id="domain-3",
+            tutorial_commit="1" * 40,
+            world_size=3,
         )
 
 
-def test_campaign_input_preparation_does_not_launch_packmol() -> None:
+def test_fixed_input_preparation_does_not_launch_packmol() -> None:
     source = inspect.getsource(PLAN.prepare_input)
 
     assert "subprocess" not in source
     assert "args.packmol" not in source
-
-
-def test_complete_campaign_requires_every_steady_case_to_succeed() -> None:
-    selection = _campaign_selection()
-    for world_size in (2, 4):
-        rows = _campaign_rows(selection, successful_rescue_gpus=(4,))
-        largest = selection["largest_success"]["input"]["pair_count"]  # type: ignore[index]
-        rows[PLAN.steady_timing_case_id(largest, world_size)]["success"] = False
-
-        with pytest.raises(
-            ValueError,
-            match=rf"{world_size}-GPU steady-timing case did not complete",
-        ):
-            PLAN._require_complete_distributed_outcomes(selection, rows)
-
-
-def test_complete_campaign_requires_the_oom_input_to_be_rescued() -> None:
-    selection = _campaign_selection()
-    rows = _campaign_rows(selection)
-
-    with pytest.raises(ValueError, match="did not succeed on any declared"):
-        PLAN._require_complete_distributed_outcomes(selection, rows)
-
-    rows = _campaign_rows(selection, successful_rescue_gpus=(4,))
-    assert PLAN._require_complete_distributed_outcomes(selection, rows) == (4,)
-    assert "_require_complete_distributed_outcomes(" in inspect.getsource(
-        PLAN.build_bundle
-    )
 
 
 def test_runtime_source_check_requires_a_pinned_clean_checkout(

@@ -195,92 +195,57 @@ Proceed only after the job exits successfully and
 `$ALCHEMI_PYTHON_OVERLAY/.part1-ready.json` exists. Check `pytest.txt` in the
 setup result directory before starting the measured jobs.
 
-## 4. Run the domain-decomposition campaign
+## 4. Run the fixed-input domain comparison
 
 The workload starts from the checked 3,200-atom periodic box in
 `data/domain_decomposition/prebuilt_base_box/`. Packmol was used once to place
-128 phenol and 128 N-methylacetamide molecules in that base box. Every larger
-campaign input is an exact integer supercell of the same saved structure.
-This avoids repeated packing work and keeps density, composition, and periodic
-contacts fixed across the atom-count ladder. The supercells are controlled
-scaling inputs, not independent liquid configurations or predicted materials.
-The D3(BJ) term uses the checkpoint damping parameters with a 15 Å cutoff and
-a taper over 12–15 Å; it is a finite-cutoff tutorial calculation, not the much
-longer untapered reference D3 setup.
+128 phenol and 128 N-methylacetamide molecules in that base box. Each job
+builds the same 2 x 2 x 4 integer supercell from those checked files. The
+result has 2,048 molecules of each species and 51,200 atoms. Packmol does not
+run in these jobs.
 
-The capacity job on one H100 performs the fixed-charge PME-versus-Ewald check,
-runs the declared cold doubling ladder, and stops at the first genuine CUDA
-out-of-memory result. It then runs the dedicated one-GPU timing series on the
-largest successful input: one warmup workflow followed by five measured
-workflows. Every warmup or measured workflow uses a fresh `DomainParallel`
-wrapper and calls the public `partition` → `run` → `gather` sequence once.
-For equal work, the one-GPU timing path requests two `BaseDynamics` steps.
-The multi-GPU path requests one step after `DomainParallel` performs its
-automatic initial force evaluation. Both paths evaluate the unchanged box
-twice.
+Run the same input, model, dtype, cutoffs, and requested outputs on 1, 2, and
+4 H100s. Every job uses one `DomainParallel` context:
+
+1. Partition the full structure once.
+2. Perform one untimed initialization and warm-up call.
+3. Measure three `domain.run(..., n_steps=1)` energy/force calls.
+4. Gather atom-level output once.
+
+`BaseDynamics` supplies the interface required by `DomainParallel`, but its
+base update methods do not move atoms. These are fixed-structure evaluations,
+not simulation steps. The first multi-rank warm-up also performs Toolkit's
+automatic force initialization. That extra work stays outside the three
+measured passes.
 
 Keep the two charge checks distinct:
 
 - The 3,200-atom PME-versus-Ewald check uses one fixed predicted-charge array
   in both solvers and requires `|Σq − Qtarget| ≤ 1e-4 e`.
-- Larger one-GPU capacity and parity rows require finite predicted charges and
-  save their float32 dtype, requested total, observed total, residual per atom,
+- The 51,200-atom one-GPU run saves its finite float32 predicted-charge
+  diagnostics: requested total, observed total, residual per atom,
   `sum(abs(q))`, and `max(abs(q))`. The residual is reported, not compared with
-  the small-box absolute limit and not adjusted before PME.
+  the small-box absolute limit, and is not adjusted before PME.
 - Toolkit 0.2 does not expose intermediate multi-rank charges. The fixed-input
-  force comparison and the 2-GPU versus 4-GPU energy comparison check the
-  supported distributed outputs. These comparisons do not independently verify
-  the global charge residual of the distributed prediction.
+  force comparison, the repeated-energy check on 2 and 4 GPUs, and the
+  2-GPU versus 4-GPU median-energy comparison check the supported distributed
+  outputs. These comparisons do not independently verify the global charge
+  residual of the distributed prediction.
+
+The launcher selects each node's route to the master and records the local
+address and interface. This confirms IP routing; it does not prove that NCCL
+can form one group across different node families or network fabrics. Use one
+checked node family for the recorded 1/2/4-GPU set. Test a mixed allocation
+with a real NCCL collective before using it. Set `ALCHEMI_DISTRIBUTED_IFACE`
+only when every rank must use one known interface; an invalid explicit setting
+fails without falling back.
 
 ```bash
 DOMAIN_JOB="$ALCHEMI_SHARED_REPO/scripts/slurm_part1_domain_decomposition.sbatch"
-capacity_job=$(
-  ALCHEMI_DOMAIN_PHASE=capacity \
-    sbatch --parsable --nodes=1 \
-    --chdir="$ALCHEMI_RUN_ROOT/logs" \
-    --output="$ALCHEMI_RUN_ROOT/logs/part1-domain-capacity-%j.out" \
-    "$DOMAIN_JOB"
-)
-capacity_job=${capacity_job%%;*}
-CAPACITY_DIR="$ALCHEMI_RUN_ROOT/results/domain-capacity-${capacity_job}-gpus-1"
-echo "capacity job: $capacity_job"
-```
-
-Submit the same selected structures to two and four H100s. Each job
-runs three distinct checks:
-
-1. One cold numerical check on the fixed 51,200-atom input.
-2. The same timing series as the one-GPU job, on the same selected input: one
-   warmup and five measured fresh `DomainParallel` workflows.
-3. One cold retry of the first input that ran out of memory on one GPU, with
-   no changes to the structure or model settings.
-
-Toolkit 0.2 uses different energy reductions in the ordinary one-GPU path and
-the multi-GPU `DomainParallel` path. Apply the following checks to both the
-fixed 51,200-atom input and the selected timing input:
-
-- Check every force component from the 2- and 4-GPU runs against the
-  one-GPU result using the declared componentwise force tolerance.
-- Use the 2-GPU result as the distributed energy reference. Require the
-  4-GPU energy to agree with it within `1e-4 eV/atom`.
-- Save the raw one-GPU-to-multi-GPU energy offsets as diagnostics. Do not use
-  them to accept or reject a result, and do not report generic energy parity
-  across one, two, and four GPUs.
-- Save the `cells_per_dim` and `rank_grid` chosen by `SpatialPartitioner` for
-  each actual input. Do not substitute the rank layout of a cubic box.
-  `require_nondegenerate=True` is the runtime check that every rank retains
-  remote atoms.
-
-The dependency prevents these jobs from starting if the capacity job fails.
-
-```bash
 declare -A domain_jobs domain_dirs
-for nodes in 2 4; do
+for nodes in 1 2 4; do
   job=$(
-    ALCHEMI_DOMAIN_PHASE=distributed \
-    ALCHEMI_DOMAIN_CAPACITY_DIR="$CAPACITY_DIR" \
-      sbatch --parsable \
-      --dependency="afterok:${capacity_job}" \
+    sbatch --parsable \
       --nodes="$nodes" \
       --chdir="$ALCHEMI_RUN_ROOT/logs" \
       --output="$ALCHEMI_RUN_ROOT/logs/part1-domain-${nodes}gpu-%j.out" \
@@ -288,18 +253,48 @@ for nodes in 2 4; do
   )
   job=${job%%;*}
   domain_jobs[$nodes]="$job"
-  domain_dirs[$nodes]="$ALCHEMI_RUN_ROOT/results/domain-distributed-${job}-gpus-${nodes}"
+  domain_dirs[$nodes]="$ALCHEMI_RUN_ROOT/results/domain-fixed-${job}-gpus-${nodes}"
   echo "${nodes} GPU job: $job"
 done
 ```
+
+The Slurm job calls
+`scripts/run_part1_domain_decomposition.sh`, which starts one Toolkit worker
+per allocated GPU and joins those workers into the same distributed run.
+
+The jobs are independent. There is no size search, deliberate out-of-memory
+run, or Slurm dependency.
+
+Toolkit 0.2 uses different energy reductions in the ordinary one-GPU path and
+the multi-GPU `DomainParallel` path. Apply these checks:
+
+- Check every force component from the 2- and 4-GPU runs against the
+  one-GPU result using the declared componentwise force tolerance.
+- Use the median of the three measured energies for each GPU layout. Require
+  the 2- and 4-GPU pass ranges to remain within `1e-4 eV/atom`.
+- Use the 2-GPU median as the distributed energy reference. Require the
+  4-GPU median to agree with it within `1e-4 eV/atom`.
+- Save the raw one-GPU-to-multi-GPU offsets and the one-GPU pass range as
+  diagnostics. Do not use them to accept or reject a result, and do not report
+  generic energy parity across one, two, and four GPUs.
+- Save the `cells_per_dim` and `rank_grid` chosen by `SpatialPartitioner` for
+  each actual input. Do not substitute the rank layout of a cubic box.
+  `require_nondegenerate=True` is the runtime check that every rank retains
+  remote atoms.
+- Require the exact same input file and input-tensor identity on every run.
+  `DomainParallel` may wrap coordinates to equivalent periodic images, so
+  require the maximum minimum-image displacement to remain within the declared
+  `1e-4 Å` tolerance rather than comparing raw position bits.
+- Keep all three raw pass times and report their median. Do not select the
+  fastest pass.
 
 After all three jobs reach terminal states, capture and check their allocation
 records together. `sacct -X` omits step rows, so this file must contain exactly
 the three submitted allocations:
 
 ```bash
-DOMAIN_JOB_IDS="${capacity_job},${domain_jobs[2]},${domain_jobs[4]}"
-DOMAIN_SACCT="$ALCHEMI_RUN_ROOT/results/domain-jobs-${capacity_job}.sacct"
+DOMAIN_JOB_IDS="${domain_jobs[1]},${domain_jobs[2]},${domain_jobs[4]}"
+DOMAIN_SACCT="$ALCHEMI_RUN_ROOT/results/domain-jobs-${domain_jobs[1]}.sacct"
 sacct -X \
   --jobs "$DOMAIN_JOB_IDS" \
   --noheader \
@@ -318,32 +313,18 @@ awk -F'|' \
 Do not build a result set if this check finds a failed, cancelled, timed-out,
 pending, or still-running job.
 
-For each measured timing workflow, the timer starts after wrapper construction
-and context entry, a rank barrier, and CUDA synchronization. It covers the
-public `partition` → `run` → `gather` calls and the final CUDA synchronization.
-The saved sample is the slowest rank's elapsed time. The result set keeps all
-five samples and reports the median, first quartile, third quartile, and
-interquartile range.
-
-Use only the complete one-, two-, and four-GPU repeated timing series
-for speedup and parallel efficiency. Do not mix in the cold capacity,
-fixed numerical check, or out-of-memory retry times.
-Every timing row must have `IQR / median <= 0.10`. If any row fails, reject the
-whole timing series and rerun all three GPU counts under the same conditions;
-do not replace only the unstable row. Report the 2- and 4-GPU speedups
-together rather than selecting the largest point.
-
-When at least two unchanged out-of-memory retries succeed, the result builder
-also checks their energy and forces against each other. With one successful
-retry, that cross-check is not applicable.
+Each pass timer starts after a rank barrier and CUDA synchronization. It covers
+one public `domain.run(..., n_steps=1)` call and the final CUDA
+synchronization. The saved value is the slowest rank time. Partitioning,
+warm-up, the slowest-rank reduction, output checks, the final gather, and file
+writes are outside the timer.
 
 Toolkit 0.2 replicates the reciprocal PME FFT and its workspace on every rank.
 Domain decomposition can reduce the atom-local AIMNet2, neighbor-list, D3, and
 real-space PME work, but it does not divide every allocation across GPUs.
-Therefore an input that runs out of memory on one GPU may also run out of
-memory on some or all multi-GPU runs. If none of the unchanged retries
-succeeds, keep the failures and leave the recorded result set incomplete; do
-not shrink the input or change the model settings to manufacture a rescue.
+Report the observed times only for this input, model, software, and hardware.
+Three passes are useful for the tutorial but are not a benchmark-grade scaling
+study.
 
 ## 5. Build and check the recorded result set
 
@@ -354,22 +335,15 @@ multi-node interconnect from the GPU model name.
 ```bash
 export VERIFIED_SITE="REPLACE_WITH_OPERATOR_CONFIRMED_SITE"
 export VERIFIED_INTERCONNECT="REPLACE_WITH_OPERATOR_CONFIRMED_INTERCONNECT"
-export DOMAIN_BUNDLE="$ALCHEMI_RUN_ROOT/results/domain-bundle-$capacity_job"
+export DOMAIN_BUNDLE="$ALCHEMI_RUN_ROOT/results/domain-fixed-bundle-${domain_jobs[1]}"
 
 "$ALCHEMI_PYTHON_OVERLAY/bin/python" \
   "$ALCHEMI_SHARED_REPO/scripts/part1_domain_plan.py" bundle \
-  --capacity-dir "$CAPACITY_DIR" \
-  --distributed-dir "${domain_dirs[2]}" \
-  --distributed-dir "${domain_dirs[4]}" \
+  --job-dir "${domain_dirs[1]}" \
+  --job-dir "${domain_dirs[2]}" \
+  --job-dir "${domain_dirs[4]}" \
   --site "$VERIFIED_SITE" \
   --interconnect "$VERIFIED_INTERCONNECT" \
-  --producer-file "$ALCHEMI_SHARED_REPO/scripts/run_part1_domain_decomposition.sh" \
-  --producer-file "$ALCHEMI_SHARED_REPO/scripts/slurm_part1_domain_decomposition.sbatch" \
-  --producer-file "$ALCHEMI_SHARED_REPO/part-1-scalable-atomistic-workflows/aux/domain/packing.py" \
-  --producer-file "$ALCHEMI_SHARED_REPO/part-1-scalable-atomistic-workflows/aux/domain/config.py" \
-  --producer-file "$ALCHEMI_SHARED_REPO/part-1-scalable-atomistic-workflows/data/domain_decomposition/prebuilt_base_box/manifest.json" \
-  --producer-file "$ALCHEMI_SHARED_REPO/part-1-scalable-atomistic-workflows/data/domain_decomposition/prebuilt_base_box/structure.extxyz" \
-  --producer-file "$ALCHEMI_SHARED_REPO/part-1-scalable-atomistic-workflows/data/domain_decomposition/prebuilt_base_box/SHA256SUMS" \
   --output-dir "$DOMAIN_BUNDLE"
 
 (
@@ -387,22 +361,28 @@ import sys
 from aux.domain.config import DOMAIN_METHODOLOGY
 from aux.domain.results import load_domain_lesson_view
 
-counts = tuple(
-    value * DOMAIN_METHODOLOGY.atoms_per_composition_unit
-    for value in DOMAIN_METHODOLOGY.capacity_molecules_per_species
-)
-parity = (
-    DOMAIN_METHODOLOGY.parity_molecules_per_species
+fixed_atom_count = (
+    DOMAIN_METHODOLOGY.fixed_molecules_per_species
     * DOMAIN_METHODOLOGY.atoms_per_composition_unit
 )
 view = load_domain_lesson_view(
     sys.argv[1],
-    planned_atom_counts=counts,
-    expected_parity_atom_count=parity,
+    expected_atom_count=fixed_atom_count,
+    expected_world_sizes=DOMAIN_METHODOLOGY.campaign_world_sizes,
 )
 if not view.available:
     raise SystemExit(view.reason)
 print(view.recorded_run_table.to_string())
+print(view.timing_table.to_string(index=False))
+print(view.output_agreement_table.to_string(index=False))
+if not all(
+    (
+        view.takeaway["all_fixed_evaluations_succeeded"],
+        view.takeaway["positions_pbc_equivalent"],
+        view.takeaway["all_output_checks_passed"],
+    )
+):
+    raise SystemExit("fixed-input checks did not all pass")
 PY
 ```
 
@@ -471,9 +451,9 @@ test -z "$(
   git -C "$DEVELOPMENT_REPO" status --porcelain=v1 --untracked-files=all
 )"
 
-capacity_job="REPLACE_WITH_CAPACITY_JOB_ID"
 COMPUTE_LAB_RUN_ROOT="/shared/alchemi"
-REMOTE_DOMAIN_BUNDLE="$COMPUTE_LAB_RUN_ROOT/results/domain-bundle-$capacity_job"
+DOMAIN_BUNDLE_NAME="REPLACE_WITH_DOMAIN_FIXED_BUNDLE_NAME"
+REMOTE_DOMAIN_BUNDLE="$COMPUTE_LAB_RUN_ROOT/results/$DOMAIN_BUNDLE_NAME"
 TRANSFER_ROOT="$(
   mktemp -d "${TMPDIR:-/tmp}/alchemi-domain-bundle.XXXXXX"
 )"
@@ -621,7 +601,7 @@ The final notebook directory must contain at least:
 - checksum indexes that pass `sha256sum -c`;
 - the scheduler transcript.
 
-No multi-GPU speed, capacity, numerical check, or rescue number is publishable
-until the recorded domain result set and all of these checks pass.
+No multi-GPU output-agreement or timing result is publishable until the
+fixed-input 1/2/4-GPU result set and all of these checks pass.
 Distributed-stage timing also remains unpublished until section 6 passes and
 its checked result set is installed.

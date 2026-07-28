@@ -89,106 +89,123 @@ def style_axis(axis: Any, *, grid_axis: str = "both") -> None:
 
 
 def plot_domain_decomposition(
-    capacity_table: Any,
-    distributed_table: Any,
+    plot_data: Any,
     *,
     figure_size: tuple[float, float] = FIGURE_SIZE,
 ) -> tuple[Any, np.ndarray]:
-    """Plot checked Torch allocation and repeated multi-GPU workflow times.
+    """Plot owned atoms and three fixed-input evaluation times."""
 
-    Failed capacity or distributed attempts stay in the input tables but are
-    not plotted as coordinates. This avoids drawing a line through work that
-    did not complete.
-    """
-
-    required_capacity = {"atom_count", "success", "torch_peak_allocated_gb"}
-    required_distributed = {
-        "atom_count",
+    required = {
         "world_size",
-        "success",
-        "measurement_role",
-        "wall_time_s",
-        "wall_time_q1_s",
-        "wall_time_q3_s",
+        "owned_atoms_min",
+        "owned_atoms_max",
+        "pass_1_s",
+        "pass_2_s",
+        "pass_3_s",
+        "median_time_s",
     }
-    missing_capacity = required_capacity - set(capacity_table.columns)
-    missing_distributed = required_distributed - set(distributed_table.columns)
-    if missing_capacity:
-        raise ValueError(
-            "capacity results are missing " + ", ".join(sorted(missing_capacity))
-        )
-    if missing_distributed:
-        raise ValueError(
-            "distributed results are missing " + ", ".join(sorted(missing_distributed))
-        )
+    missing = required - set(plot_data.columns)
+    if missing:
+        raise ValueError("domain results are missing " + ", ".join(sorted(missing)))
 
-    capacity_ok = capacity_table.loc[capacity_table["success"].astype(bool)].copy()
-    distributed_ok = distributed_table.loc[
-        distributed_table["success"].astype(bool)
-        & distributed_table["measurement_role"].eq("steady_timing")
-    ].copy()
-    if capacity_ok.empty or distributed_ok.empty:
+    rows = plot_data.sort_values("world_size").copy()
+    if rows.empty:
         raise ValueError("the domain plot requires checked successful rows")
+    world_sizes = np.asarray(rows["world_size"], dtype=int)
+    if np.any(world_sizes <= 0) or len(np.unique(world_sizes)) != len(world_sizes):
+        raise ValueError("world sizes must be unique positive integers")
+
+    owned_min = np.asarray(rows["owned_atoms_min"], dtype=float)
+    owned_max = np.asarray(rows["owned_atoms_max"], dtype=float)
+    pass_columns = ("pass_1_s", "pass_2_s", "pass_3_s")
+    pass_times = np.column_stack(
+        [np.asarray(rows[column], dtype=float) for column in pass_columns]
+    )
+    median_times = np.asarray(rows["median_time_s"], dtype=float)
+    if (
+        not np.isfinite(owned_min).all()
+        or not np.isfinite(owned_max).all()
+        or np.any(owned_min <= 0)
+        or np.any(owned_min > owned_max)
+    ):
+        raise ValueError("owned-atom ranges must be finite and positive")
+    if (
+        not np.isfinite(pass_times).all()
+        or not np.isfinite(median_times).all()
+        or np.any(pass_times <= 0)
+        or np.any(median_times <= 0)
+    ):
+        raise ValueError("evaluation times must be finite and positive")
+    if not np.allclose(
+        median_times,
+        np.median(pass_times, axis=1),
+        rtol=1e-12,
+        atol=1e-12,
+    ):
+        raise ValueError("median_time_s does not match the three saved passes")
 
     plt = _pyplot()
     figure, axes = plt.subplots(1, 2, figsize=figure_size)
 
-    capacity_ok = capacity_ok.sort_values("atom_count")
-    axes[0].plot(
-        capacity_ok["atom_count"],
-        capacity_ok["torch_peak_allocated_gb"],
+    owned_center = 0.5 * (owned_min + owned_max)
+    axes[0].errorbar(
+        world_sizes,
+        owned_center,
+        yerr=np.vstack((owned_center - owned_min, owned_max - owned_center)),
         color=MD_COLOR,
         marker="o",
         linewidth=1.6,
+        capsize=4,
+        label="recorded rank range",
     )
-    if "device_memory_gb" in capacity_ok:
-        hbm_values = np.asarray(
-            capacity_ok["device_memory_gb"].dropna().unique(), dtype=float
+    one_gpu = np.flatnonzero(world_sizes == 1)
+    if one_gpu.size == 1:
+        total_atoms = float(owned_max[one_gpu[0]])
+        axes[0].plot(
+            world_sizes,
+            total_atoms / world_sizes,
+            color="#6B7280",
+            linestyle="--",
+            linewidth=1.2,
+            label="atoms / ranks",
         )
-        if hbm_values.size == 1:
-            axes[0].axhline(
-                hbm_values[0],
-                color="#9A3412",
-                linestyle="--",
-                linewidth=1.2,
-                label=f"device memory ({hbm_values[0]:g} GB)",
-            )
-            axes[0].legend(frameon=False, fontsize=8)
     axes[0].set(
-        title="Single-GPU capacity",
-        xlabel="atoms in one periodic system",
-        ylabel="Torch peak allocated / GB",
+        title="Spatial ownership",
+        xlabel="GPUs = ranks",
+        ylabel="owned atoms per rank",
     )
+    axes[0].set_xticks(world_sizes)
+    axes[0].legend(frameon=False, fontsize=8)
     style_axis(axes[0])
 
-    for atom_count, rows in distributed_ok.groupby("atom_count", sort=True):
-        rows = rows.sort_values("world_size")
-        median_s = np.asarray(rows["wall_time_s"], dtype=float)
-        q1_s = np.asarray(rows["wall_time_q1_s"], dtype=float)
-        q3_s = np.asarray(rows["wall_time_q3_s"], dtype=float)
-        if (
-            not np.isfinite((median_s, q1_s, q3_s)).all()
-            or np.any(q1_s > median_s)
-            or np.any(q3_s < median_s)
-        ):
-            raise ValueError("steady timing rows have invalid median or quartiles")
-        axes[1].errorbar(
-            rows["world_size"],
-            median_s,
-            yerr=np.vstack((median_s - q1_s, q3_s - median_s)),
-            marker="o",
-            linewidth=1.6,
-            capsize=4,
-            label=f"{int(atom_count):,} atoms",
+    pass_markers = ("o", "s", "^")
+    pass_colors = ("#93C5FD", "#60A5FA", "#2563EB")
+    for index, (column, marker, color) in enumerate(
+        zip(pass_columns, pass_markers, pass_colors, strict=True),
+        start=1,
+    ):
+        axes[1].plot(
+            world_sizes,
+            rows[column],
+            linestyle="none",
+            marker=marker,
+            color=color,
+            label=f"pass {index}",
         )
+    axes[1].plot(
+        world_sizes,
+        median_times,
+        color=TEXT_COLOR,
+        marker="D",
+        linewidth=1.6,
+        label="median",
+    )
     axes[1].set(
-        title="Same-input DomainParallel time",
-        xlabel="GPUs",
-        ylabel="partition → 2 evaluations → gather / s",
+        title="Fixed-input evaluation time",
+        xlabel="GPUs = ranks",
+        ylabel="one energy/force pass / s",
     )
-    axes[1].set_xticks(
-        sorted(distributed_ok["world_size"].astype(int).unique().tolist())
-    )
+    axes[1].set_xticks(world_sizes)
     axes[1].legend(frameon=False, fontsize=8)
     style_axis(axes[1])
     figure.tight_layout()

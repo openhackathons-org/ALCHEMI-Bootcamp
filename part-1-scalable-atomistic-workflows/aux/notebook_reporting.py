@@ -449,12 +449,10 @@ def build_part1_results_summary(
         ),
         domain_successful_cases=domain_view.successful_case_count,
         domain_failed_cases=domain_view.failed_case_count,
-        domain_planned_max_atom_count=max(values["DOMAIN_PLANNED_ATOM_COUNTS"]),
+        domain_planned_max_atom_count=int(values["DOMAIN_FIXED_ATOM_COUNT"]),
         domain_measured_max_atom_count=domain_view.measured_max_atom_count,
         campaign_available=False,
-        campaign_unavailable_reason=values[
-            "DISTRIBUTED_PIPELINE_NOT_REPORTED_REASON"
-        ],
+        campaign_unavailable_reason=values["DISTRIBUTED_PIPELINE_NOT_REPORTED_REASON"],
         campaign_successes=0,
         campaign_failures=0,
         campaign_systems_total=values["PLANNED_CAMPAIGN_SYSTEMS_TOTAL"],
@@ -551,9 +549,7 @@ def _build_manifest_run_details(
         },
         "nci_data": {
             "nci_checkpoints": values["NCI_CHECKPOINTS"],
-            "aimnet_checkpoint_identities": values[
-                "aimnet_checkpoint_identities"
-            ],
+            "aimnet_checkpoint_identities": values["aimnet_checkpoint_identities"],
             "nci_subset_sha256": sha256_file(values["NCI_DATA_FILE"]),
         },
         "sevennet_checkpoint": {

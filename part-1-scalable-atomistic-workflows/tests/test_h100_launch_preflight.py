@@ -87,6 +87,39 @@ def _git(repository: Path, *arguments: str) -> None:
     )
 
 
+def _run_launcher_network_mode(
+    tmp_path: Path,
+    *,
+    ip_script: str,
+    mode: str,
+    environment: dict[str, str] | None = None,
+    check: bool = True,
+) -> subprocess.CompletedProcess[str]:
+    fake_bin = tmp_path / "bin"
+    fake_bin.mkdir(parents=True)
+    ip = fake_bin / "ip"
+    ip.write_text(ip_script, encoding="utf-8")
+    ip.chmod(0o755)
+
+    run_environment = os.environ.copy()
+    run_environment["PATH"] = f"{fake_bin}:{run_environment['PATH']}"
+    for name in (
+        "ALCHEMI_DISTRIBUTED_IFACE",
+        "ALCHEMI_MASTER_ADDR",
+    ):
+        run_environment.pop(name, None)
+    if environment is not None:
+        run_environment.update(environment)
+
+    return subprocess.run(
+        ["bash", str(DOMAIN_LAUNCHER_PATH), mode],
+        check=check,
+        capture_output=True,
+        text=True,
+        env=run_environment,
+    )
+
+
 def _clean_test_checkout(tmp_path: Path) -> Path:
     checkout = tmp_path / "checkout"
     checkout.mkdir()
@@ -258,6 +291,213 @@ def test_domain_launcher_uses_the_requested_local_process_count() -> None:
     assert 'case "$ALCHEMI_DOMAIN_GPUS"' not in source
 
 
+def test_domain_launcher_resolves_the_automatic_master_address(
+    tmp_path: Path,
+) -> None:
+    result = _run_launcher_network_mode(
+        tmp_path,
+        mode="--print-master-address",
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "-4 route get 1.1.1.1")
+    echo "1.1.1.1 via 10.117.0.1 dev eno1np0 src 10.117.10.97"
+    ;;
+  "-4 -o addr show dev eno1np0 scope global")
+    echo "2: eno1np0 inet 10.117.10.97/19 scope global eno1np0"
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+    )
+
+    assert result.stdout.strip() == "10.117.10.97"
+
+
+def test_domain_launcher_uses_an_explicit_master_interface_without_public_routing(
+    tmp_path: Path,
+) -> None:
+    result = _run_launcher_network_mode(
+        tmp_path,
+        mode="--print-master-address",
+        environment={"ALCHEMI_DISTRIBUTED_IFACE": "cluster0"},
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "link show dev cluster0")
+    exit 0
+    ;;
+  "-4 -o addr show dev cluster0 scope global")
+    echo "2: cluster0 inet 10.90.0.12/24 scope global cluster0"
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+    )
+
+    assert result.stdout.strip() == "10.90.0.12"
+
+
+def test_domain_launcher_maps_the_master_address_to_its_non_loopback_device(
+    tmp_path: Path,
+) -> None:
+    result = _run_launcher_network_mode(
+        tmp_path,
+        mode="--print-network-record",
+        environment={"ALCHEMI_MASTER_ADDR": "10.117.10.97"},
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "-4 -o addr show scope global")
+    echo "2: eno1np0 inet 10.117.10.97/19 scope global eno1np0"
+    ;;
+  "-4 -o addr show dev eno1np0 scope global")
+    echo "2: eno1np0 inet 10.117.10.97/19 scope global eno1np0"
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+    )
+
+    assert "address=10.117.10.97" in result.stdout
+    assert "interface=eno1np0" in result.stdout
+    assert "nccl==eno1np0" in result.stdout
+    assert "gloo=eno1np0" in result.stdout
+    assert "selection=automatic" in result.stdout
+
+
+def test_domain_launcher_selects_the_worker_route_to_the_master(
+    tmp_path: Path,
+) -> None:
+    result = _run_launcher_network_mode(
+        tmp_path,
+        mode="--print-network-record",
+        environment={"ALCHEMI_MASTER_ADDR": "10.117.10.97"},
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "-4 -o addr show scope global")
+    echo "2: enp1s0f0np0 inet 10.176.188.32/16 scope global enp1s0f0np0"
+    ;;
+  "-4 route get 10.117.10.97")
+    echo "10.117.10.97 via 10.176.0.1 dev enp1s0f0np0 src 10.176.188.32"
+    ;;
+  "-4 -o addr show dev enp1s0f0np0 scope global")
+    echo "2: enp1s0f0np0 inet 10.176.188.32/16 scope global enp1s0f0np0"
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+    )
+
+    assert "address=10.176.188.32" in result.stdout
+    assert "interface=enp1s0f0np0" in result.stdout
+    assert "nccl==enp1s0f0np0" in result.stdout
+    assert "gloo=enp1s0f0np0" in result.stdout
+    assert "selection=automatic" in result.stdout
+
+
+def test_domain_launcher_requires_an_explicit_interface_without_fallback(
+    tmp_path: Path,
+) -> None:
+    valid = _run_launcher_network_mode(
+        tmp_path / "valid",
+        mode="--print-network-record",
+        environment={
+            "ALCHEMI_MASTER_ADDR": "10.117.10.97",
+            "ALCHEMI_DISTRIBUTED_IFACE": "custom0",
+        },
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "-4 -o addr show scope global")
+    echo "2: custom0 inet 10.176.188.32/16 scope global custom0"
+    ;;
+  "link show dev custom0")
+    exit 0
+    ;;
+  "-4 route get 10.117.10.97 oif custom0")
+    echo "10.117.10.97 via 10.176.0.1 dev custom0 src 10.176.188.32"
+    ;;
+  "-4 -o addr show dev custom0 scope global")
+    echo "2: custom0 inet 10.176.188.32/16 scope global custom0"
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+    )
+    assert "interface=custom0" in valid.stdout
+    assert "selection=explicit" in valid.stdout
+
+    master = _run_launcher_network_mode(
+        tmp_path / "master",
+        mode="--print-network-record",
+        environment={
+            "ALCHEMI_MASTER_ADDR": "10.176.188.32",
+            "ALCHEMI_DISTRIBUTED_IFACE": "custom0",
+        },
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "-4 -o addr show scope global"|"-4 -o addr show dev custom0 scope global")
+    echo "2: custom0 inet 10.176.188.32/16 scope global custom0"
+    ;;
+  "link show dev custom0")
+    exit 0
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+    )
+    assert "address=10.176.188.32" in master.stdout
+    assert "interface=custom0" in master.stdout
+    assert "selection=explicit" in master.stdout
+
+    invalid = _run_launcher_network_mode(
+        tmp_path / "invalid",
+        mode="--print-network-record",
+        environment={
+            "ALCHEMI_MASTER_ADDR": "10.117.10.97",
+            "ALCHEMI_DISTRIBUTED_IFACE": "missing0",
+        },
+        check=False,
+        ip_script="""#!/usr/bin/env bash
+set -euo pipefail
+if [[ "$*" == "-4 -o addr show scope global" ]]; then
+  echo "2: test0 inet 10.176.188.32/16 scope global test0"
+  exit 0
+fi
+if [[ "$*" == "link show dev missing0" ]]; then
+  echo "missing interface" >&2
+  exit 1
+fi
+echo "automatic fallback was attempted" >&2
+exit 2
+""",
+    )
+    assert invalid.returncode != 0
+    assert "missing interface" in invalid.stderr
+    assert "automatic fallback was attempted" not in invalid.stderr
+
+
 @pytest.mark.parametrize(
     "mode_environment",
     (
@@ -320,6 +560,25 @@ exec "$TEST_PYTHON" "$@"
         "{}\n",
         encoding="utf-8",
     )
+    fake_bin = tmp_path / "fake-bin"
+    fake_bin.mkdir()
+    ip = fake_bin / "ip"
+    ip.write_text(
+        """#!/usr/bin/env bash
+set -euo pipefail
+case "$*" in
+  "-4 -o addr show scope global"|"-4 -o addr show dev test0 scope global")
+    echo "2: test0 inet 127.0.0.1/8 scope global test0"
+    ;;
+  *)
+    echo "unexpected ip arguments: $*" >&2
+    exit 2
+    ;;
+esac
+""",
+        encoding="utf-8",
+    )
+    ip.chmod(0o755)
 
     runner = tutorial_root / "runner.py"
     runner.write_text(
@@ -335,6 +594,9 @@ assert sys.dont_write_bytecode
 assert core_probe.SOURCE == "core_probe"
 assert ops_probe.SOURCE == "ops_probe"
 assert tutorial_probe.SOURCE == "tutorial_probe"
+if "SLURM_JOB_ID" in os.environ:
+    assert os.environ["NCCL_SOCKET_IFNAME"] == "=test0"
+    assert os.environ["GLOO_SOCKET_IFNAME"] == "test0"
 """,
         encoding="utf-8",
     )
@@ -359,6 +621,7 @@ assert tutorial_probe.SOURCE == "tutorial_probe"
             "ALCHEMI_TOOLKIT_CORE_ROOT": str(core_root),
             "ALCHEMI_TOOLKIT_OPS_ROOT": str(ops_root),
             "TEST_PYTHON": sys.executable,
+            "PATH": f"{fake_bin}:{environment['PATH']}",
             **mode_environment,
         }
     )
@@ -495,10 +758,12 @@ def test_domain_job_locks_and_rechecks_its_reportable_sources() -> None:
         assert (
             f'git -C "${root_name}" ls-files --others --ignored --exclude-standard'
         ) in source
-    assert '--output-dir $RUN_ROOT/results/domain-bundle-$CAPACITY_JOB_ID' in source
+    assert "--output-dir $RUN_ROOT/results/domain-fixed-bundle" in source
     assert '--base-box-dir "$BASE_BOX_DIR"' in source
     assert 'command -v "$PACKMOL"' not in source
-    producer_command = source[source.rfind("sha256sum", 0, producer_write):producer_write]
+    producer_command = source[
+        source.rfind("sha256sum", 0, producer_write) : producer_write
+    ]
     for base_file in (
         '"$BASE_BOX_MANIFEST"',
         '"$BASE_BOX_STRUCTURE"',
@@ -706,13 +971,13 @@ def test_runbook_checks_domain_jobs_and_scopes_the_signed_result_commit() -> Non
     source = COMPUTE_LAB_RUNBOOK_PATH.read_text(encoding="utf-8")
 
     for check in (
-        'DOMAIN_JOB_IDS="${capacity_job},${domain_jobs[2]},${domain_jobs[4]}"',
+        'DOMAIN_JOB_IDS="${domain_jobs[1]},${domain_jobs[2]},${domain_jobs[4]}"',
         "sacct -X",
         ')" -eq 3',
         '$3 != "COMPLETED"',
         '$4 != "0:0"',
-        'REMOTE_DOMAIN_BUNDLE="$COMPUTE_LAB_RUN_ROOT/results/'
-        'domain-bundle-$capacity_job"',
+        'DOMAIN_BUNDLE_NAME="REPLACE_WITH_DOMAIN_FIXED_BUNDLE_NAME"',
+        'REMOTE_DOMAIN_BUNDLE="$COMPUTE_LAB_RUN_ROOT/results/$DOMAIN_BUNDLE_NAME"',
         'TRANSFER_ROOT="$(',
         'mktemp -d "${TMPDIR:-/tmp}/alchemi-domain-bundle.XXXXXX"',
         "ssh cl",
@@ -730,30 +995,103 @@ def test_runbook_checks_domain_jobs_and_scopes_the_signed_result_commit() -> Non
         assert check in source
 
 
-def test_reportable_domain_campaign_rejects_size_overrides() -> None:
+def test_reportable_domain_run_uses_only_the_versioned_fixed_work() -> None:
     source = DOMAIN_SBATCH_PATH.read_text(encoding="utf-8")
-    guard_start = source.index('if [[ "${PAIR_COUNTS[*]}"')
-    guard_end = source.index('if [[ "$PHASE" == distributed ]]', guard_start)
-    guard = source[guard_start:guard_end]
 
     for check in (
-        '"${PAIR_COUNTS[*]}" != "${DEFAULT_PAIR_COUNTS[*]}"',
-        '"$VALIDATION_PAIRS" != "${DOMAIN_METHODOLOGY_DEFAULTS[1]}"',
-        '"$PARITY_PAIRS" != "${DOMAIN_METHODOLOGY_DEFAULTS[2]}"',
-        "This reportable tutorial job only accepts the versioned methodology sizes.",
-        (
-            "Use part1_domain_plan.py and part1_domain_run.py directly for "
-            "diagnostic size overrides."
-        ),
-        "exit 2",
+        "config.fixed_molecules_per_species",
+        "config.electrostatics_validation_molecules_per_species",
+        'print(" ".join(map(str, config.campaign_world_sizes)))',
+        "config.evaluation_warmup_count",
+        "config.evaluation_pass_count",
+        'FIXED_PAIRS="${DOMAIN_DEFAULTS[0]}"',
+        'if [[ " $SUPPORTED_WORLD_SIZES " != *" $WORLD_SIZE "* ]]',
+        "This example supports --nodes 1, 2, or 4",
+        "The recorded example requires one warmup and three measured passes",
     ):
-        assert check in guard
-    assert guard_start < source.index('"$PYTHON" "$PLAN_SCRIPT" plan')
+        assert check in source
+    for removed in (
+        "ALCHEMI_DOMAIN_PAIR_COUNTS",
+        "ALCHEMI_DOMAIN_PHASE",
+        "ALCHEMI_DOMAIN_CAPACITY_DIR",
+        "PARITY_PAIRS",
+    ):
+        assert removed not in source
 
 
-def test_domain_sbatch_has_valid_bash_syntax() -> None:
+def test_domain_launch_resolves_and_records_each_rank_interface() -> None:
+    source = DOMAIN_SBATCH_PATH.read_text(encoding="utf-8")
+    launcher = DOMAIN_LAUNCHER_PATH.read_text(encoding="utf-8")
+    runbook = COMPUTE_LAB_RUNBOOK_PATH.read_text(encoding="utf-8")
+    runbook_text = " ".join(runbook.split())
+
+    expected = (
+        'MASTER_NODE="$(scontrol show hostnames "$SLURM_NODELIST" | head -n 1)"',
+        "export MASTER_NODE",
+        "export ALCHEMI_MASTER_ADDR",
+        'ALCHEMI_MASTER_ADDR="$(',
+        'srun --nodes=1 --ntasks=1 --ntasks-per-node=1 --nodelist="$MASTER_NODE"',
+        '"$LAUNCHER" --print-master-address',
+        'if [[ -z "$ALCHEMI_MASTER_ADDR" ]]',
+        "Could not resolve a routed global IPv4 address on $MASTER_NODE",
+        '"$LAUNCHER" --print-network-record',
+        "| LC_ALL=C sort",
+        '> "$FINAL_DIR/network-interfaces.txt"',
+        '"$FINAL_DIR/network-interfaces.txt"',
+    )
+    for check in expected:
+        assert check in source
+
+    master_node = source.index('MASTER_NODE="$(scontrol show hostnames')
+    master_resolution = source.index('ALCHEMI_MASTER_ADDR="$(')
+    master_validation = source.index('if [[ -z "$ALCHEMI_MASTER_ADDR" ]]')
+    network_record = source.index('> "$FINAL_DIR/network-interfaces.txt"')
+    launcher_call = source.index('"$LAUNCHER" "$RUNNER"')
+    artifact_record = source.index(
+        '"$FINAL_DIR/network-interfaces.txt"',
+        network_record + len('> "$FINAL_DIR/network-interfaces.txt"'),
+    )
+    assert (
+        master_node
+        < master_resolution
+        < master_validation
+        < network_record
+        < launcher_call
+        < artifact_record
+    )
+    assert (
+        'ALCHEMI_MASTER_ADDR="$(scontrol show hostnames "$SLURM_NODELIST"' not in source
+    )
+    assert "enp1s0f0np0" not in source
+    assert "eno1np0" not in source
+    assert "169.254" not in source
+    assert "10[.]63" not in source
+    assert "10.63" not in source
+    assert "NCCL_IB_DISABLE" not in source
+
+    interface_resolution = launcher.index("resolve_local_network")
+    nccl_export = launcher.index('export NCCL_SOCKET_IFNAME="=$interface"')
+    gloo_export = launcher.index('export GLOO_SOCKET_IFNAME="$interface"')
+    torchrun = launcher.index('exec "$TORCHRUN"')
+    assert interface_resolution < nccl_export < gloo_export < torchrun
+    assert "--print-master-address" in launcher
+    assert "--print-network-record" in launcher
+    assert "enp1s0f0np0" not in launcher
+    assert "eno1np0" not in launcher
+    assert "NCCL_IB_DISABLE" not in launcher
+    assert "does not prove that NCCL" in runbook_text
+    assert "Use one checked node family for the recorded 1/2/4-GPU set" in runbook_text
+    assert "Test a mixed allocation with a real NCCL collective" in runbook_text
+
+
+@pytest.mark.parametrize(
+    "path",
+    (DOMAIN_SBATCH_PATH, DOMAIN_LAUNCHER_PATH),
+    ids=("sbatch", "launcher"),
+)
+def test_domain_shell_launchers_have_valid_bash_syntax(path: Path) -> None:
     subprocess.run(
-        ["bash", "-n", str(DOMAIN_SBATCH_PATH)],
+        ["bash", "-n", str(path)],
         check=True,
         capture_output=True,
         text=True,
@@ -763,7 +1101,10 @@ def test_domain_sbatch_has_valid_bash_syntax() -> None:
 def test_successful_domain_launch_without_result_records_exit_code_66() -> None:
     source = DOMAIN_SBATCH_PATH.read_text(encoding="utf-8")
     run_case_start = source.index("run_case() {")
-    run_case_end = source.index('\n}\n\nif [[ "$PHASE" == capacity ]]', run_case_start)
+    run_case_end = source.index(
+        '\n}\n\nif [[ "$WORLD_SIZE" -eq 1 ]]',
+        run_case_start,
+    )
     run_case = source[run_case_start:run_case_end]
 
     missing_result = run_case.index('elif [[ ! -s "$CURRENT_OUTPUT" ]]')
@@ -773,6 +1114,23 @@ def test_successful_domain_launch_without_result_records_exit_code_66() -> None:
     )
     recorded_failure = run_case.index("record_failure 66", diagnostic)
     assert missing_result < diagnostic < recorded_failure
+
+
+def test_domain_commands_pass_the_input_path_once_each() -> None:
+    source = DOMAIN_SBATCH_PATH.read_text(encoding="utf-8")
+    record_start = source.index("record_failure() {")
+    record_end = source.index(
+        "\n}\n\nrecord_active_timeout()",
+        record_start,
+    )
+    run_start = source.index("run_case() {")
+    run_end = source.index(
+        '\n}\n\nif [[ "$WORLD_SIZE" -eq 1 ]]',
+        run_start,
+    )
+
+    assert source[record_start:record_end].count('--input-extxyz "$CURRENT_INPUT"') == 1
+    assert source[run_start:run_end].count('--input-extxyz "$CURRENT_INPUT"') == 1
 
 
 def test_domain_hardware_counts_come_from_observed_runtime_rows() -> None:
@@ -798,7 +1156,8 @@ def test_domain_hardware_identity_records_source_fields() -> None:
         "interconnect_source": ("operator-declared; raw GPU topology is retained"),
     }
     for field, value in expected_plan_values.items():
-        assert f'"{field}": "{value}"' in plan_source
+        assert f'"{field}":' in plan_source
+        assert value in plan_source
         assert f'"{field}",' in results_source
 
 

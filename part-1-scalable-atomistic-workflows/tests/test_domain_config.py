@@ -21,9 +21,10 @@ from aux.domain.config import (  # noqa: E402
 def test_every_domain_setting_has_required_context() -> None:
     record = DOMAIN_METHODOLOGY.as_record()
 
+    assert DOMAIN_METHODOLOGY_SCHEMA == "alchemi.part1-domain-methodology.v5"
     assert record["schema"] == DOMAIN_METHODOLOGY_SCHEMA
     assert record["name"] == "part1-packmol-domain-decomposition"
-    assert record["version"] == "1.7.0"
+    assert record["version"] == "1.10.0"
     assert set(record["settings"]) == {
         item.name
         for item in fields(DomainMethodologyConfig)
@@ -39,29 +40,22 @@ def test_every_domain_setting_has_required_context() -> None:
 
 def test_domain_settings_form_one_consistent_campaign() -> None:
     config = DOMAIN_METHODOLOGY
-    counts = config.capacity_molecules_per_species
 
     assert config.nci_system_id.strip()
     assert config.nci_scale > 0
     assert config.atoms_per_composition_unit > 0
     assert config.aimnet_neighbor_cutoff_a > 0
-    assert all(right == 2 * left for left, right in zip(counts, counts[1:]))
-    assert config.live_molecules_per_species in counts
-    assert config.electrostatics_validation_molecules_per_species in counts
-    assert config.parity_molecules_per_species in counts
-    assert set(config.capacity_world_sizes) <= set(config.supported_world_sizes)
-    assert all(value > 1 for value in config.distributed_world_sizes)
-    assert config.steady_timing_world_sizes == config.supported_world_sizes
-    assert config.steady_timing_warmup_count >= 1
-    assert config.steady_timing_sample_count >= 5
-    assert config.steady_timing_max_relative_iqr == 0.10
-    assert config.steady_timing_model_evaluations_per_workflow == 2
-    assert config.domain_parallel_multi_rank_initial_force_evaluations == 1
-    assert config.steady_timing_run_steps(1) == 2
-    assert all(
-        config.steady_timing_run_steps(world_size) == 1
-        for world_size in config.distributed_world_sizes
+    assert config.live_molecules_per_species == 128
+    assert config.electrostatics_validation_molecules_per_species == 128
+    assert config.fixed_molecules_per_species == 2_048
+    assert (
+        config.fixed_molecules_per_species * config.atoms_per_composition_unit == 51_200
     )
+    assert all(value > 1 for value in config.distributed_world_sizes)
+    assert config.evaluation_warmup_count == 1
+    assert config.evaluation_pass_count == 3
+    assert config.measured_model_evaluations_per_pass == 1
+    assert config.domain_parallel_multi_rank_warmup_force_prime_evaluations == 1
     assert config.domain_grid_dims is None
     assert config.campaign_world_sizes == (1, 2, 4)
     assert config.supported_world_sizes == config.campaign_world_sizes
@@ -69,10 +63,77 @@ def test_domain_settings_form_one_consistent_campaign() -> None:
     assert config.force_comparison_world_sizes == (2, 4)
     assert config.energy_reference_world_size == 2
     assert config.energy_comparison_world_sizes == (4,)
+    assert config.evaluation_energy_dtype_for_world_size(1) == "torch.float32"
+    assert config.evaluation_energy_dtype_for_world_size(2) == "torch.float64"
+    assert config.evaluation_energy_dtype_for_world_size(4) == "torch.float64"
 
-    unsupported = max(config.supported_world_sizes) + 1
-    with pytest.raises(ValueError, match="unsupported steady-timing"):
-        config.steady_timing_run_steps(unsupported)
+
+@pytest.mark.parametrize("world_size", (True, 1.0, 3))
+def test_energy_dtype_mapping_rejects_unsupported_world_sizes(
+    world_size: object,
+) -> None:
+    with pytest.raises(ValueError, match="world_size must be one of"):
+        DOMAIN_METHODOLOGY.evaluation_energy_dtype_for_world_size(world_size)  # type: ignore[arg-type]
+
+
+def test_energy_dtype_mapping_rejects_changed_dtypes() -> None:
+    with pytest.raises(
+        ValueError,
+        match="evaluation_energy_dtype_single_rank must be torch.float32",
+    ):
+        replace(
+            DOMAIN_METHODOLOGY,
+            evaluation_energy_dtype_single_rank="torch.float64",
+        )
+
+    with pytest.raises(
+        ValueError,
+        match="evaluation_energy_dtype_multi_rank must be torch.float64",
+    ):
+        replace(
+            DOMAIN_METHODOLOGY,
+            evaluation_energy_dtype_multi_rank="torch.float32",
+        )
+
+
+def test_fixed_evaluation_position_tolerance_is_declared_and_positive() -> None:
+    assert DOMAIN_METHODOLOGY.evaluation_position_mic_tolerance_a == 1.0e-4
+    assert (
+        DOMAIN_METHODOLOGY.resolved_values()["evaluation_position_mic_tolerance_a"]
+        == 1.0e-4
+    )
+    with pytest.raises(
+        ValueError,
+        match="evaluation_position_mic_tolerance_a must be positive and finite",
+    ):
+        replace(
+            DOMAIN_METHODOLOGY,
+            evaluation_position_mic_tolerance_a=0.0,
+        )
+
+
+def test_distributed_energy_tolerances_are_declared_separately() -> None:
+    repeatability_name = "distributed_energy_repeatability_tolerance_ev_per_atom"
+    assert (
+        DOMAIN_METHODOLOGY.distributed_energy_repeatability_tolerance_ev_per_atom
+        == 1.0e-4
+    )
+    assert DOMAIN_METHODOLOGY.evaluation_energy_tolerance_ev_per_atom == 1.0e-4
+    resolved = DOMAIN_METHODOLOGY.resolved_values()
+    assert resolved[repeatability_name] == 1.0e-4
+    assert resolved["evaluation_energy_tolerance_ev_per_atom"] == 1.0e-4
+
+    with pytest.raises(
+        ValueError,
+        match=(
+            "distributed_energy_repeatability_tolerance_ev_per_atom "
+            "must be positive and finite"
+        ),
+    ):
+        replace(
+            DOMAIN_METHODOLOGY,
+            distributed_energy_repeatability_tolerance_ev_per_atom=0.0,
+        )
 
 
 def test_explicit_zero_d3_smoothing_is_valid() -> None:
@@ -84,16 +145,21 @@ def test_explicit_zero_d3_smoothing_is_valid() -> None:
         replace(DOMAIN_METHODOLOGY, d3_smoothing_fraction=1.0)
 
 
-def test_steady_timing_keeps_at_least_one_requested_multi_rank_step() -> None:
-    with pytest.raises(ValueError, match="at least one requested multi-rank step"):
+@pytest.mark.parametrize(
+    ("field_name", "value", "message"),
+    (
+        ("evaluation_warmup_count", 2, "exactly 1"),
+        ("evaluation_pass_count", 2, "exactly 3"),
+        ("measured_model_evaluations_per_pass", 2, "exactly 1"),
+    ),
+)
+def test_fixed_evaluation_counts_cannot_drift(
+    field_name: str,
+    value: int,
+    message: str,
+) -> None:
+    with pytest.raises(ValueError, match=message):
         replace(
             DOMAIN_METHODOLOGY,
-            steady_timing_model_evaluations_per_workflow=1,
+            **{field_name: value},
         )
-
-
-def test_steady_timing_relative_iqr_limit_is_a_fraction() -> None:
-    with pytest.raises(ValueError, match="must not exceed 1"):
-        replace(DOMAIN_METHODOLOGY, steady_timing_max_relative_iqr=1.01)
-    with pytest.raises(ValueError, match="positive and finite"):
-        replace(DOMAIN_METHODOLOGY, steady_timing_max_relative_iqr=0.0)
