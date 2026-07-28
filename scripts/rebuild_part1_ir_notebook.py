@@ -1031,7 +1031,7 @@ display(readable_table(
 """
             + "\n\n"
             + callout_html(
-                'Checkpoint weights and AIMNet inputs are float32. A float64 coordinate tensor does not turn it into a float64 model; widening saved float32 weights cannot recover information. The setting torch.set_float32_matmul_precision("highest") controls float32 matrix multiplication, not model weights or input dtypes. Use float64 for selected reductions and analysis.',
+                'Toolkit data can start in float64, but AIMNet2 kernels require float32. `adapt_input` returns float32 coordinates while leaving the batch coordinate dtype unchanged; the full wrapper then converts the batch positions, and any cell tensor, to float32 in place. A float64 coordinate tensor does not turn AIMNet2 into a float64 model, and widening saved float32 weights cannot recover information. The setting torch.set_float32_matmul_precision("highest") chooses the internal precision for eligible float32 matrix multiplications; it does not change model weights or input dtypes.',
                 kind="check",
             ),
         ),
@@ -1063,19 +1063,25 @@ buffer_dtypes = sorted({str(buffer.dtype) for buffer in floating_buffers})
 assert parameter_dtypes == ["torch.float32"]
 precision_progress.advance(message="checkpoint parameter and buffer storage inspected")
 
-# The container is float64, but the AIMNet wrapper adapts model inputs to float32.
+# Observe the dtype before input adaptation and after the full wrapper call.
 precision_probe_data = AtomicData.from_atoms(
     water, device=DEVICE, dtype=torch.float64
 )
 precision_probe_batch = Batch.from_data_list([precision_probe_data], device=DEVICE)
 compute_neighbors(precision_probe_batch, config=aimnet.model_config.neighbor_config)
+precision_dtype_before = precision_probe_batch.positions.dtype
 precision_model_input = aimnet.adapt_input(precision_probe_batch)
+precision_dtype_after_adapt = precision_probe_batch.positions.dtype
 precision_probe = aimnet(precision_probe_batch)
-assert precision_probe_batch.positions.dtype == torch.float64
+precision_dtype_after_forward = precision_probe_batch.positions.dtype
+assert precision_dtype_before == torch.float64
+assert precision_dtype_after_adapt == torch.float64
 assert precision_model_input["coord"].dtype == torch.float32
+assert precision_dtype_after_forward == torch.float32
 assert precision_probe["energy"].dtype == torch.float32
+assert precision_probe["forces"].dtype == torch.float32
 assert precision_probe["charges"].dtype == torch.float32
-precision_progress.advance(message="float64 container and float32 model input compared")
+precision_progress.advance(message="wrapper input conversion observed")
 
 energy_magnitude_eV = abs(float(hello["energy"].detach().cpu().reshape(())))
 energy32 = torch.tensor(energy_magnitude_eV, dtype=torch.float32)
@@ -1089,8 +1095,9 @@ precision_progress.complete("tensor storage, model input, and numerical spacing 
 
 display(readable_table(pd.DataFrame([
     {"Quantity": "hello-world coordinates", "Observed": str(hello_data.positions.dtype)},
-    {"Quantity": "float64 probe coordinates", "Observed": str(precision_probe_batch.positions.dtype)},
+    {"Quantity": "probe coordinates before wrapper call", "Observed": str(precision_dtype_before)},
     {"Quantity": "coordinates passed to AIMNet", "Observed": str(precision_model_input["coord"].dtype)},
+    {"Quantity": "probe coordinates after wrapper call", "Observed": str(precision_dtype_after_forward)},
     {"Quantity": "checkpoint floating parameters", "Observed": ", ".join(parameter_dtypes)},
     {"Quantity": "checkpoint floating buffers", "Observed": ", ".join(buffer_dtypes)},
     {"Quantity": "floating parameter count", "Observed": f"{parameter_count:,}"},
@@ -1102,7 +1109,7 @@ display(readable_table(pd.DataFrame([
     {"Quantity": "float32 matmul setting", "Observed": torch.get_float32_matmul_precision()},
 ]), label="Precision used by the first model", show_index=False))
 display(callout(
-    "The float64 probe keeps float64 coordinates in AtomicData, while AIMNet receives float32 coordinates and retains float32 checkpoint weights. The force can return in the coordinate container's dtype because autograd differentiates with respect to that tensor; its values still come from the float32 forward calculation. A float64 copy of a stored weight represents the same learned value with no recovered digits. The spacing values show numerical resolution at this energy scale, not scientific model error.",
+    "The probe begins with float64 coordinates. Input adaptation makes a float32 copy, and the full AIMNet2 wrapper converts the batch positions to float32 in place because the model kernels require it. The checkpoint weights and returned energy, forces, and charges remain float32. A float64 copy of a stored weight represents the same learned value with no recovered digits. The spacing values show numerical resolution at this energy scale, not scientific model error.",
     kind="result",
     result_state="observed",
 ))
@@ -5717,24 +5724,31 @@ assert precision_summary.parameter_dtypes == ("torch.float32",)
 assert precision_summary.widening_preserves_stored_values
 precision_progress.advance(message="checkpoint storage inspected")
 
-# AtomicData keeps float64 here; the AIMNet wrapper prepares float32 model input.
+# Observe the dtype before input adaptation and after the full wrapper call.
 precision_probe_data = AtomicData.from_atoms(water, device=DEVICE, dtype=torch.float64)
 precision_probe_batch = Batch.from_data_list([precision_probe_data], device=DEVICE)
 compute_neighbors(precision_probe_batch, config=aimnet.model_config.neighbor_config)
+precision_dtype_before = precision_probe_batch.positions.dtype
 precision_model_input = aimnet.adapt_input(precision_probe_batch)
+precision_dtype_after_adapt = precision_probe_batch.positions.dtype
 precision_probe = aimnet(precision_probe_batch)
-assert precision_probe_batch.positions.dtype == torch.float64
+precision_dtype_after_forward = precision_probe_batch.positions.dtype
+assert precision_dtype_before == torch.float64
+assert precision_dtype_after_adapt == torch.float64
 assert precision_model_input["coord"].dtype == torch.float32
+assert precision_dtype_after_forward == torch.float32
 assert precision_probe["energy"].dtype == torch.float32
+assert precision_probe["forces"].dtype == torch.float32
 assert precision_probe["charges"].dtype == torch.float32
-precision_progress.advance(message="container and model-input dtypes compared")
+precision_progress.advance(message="wrapper input conversion observed")
 
 precision_table = precision_display_table(
     precision_summary,
     observed_dtypes={
         "hello-world coordinates": str(hello_data.positions.dtype),
-        "float64 probe coordinates": str(precision_probe_batch.positions.dtype),
+        "probe coordinates before wrapper call": str(precision_dtype_before),
         "coordinates passed to AIMNet": str(precision_model_input["coord"].dtype),
+        "probe coordinates after wrapper call": str(precision_dtype_after_forward),
         "probe energy / forces / charges": " / ".join(
             str(precision_probe[name].dtype) for name in ("energy", "forces", "charges")
         ),
@@ -5746,9 +5760,10 @@ display(readable_table(
 ))
 precision_progress.complete("storage, input dtypes, and numerical spacing shown")
 display(callout(
-    "Observed: AtomicData keeps float64 coordinates and AIMNet receives float32. "
-    "A force may return in the container dtype through autograd, but its values "
-    "come from the float32 model calculation. "
+    "Observed: the probe begins with float64 coordinates. Input adaptation makes "
+    "a float32 copy, and the full AIMNet2 wrapper converts the batch positions "
+    "to float32 in place because the model kernels require it. "
+    "Energy, forces, and charges return in float32. "
     "The spacing values show numerical resolution, not model error.",
     kind="result", result_state="observed",
 ))

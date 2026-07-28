@@ -85,8 +85,9 @@ def precision_display_table(
 
     required = {
         "hello-world coordinates",
-        "float64 probe coordinates",
+        "probe coordinates before wrapper call",
         "coordinates passed to AIMNet",
+        "probe coordinates after wrapper call",
         "probe energy / forces / charges",
     }
     if set(observed_dtypes) != required:
