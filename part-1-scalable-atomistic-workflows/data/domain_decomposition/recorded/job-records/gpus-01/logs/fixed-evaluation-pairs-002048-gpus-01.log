@@ -1,0 +1,34 @@
+/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db/lib/python3.12/site-packages/physicsnemo/utils/logging/launch.py:327: SyntaxWarning: invalid escape sequence '\.'
+  key = re.sub("[^a-zA-Z0-9\.\-\s\/\_]+", "", key)
+/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/models/aimnet2.py:342: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:838.)
+  values = [float(v) for v in (rc_s, rc_v) if v is not None]
+INFO:nvalchemi.distributed._core.shard_wrappers:Registered 22 passthrough + 8 reduction ShardTensor wrappers
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] Graph break from `Tensor.item()`, consider setting:
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]     torch._dynamo.config.capture_scalar_outputs = True
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] or:
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]     env TORCHDYNAMO_CAPTURE_SCALAR_OUTPUTS=1
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] to include these operations in the captured graph.
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] 
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] Graph break: from user code at:
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]   File "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/hooks/neighbor_list.py", line 328, in torch_dynamo_resume_in__rebuild_at_270
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]     neighbor_list(
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]   File "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-ops-e8e7a7464f6745277a156a3d6f433d06b58c60e3/nvalchemiops/torch/neighbors/__init__.py", line 515, in neighbor_list
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]     _reject_unsupported_cluster_tile_combo(pbc, half_fill)
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]   File "/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-ops-e8e7a7464f6745277a156a3d6f433d06b58c60e3/nvalchemiops/torch/neighbors/_dispatch.py", line 393, in _reject_unsupported_cluster_tile_combo
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0]     all_periodic = bool(pbc.all().item())
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] 
+[rank0]:W0728 00:02:51.223000 375298 torch/_dynamo/variables/tensor.py:1612] [4/0] 
+/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:2311: UserWarning: Dynamo does not know how to trace the builtin `_ctypes.sizeof.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db/lib/python3.12/site-packages/torch/_dynamo/variables/functions.py:2311: UserWarning: Dynamo does not know how to trace the builtin `<unknown module>.Structure.__new__.` This function is either a Python builtin (e.g. _warnings.warn) or a third-party C/C++ Python extension (perhaps created with pybind).
+If it is a Python builtin, please file an issue on GitHub so the PyTorch team can add support for it and see the next case for a workaround.
+If it is a third-party C/C++ Python extension, please either wrap it into a PyTorch-understood custom operator (see https://pytorch.org/tutorials/advanced/custom_ops_landing_page.html for more details) or, if it is traceable, use `torch.compiler.allow_in_graph`.
+  torch._dynamo.utils.warn_once(explanation + "\n" + "\n".join(hints))
+[rank0]:W0728 00:03:08.313000 375298 torch/_dynamo/convert_frame.py:1853] [22/8] torch._dynamo hit config.recompile_limit (8)
+[rank0]:W0728 00:03:08.313000 375298 torch/_dynamo/convert_frame.py:1853] [22/8]    function: 'torch_dynamo_resume_in_from_torch_at_221' (/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db/lib/python3.12/site-packages/warp/_src/torch.py:221)
+[rank0]:W0728 00:03:08.313000 375298 torch/_dynamo/convert_frame.py:1853] [22/8]    last reason: 22/7: tensor 't' dtype mismatch. expected Int, actual Bool
+[rank0]:W0728 00:03:08.313000 375298 torch/_dynamo/convert_frame.py:1853] [22/8] To log all recompilation reasons, use TORCH_LOGS="recompiles".
+[rank0]:W0728 00:03:08.313000 375298 torch/_dynamo/convert_frame.py:1853] [22/8] To diagnose recompilation issues, see https://docs.pytorch.org/docs/main/user_guide/torch_compiler/compile/programming_model.recompilation.html

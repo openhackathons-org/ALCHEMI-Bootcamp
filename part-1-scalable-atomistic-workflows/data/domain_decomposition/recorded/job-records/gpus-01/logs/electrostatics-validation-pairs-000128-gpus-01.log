@@ -1,0 +1,3 @@
+/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/models/aimnet2.py:342: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:838.)
+  values = [float(v) for v in (rc_s, rc_v) if v is not None]

@@ -6,6 +6,7 @@ import importlib.util
 from hashlib import sha256
 from pathlib import Path, PurePosixPath
 import re
+import subprocess
 
 import pytest
 
@@ -346,6 +347,33 @@ def test_part1_directory_copy_has_no_undeclared_files() -> None:
             unclassified.append(relative_path)
 
     assert unclassified == []
+
+
+def test_self_indexed_result_bundles_are_fully_tracked() -> None:
+    if not (ROOT / ".git").exists():
+        pytest.skip("Git metadata is not present in this source copy")
+
+    expected = _self_indexed_bundle_paths()
+    completed = subprocess.run(
+        [
+            "git",
+            "-C",
+            str(ROOT),
+            "ls-files",
+            "-z",
+            "--",
+            *SELF_INDEXED_PART1_BUNDLE_ROOTS,
+        ],
+        check=True,
+        capture_output=True,
+    )
+    tracked = {
+        relative.decode("utf-8")
+        for relative in completed.stdout.split(b"\0")
+        if relative
+    }
+
+    assert tracked == expected
 
 
 def test_relative_links_resolve_within_the_clean_image() -> None:

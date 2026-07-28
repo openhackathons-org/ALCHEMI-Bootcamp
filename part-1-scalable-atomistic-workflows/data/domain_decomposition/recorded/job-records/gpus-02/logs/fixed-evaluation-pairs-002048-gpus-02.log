@@ -1,0 +1,92 @@
+/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db/lib/python3.12/site-packages/physicsnemo/utils/logging/launch.py:327: SyntaxWarning: invalid escape sequence '\.'
+  key = re.sub("[^a-zA-Z0-9\.\-\s\/\_]+", "", key)
+/home/scratch.nfedik_other/alchemi-ir-20260710/envs/part1-python-115666734fa7cd9e85887bc7b02c424d10f270db/lib/python3.12/site-packages/physicsnemo/utils/logging/launch.py:327: SyntaxWarning: invalid escape sequence '\.'
+  key = re.sub("[^a-zA-Z0-9\.\-\s\/\_]+", "", key)
+/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/models/aimnet2.py:342: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:838.)
+  values = [float(v) for v in (rc_s, rc_v) if v is not None]
+/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/models/aimnet2.py:342: UserWarning: Converting a tensor with requires_grad=True to a scalar may lead to unexpected behavior.
+Consider using tensor.detach() first. (Triggered internally at /pytorch/torch/csrc/autograd/generated/python_variable_methods.cpp:838.)
+  values = [float(v) for v in (rc_s, rc_v) if v is not None]
+INFO:nvalchemi.distributed._core.shard_wrappers:Registered 22 passthrough + 8 reduction ShardTensor wrappers
+INFO:nvalchemi.distributed._core.shard_wrappers:Registered 22 passthrough + 8 reduction ShardTensor wrappers
+INFO:nvalchemi.distributed.domain_parallel:[rank 1] priming forces (initial compute)
+INFO:nvalchemi.distributed.domain_parallel:[rank 0] priming forces (initial compute)
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/distributed/output_consolidation.py:298: UserWarning: output_consolidation: output 'charges' has no spec.output_kinds declaration; falling back to shape heuristic (shape=torch.Size([32132]), n_padded=32132). Declare on MLIPSpec.output_kinds to silence this warning.
+  _warn_undeclared_output_kind(key, value.shape, n_padded)
+/home/scratch.nfedik_other/alchemi-ir-20260710/stage/toolkit/nvalchemi-toolkit-331d6b2a17d7aabe64a3c77bc9b0cfdbc0e85409/nvalchemi/distributed/output_consolidation.py:298: UserWarning: output_consolidation: output 'charges' has no spec.output_kinds declaration; falling back to shape heuristic (shape=torch.Size([32132]), n_padded=32132). Declare on MLIPSpec.output_kinds to silence this warning.
+  _warn_undeclared_output_kind(key, value.shape, n_padded)
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed.domain_parallel:[rank 1] force priming complete
+INFO:nvalchemi.distributed.domain_parallel:[rank 0] force priming complete
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:PythonAdapter.install: replacing aimnet.nbops.mol_sum with _distributed_mol_sum
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.aev.ConvSV.forward with _distributed_conv_sv_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.LRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.adapter:MethodAdapter.install: wrapping aimnet.modules.lr.SRCoulomb.forward with _distributed_coulomb_forward
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 6532 ghosts = 32132 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 12500 ghosts = 38100 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 0] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+INFO:nvalchemi.distributed._core.particle_halo:[rank 1] particle_halo_padding: 25600 owned + 14892 ghosts = 40492 total
+[rank1]:[W728 00:13:02.861457602 ProcessGroupNCCL.cpp:4172] Warning: [PG ID 0 PG GUID 0(default_pg) Rank 1] An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In eager initialization mode, unbatched P2P ops are treated as independent collective ops, and are thus serialized with all other ops on this ProcessGroup, including other P2P ops. To avoid serialization, either create additional independent ProcessGroups for the P2P ops or use batched P2P ops. You can squash this warning by setting the environment variable TORCH_NCCL_SHOW_EAGER_INIT_P2P_SERIALIZATION_WARNING to false. (function operator())
+[rank0]:[W728 00:13:02.430210347 ProcessGroupNCCL.cpp:4172] Warning: [PG ID 0 PG GUID 0(default_pg) Rank 0] An unbatched P2P op (send/recv) was called on this ProcessGroup with size 2.  In eager initialization mode, unbatched P2P ops are treated as independent collective ops, and are thus serialized with all other ops on this ProcessGroup, including other P2P ops. To avoid serialization, either create additional independent ProcessGroups for the P2P ops or use batched P2P ops. You can squash this warning by setting the environment variable TORCH_NCCL_SHOW_EAGER_INIT_P2P_SERIALIZATION_WARNING to false. (function operator())
