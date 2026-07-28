@@ -94,8 +94,6 @@ def test_release_link_rebasing_uses_current_notebook_local_references() -> None:
         "assets/images/banner_candidates/"
         "water-ir-v2-04-trajectory-to-spectrum.png",
         "COMPUTE_LAB_RUNBOOK.md#5-build-and-check-the-recorded-result-set",
-        "COMPUTE_LAB_RUNBOOK.md"
-        "#6-check-the-separate-distributedpipeline-campaign",
         "../part-2-batched-adsorption-toolkit/README.md",
         "../THIRD_PARTY_NOTICES.md",
     )
@@ -1212,6 +1210,34 @@ def test_packaged_runtime_check_is_validated_and_hashed(tmp_path: Path) -> None:
     assert result["versions"]["packmol"] == VALIDATOR.EXPECTED_PACKMOL_VERSION
 
 
+def test_review_validation_uses_the_recorded_calculation_source(
+    tmp_path: Path,
+) -> None:
+    report = packaged_runtime_check()
+    path = tmp_path / VALIDATOR.RUNTIME_CHECK_NAME
+    path.write_text(json.dumps(report), encoding="utf-8")
+
+    result = VALIDATOR.validate_packaged_runtime_check(
+        path,
+        source_root=tmp_path,
+        expected_source=report["source"],
+    )
+
+    assert result["source"] == report["source"]
+
+    different_source = deepcopy(report["source"])
+    different_source["repository_commit"] = "0" * 40
+    with pytest.raises(
+        RuntimeError,
+        match="does not match the calculation validation",
+    ):
+        VALIDATOR.validate_packaged_runtime_check(
+            path,
+            source_root=tmp_path,
+            expected_source=different_source,
+        )
+
+
 @pytest.mark.parametrize(
     ("path", "value", "message"),
     [
@@ -1985,6 +2011,17 @@ def test_run_details_require_pinned_sevennet_and_structure_manifests() -> None:
     )
     assert result["nci_subset_sha256"] == VALIDATOR.NCI_ATLAS_SUBSET_SHA256
     assert result["domain_decomposition_bundle"] == expected_domain_bundle
+
+    calculation_notebook_sha256 = "f" * 64
+    details["notebook_sha256"] = calculation_notebook_sha256
+    result = VALIDATOR.validate_run_details(
+        manifest,
+        source_notebook,
+        ROOT,
+        expected_notebook_sha256=calculation_notebook_sha256,
+    )
+    assert result["notebook_sha256"] == calculation_notebook_sha256
+    details["notebook_sha256"] = VALIDATOR.sha256_file(source_notebook)
 
     details["domain_decomposition_bundle"] = {"manifest_sha256": "0" * 64}
     with pytest.raises(RuntimeError, match="does not match the live bundle"):

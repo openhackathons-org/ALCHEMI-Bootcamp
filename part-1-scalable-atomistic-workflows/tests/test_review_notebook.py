@@ -269,8 +269,6 @@ def test_local_markdown_references_are_rebased_for_release_copy(
                 'water-ir-v2-04-trajectory-to-spectrum.png">\n'
                 "[domain run](COMPUTE_LAB_RUNBOOK.md"
                 "#5-build-and-check-the-recorded-result-set)\n"
-                "[pipeline run](COMPUTE_LAB_RUNBOOK.md"
-                "#6-check-the-separate-distributedpipeline-campaign)\n"
                 "[Part 2](../part-2-batched-adsorption-toolkit/README.md)\n"
                 "[notices](../THIRD_PARTY_NOTICES.md)\n"
                 "![embedded](attachment:preview.png)\n"
@@ -294,10 +292,6 @@ def test_local_markdown_references_are_rebased_for_release_copy(
             "../../COMPUTE_LAB_RUNBOOK.md"
             "#5-build-and-check-the-recorded-result-set"
         ),
-        "COMPUTE_LAB_RUNBOOK.md#6-check-the-separate-distributedpipeline-campaign": (
-            "../../COMPUTE_LAB_RUNBOOK.md"
-            "#6-check-the-separate-distributedpipeline-campaign"
-        ),
         "../part-2-batched-adsorption-toolkit/README.md": (
             "../../../part-2-batched-adsorption-toolkit/README.md"
         ),
@@ -306,7 +300,6 @@ def test_local_markdown_references_are_rebased_for_release_copy(
     source = reviewed.cells[0].source
     assert "../../assets/images/banner_candidates/" in source
     assert "../../COMPUTE_LAB_RUNBOOK.md#5-" in source
-    assert "../../COMPUTE_LAB_RUNBOOK.md#6-" in source
     assert "../../../part-2-batched-adsorption-toolkit/README.md" in source
     assert "../../../THIRD_PARTY_NOTICES.md" in source
     assert "attachment:preview.png" in source
