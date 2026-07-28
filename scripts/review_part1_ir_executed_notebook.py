@@ -9,6 +9,7 @@ from datetime import datetime, timezone
 import hashlib
 from importlib.util import find_spec
 from pathlib import Path
+import re
 import shutil
 import sys
 import sysconfig
@@ -39,6 +40,30 @@ OVITO_NBEXTENSION_RELATIVE_PATH = (
     / "nbextensions"
     / OVITO_WIDGET_MODULE
     / "index.js"
+)
+KNOWN_UPSTREAM_WARNING_PATTERNS = tuple(
+    re.compile(pattern, re.DOTALL)
+    for pattern in (
+        (
+            r"^.*physicsnemo/utils/logging/launch[.]py:\d+: SyntaxWarning: "
+            r"invalid escape sequence.*\n\s*key = re[.]sub.*$"
+        ),
+        (
+            r"^.*nvalchemi/models/aimnet2[.]py:\d+: UserWarning: Converting a "
+            r"tensor with requires_grad=True to a scalar.*\n"
+            r"Consider using tensor[.]detach[(][)] first[.].*\n"
+            r"\s*values =.*$"
+        ),
+        (
+            r"^.*torch/_inductor/compile_fx[.]py:\d+: UserWarning: TensorFloat32 "
+            r"tensor cores for float32 matrix multiplication available but not "
+            r"enabled[.].*\n\s*warnings[.]warn[(](?:[)])?$"
+        ),
+        (
+            r"^Sets are not currently considered sequences, but this may change "
+            r"in the future, so consider avoiding using them[.]$"
+        ),
+    )
 )
 
 
@@ -101,6 +126,33 @@ def preserve_saved_widget_state(
     reviewed.metadata["widgets"] = copy.deepcopy(saved_widgets)
     state = saved_widgets.get(WIDGET_STATE_MIME, {}).get("state", {})
     return len(state)
+
+
+def remove_known_upstream_warnings(reviewed: nbformat.NotebookNode) -> int:
+    """Remove exact warning-only stderr blocks from the learner review copy."""
+
+    removed = 0
+    for cell in reviewed.cells:
+        if cell.cell_type != "code":
+            continue
+        kept_outputs = []
+        for output in cell.get("outputs", []):
+            text = output.get("text")
+            is_known_warning = (
+                output.get("output_type") == "stream"
+                and output.get("name") == "stderr"
+                and isinstance(text, str)
+                and any(
+                    pattern.fullmatch(text.strip())
+                    for pattern in KNOWN_UPSTREAM_WARNING_PATTERNS
+                )
+            )
+            if is_known_warning:
+                removed += 1
+            else:
+                kept_outputs.append(output)
+        cell.outputs = kept_outputs
+    return removed
 
 
 def rebase_local_markdown_references(
@@ -455,6 +507,7 @@ def main() -> int:
 
     saved_widget_models_preserved = preserve_saved_widget_state(reviewed, executed)
     progress_outputs_flattened = flatten_saved_progress_cards(reviewed, executed)
+    upstream_warning_streams_removed = remove_known_upstream_warnings(reviewed)
     rebased_references = rebase_local_markdown_references(
         reviewed,
         source_dir=args.source.resolve().parent,
@@ -469,11 +522,13 @@ def main() -> int:
         "code_sources_unchanged": True,
         "progress_outputs_flattened": progress_outputs_flattened,
         "saved_widget_models_preserved": saved_widget_models_preserved,
+        "upstream_warning_streams_removed": upstream_warning_streams_removed,
         "rebased_local_markdown_references": rebased_references,
         "reason": (
-            "Refreshed learner-facing Markdown and kept its local images and links "
-            "working from the release directory; numerical code and outputs are "
-            "unchanged."
+            "Refreshed learner-facing Markdown, removed only exact one-time "
+            "upstream warning streams, and kept local images and links working "
+            "from the release directory. Numerical code and results are unchanged; "
+            "the original executed notebook is preserved."
         ),
     }
     nbformat.validate(reviewed)

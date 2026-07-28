@@ -21,11 +21,26 @@ study is now Stage 3 of the learner notebook; the broader DESS study remains a
 research prototype outside the tutorial.
 
 The current source selects Toolkit Core `331d6b2` and Toolkit-Ops `e8e7a74`.
-Complete-notebook job `3315568` checked the preceding 88-code-cell source at
-those pins. It took `798.752 s` of code time and `808.478 s` of notebook wall
-time on one H100 PCIe; its eight Stage 3 code cells took `22.988 s`. The current
-learner cleanup has 92 code cells, including ten in Stage 3, so an exact-source
-rerun is pending.
+Complete-notebook job `3317215` ran commit
+`1eca73058c5bae4a164f3b07c3e12fa944030086` at those pins on one NVIDIA H100
+PCIe. All 92 code cells completed and none failed. The code took `770.760 s`
+(`12:51`), notebook wall time was `781.144 s` (`13:01`), and scheduler elapsed
+time was `15:49` with exit `0:0`.
+
+| Current source section | Code time |
+|---|---:|
+| Setup and imports | 23.476 s |
+| Stage 1 | 18.211 s |
+| Stage 2 | 19.250 s |
+| Stage 3, ten code cells | 22.064 s |
+| Stage 4 | 17.649 s |
+| Stage 5 | 72.690 s |
+| Stage 6 | 567.180 s |
+| Stage 7 | 30.238 s |
+| **Total code time** | **770.760 s (12:51)** |
+
+The final notebook changes only the displayed timing text. Its 92 code cells
+are byte-for-byte the same as the notebook that ran.
 
 ## Historical focused H100 run: older six-cell Stage 3 source
 
@@ -37,9 +52,9 @@ first calls, one shared D3 pass, the composed-model checks, the independent
 force check, reference analysis, and plotting. Checkpoint downloads, kernel
 startup, earlier cells, and result packaging were outside the measured range.
 
-The current Stage 3 has ten code cells. Its exact-source timing is pending; use
-the complete job `3315568` above only for pacing until the replacement run
-finishes.
+The current Stage 3 has ten code cells. Exact-source job `3317215` measured
+them at `22.064 s`. That current result supersedes the historical focused
+timing for classroom pacing.
 
 The complete-model maximum MAE across the three curves was
 `0.368655 kcal/mol` against DFT-D3 and `0.351350 kcal/mol` against
@@ -592,8 +607,8 @@ a diagnostic timing for the wrong phase route. Old-pin job `3189534` spent
 `598.6 s` on the exact 25,000-update route. The 20,000-step production record
 is an explicit teaching choice: it keeps the live demonstration short while
 retaining two complete analysis windows. It is not presented as a converged IR
-spectrum. The merged notebook needs a fresh H100 run with the current Toolkit
-versions.
+spectrum. Current-source job `3317215` measured the complete Stage 6 section at
+`567.180 s` on one H100 PCIe.
 
 ## Stage 6 detail: the IR centerpiece
 
@@ -689,8 +704,9 @@ Three phases run on one batch of {H₂O, D₂O, (H₂O)₆, (D₂O)₆} (~42 ato
    47 code cells, and produced a
    reviewed notebook and standalone HTML. Automated checks are not a human
    visual review, which remains pending. That run established a 15:37 H100
-   scheduler wall time and 9.98-minute dynamics time; the seven-stage current-
-   pin merge still needs its own run. Early FIRE convergence is reported as
+   scheduler wall time and 9.98-minute dynamics time. Current-pin job `3317215`
+   has now run the seven-stage, 92-code-cell source with no failed cells. Early
+   FIRE convergence is reported as
    steps used against a limit rather than a partially filled "complete" task.
    The source also replaces illustration placeholders with accessible process
    diagrams and builds its final results summary from live errors, accepted
@@ -838,12 +854,7 @@ classical MD. These questions remain:
    isotope or cluster–monomer centroid differences.
 2. Retain the explicit no-common-intensity/no-IR-MAE rule unless a matched
    experimental/computational protocol and metric are added.
-3. Run the merged notebook on an H100 with the current Toolkit versions and
-   replace the earlier 15:37 pacing reference with measured section and
-   scheduler times. The
-   declared 10 ps production record is the qualitative teaching calculation;
-   there is no hidden short mode or hardware-dependent cutoff.
-4. Decide whether the nearly free VDOS contrast earns its notebook space; it
+3. Decide whether the nearly free VDOS contrast earns its notebook space; it
    must remain secondary to predicted-charge IR if retained.
 
 ## Remaining release checks
@@ -853,8 +864,6 @@ classical MD. These questions remain:
   redistribution terms as described in `THIRD_PARTY_NOTICES.md`.
 - Keep the D3 parameter tensor external unless its redistribution rights are
   confirmed.
-- Run the complete merged notebook on one H100 at the current Core and
-  Toolkit-Ops pins, then validate and checksum the full saved output.
 - Run the complete test suite inside the exact declared image rather than
   substituting the older local environment.
 - Build the clean distributable Docker image and repeat its import/runtime

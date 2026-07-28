@@ -2,7 +2,7 @@
 
 This is the calculation record for the focused NCI Atlas set used in Stage 3
 of the active seven-stage Part 1. It explains the selected reference levels,
-interaction-energy definition, measured local checks, and remaining H100 run.
+interaction-energy definition, measured local checks, and exact H100 timing.
 DESS is not included in the learner notebook.
 
 The later IR stages use a separate B97-3c harmonic reference and selected
@@ -11,9 +11,13 @@ not share an accuracy metric with the NCI interaction curves.
 
 The historical focused NCI run passed on one H100 with the current Toolkit
 source pins. Its six code cells took `22.643220 s`, measured with CUDA
-synchronization. Complete-notebook job `3315568` later measured its eight-cell
-Stage 3 at `22.988 s` and all notebook code at `798.752 s`. The current learner
-cleanup has ten Stage 3 code cells, so its exact-source rerun remains pending.
+synchronization. Exact complete-notebook job `3317215` ran commit
+`1eca73058c5bae4a164f3b07c3e12fa944030086` on one NVIDIA H100 PCIe. Its ten
+Stage 3 code cells took `22.064 s`; all 92 notebook code cells completed with
+no failures and took `770.760 s` in total. Notebook wall time was `781.144 s`,
+scheduler elapsed time was `15:49`, and the job exited `0:0`.
+The final notebook changes only the displayed timing text; its 92 code cells
+are byte-for-byte the same as the notebook that ran.
 
 ## Selected data and model
 
