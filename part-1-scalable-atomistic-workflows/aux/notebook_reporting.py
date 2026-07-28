@@ -26,7 +26,7 @@ from .run_output import WaterRunManifestInput, WaterRunResults
 _RESULT_SUMMARY_NAMES = (
     "ADSORBATES",
     "DISTRIBUTED_PIPELINE_NOT_REPORTED_REASON",
-    "DOMAIN_PLANNED_ATOM_COUNTS",
+    "DOMAIN_METHODOLOGY",
     "FULL_SERIAL_BATCH_TOLERANCE_EV",
     "INFLIGHT_ACTIVE_SYSTEMS",
     "INFLIGHT_NVE_STEPS",
@@ -152,13 +152,7 @@ _MANIFEST_MODEL_SETTING_NAMES = (
 
 _MANIFEST_WORKFLOW_SETTING_NAMES = (
     "COVALENT_OH_CUTOFF_A",
-    "DOMAIN_CONSTRUCTION_DENSITY_G_CM3",
-    "DOMAIN_HALO_SKIN_A",
     "DOMAIN_METHODOLOGY",
-    "DOMAIN_PACKMOL_PRECISION_A",
-    "DOMAIN_PACKMOL_SEED",
-    "DOMAIN_PACKMOL_TOLERANCE_A",
-    "DOMAIN_LIVE_MOLECULES_PER_SPECIES",
     "DT_FS",
     "ENERGY_EXCURSION_ADVISORY_MEV_PER_ATOM",
     "HARMONIC_CHARGE_NEUTRALITY_TOLERANCE_E",
@@ -202,12 +196,9 @@ _MANIFEST_WORKFLOW_SETTING_NAMES = (
     "OH_REGION_WINDOWS_CM1",
     "OXYGEN_CONNECTIVITY_CUTOFF_A",
     "PAIR_TEMPERATURE_RELATIVE_TOLERANCE",
-    "PME_ACCURACY",
     "PME_ALPHA_A_INV",
     "PME_MESH_DIMENSIONS",
-    "PME_MESH_SAFETY_FACTOR",
     "PME_MESH_SPACING_A",
-    "PME_REALSPACE_CUTOFF_A",
     "PRODUCTION_STEPS",
     "TEMPERATURE_K",
     "WARMUP_STEPS",
@@ -218,7 +209,6 @@ _MANIFEST_WORKFLOW_SETTING_NAMES = (
 _MANIFEST_CHECK_NAMES = (
     "ADSORBATES",
     "COMPOSITION_FD_ENERGY_ROUTE",
-    "DOMAIN_CHARGE_SUM_TOLERANCE_E",
     "FD_STEP_A",
     "INFLIGHT_SYSTEMS",
     "NCI_VALIDATION",
@@ -233,6 +223,11 @@ _MANIFEST_CHECK_NAMES = (
     "component_closure_error",
     "counts",
     "domain_charge_sum",
+    "domain_charge_abs_residual_per_atom",
+    "domain_charge_dtype",
+    "domain_charge_finite",
+    "domain_charge_residual_e",
+    "domain_charge_target_e",
     "domain_elapsed_s",
     "domain_energy_ev",
     "domain_fmax_ev_a",
@@ -391,6 +386,7 @@ def build_part1_results_summary(
     counts = values["counts"]
     domain_result = values["domain_result"]
     domain_view = values["domain_view"]
+    methodology = values["DOMAIN_METHODOLOGY"]
     nci_metrics = values["nci_metrics"]
 
     return build_results_summary(
@@ -449,7 +445,10 @@ def build_part1_results_summary(
         ),
         domain_successful_cases=domain_view.successful_case_count,
         domain_failed_cases=domain_view.failed_case_count,
-        domain_planned_max_atom_count=int(values["DOMAIN_FIXED_ATOM_COUNT"]),
+        domain_planned_max_atom_count=(
+            methodology.fixed_molecules_per_species
+            * methodology.atoms_per_composition_unit
+        ),
         domain_measured_max_atom_count=domain_view.measured_max_atom_count,
         campaign_available=False,
         campaign_unavailable_reason=values["DISTRIBUTED_PIPELINE_NOT_REPORTED_REASON"],
@@ -774,23 +773,23 @@ def _build_manifest_workflow_settings(
             "inflight_active_systems": values["INFLIGHT_ACTIVE_SYSTEMS"],
             "inflight_nvt_steps": values["INFLIGHT_NVT_STEPS"],
             "inflight_nve_steps": values["INFLIGHT_NVE_STEPS"],
-            "domain_live_molecules_per_species": values[
-                "DOMAIN_LIVE_MOLECULES_PER_SPECIES"
-            ],
-            "domain_construction_density_g_cm3": values[
-                "DOMAIN_CONSTRUCTION_DENSITY_G_CM3"
-            ],
-            "domain_packmol_tolerance_a": values["DOMAIN_PACKMOL_TOLERANCE_A"],
-            "domain_packmol_precision_a": values["DOMAIN_PACKMOL_PRECISION_A"],
-            "domain_packmol_seed": values["DOMAIN_PACKMOL_SEED"],
-            "domain_pme_realspace_cutoff_a": values["PME_REALSPACE_CUTOFF_A"],
-            "domain_pme_mesh_safety_factor": values["PME_MESH_SAFETY_FACTOR"],
+            "domain_live_molecules_per_species": (
+                methodology.live_molecules_per_species
+            ),
+            "domain_construction_density_g_cm3": (
+                methodology.construction_density_g_cm3
+            ),
+            "domain_packmol_tolerance_a": methodology.packmol_tolerance_a,
+            "domain_packmol_precision_a": methodology.packmol_precision_a,
+            "domain_packmol_seed": methodology.packmol_seed,
+            "domain_pme_realspace_cutoff_a": methodology.pme_realspace_cutoff_a,
+            "domain_pme_mesh_safety_factor": methodology.pme_mesh_safety_factor,
             "domain_pme_alpha_a_inv": values["PME_ALPHA_A_INV"],
             "domain_pme_mesh_dimensions": values["PME_MESH_DIMENSIONS"],
             "domain_pme_mesh_spacing_a": values["PME_MESH_SPACING_A"],
-            "domain_pme_accuracy": values["PME_ACCURACY"],
+            "domain_pme_accuracy": methodology.pme_accuracy,
             "domain_ewald_reference_accuracy": (methodology.ewald_reference_accuracy),
-            "domain_halo_skin_a": values["DOMAIN_HALO_SKIN_A"],
+            "domain_halo_skin_a": methodology.domain_halo_skin_a,
             "domain_model_cutoff_a": values["domain_cutoff_a"],
             "domain_compile": values["domain_config"].compile,
         },
@@ -906,11 +905,14 @@ def _build_manifest_checks(
             "domain_atom_count": int(values["domain_result"].num_nodes),
             "domain_energy_eV": values["domain_energy_ev"],
             "domain_force_max_eV_A": values["domain_fmax_ev_a"],
+            "domain_charge_dtype": values["domain_charge_dtype"],
+            "domain_charge_target_e": values["domain_charge_target_e"],
             "domain_charge_sum_e": domain_charge_sum,
-            "domain_charge_sum_tolerance_e": values["DOMAIN_CHARGE_SUM_TOLERANCE_E"],
-            "domain_charge_neutral": (
-                abs(domain_charge_sum) <= values["DOMAIN_CHARGE_SUM_TOLERANCE_E"]
-            ),
+            "domain_charge_residual_e": values["domain_charge_residual_e"],
+            "domain_charge_abs_residual_per_atom": values[
+                "domain_charge_abs_residual_per_atom"
+            ],
+            "domain_charge_finite": values["domain_charge_finite"],
             "domain_elapsed_s": values["domain_elapsed_s"],
             "domain_peak_memory_GB": values["domain_peak_memory_gb"],
             "domain_recorded_results_available": domain_view.available,

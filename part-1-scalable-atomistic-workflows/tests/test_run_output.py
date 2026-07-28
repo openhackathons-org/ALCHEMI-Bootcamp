@@ -236,9 +236,12 @@ CHECK_SECTION_KEYS = {
         "domain_atom_count",
         "domain_energy_eV",
         "domain_force_max_eV_A",
+        "domain_charge_dtype",
+        "domain_charge_target_e",
         "domain_charge_sum_e",
-        "domain_charge_sum_tolerance_e",
-        "domain_charge_neutral",
+        "domain_charge_residual_e",
+        "domain_charge_abs_residual_per_atom",
+        "domain_charge_finite",
         "domain_elapsed_s",
         "domain_peak_memory_GB",
         "domain_recorded_results_available",
@@ -415,7 +418,7 @@ def test_manifest_input_flattens_all_current_fields_without_changing_names() -> 
     expected_check_keys = {key for keys in CHECK_SECTION_KEYS.values() for key in keys}
     assert len(expected_run_detail_keys) == 28
     assert len(expected_setting_keys) == 93
-    assert len(expected_check_keys) == 52
+    assert len(expected_check_keys) == 55
     assert set(manifest_input.run_details) == expected_run_detail_keys
     assert set(manifest_input.settings) == expected_setting_keys
     assert set(manifest_input.checks) == expected_check_keys
