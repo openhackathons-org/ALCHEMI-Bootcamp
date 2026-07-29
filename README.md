@@ -67,6 +67,11 @@ Open the Jupyter URL in your browser and launch either notebook:
 
 The Part 1 notebook's run-configuration cell exposes a `RUN_SCOPE` toggle — `"short"` runs one representative adsorption example with six starting structures, `"full"` runs the complete adsorption grid — and a result-source toggle, where `"saved"` reads pre-computed results so you can step through the tutorial without waiting on the GPU. Part 2 has the same idea via `RESULT_SOURCE="saved"`. These are useful in workshop settings with limited GPU availability.
 
+## Developers who shaped the tutorials
+
+- **[Ryan Reese](https://github.com/Ryan-Reese)** — creator of the melting-point study using the NVIDIA ALCHEMI Toolkit.
+- **[Anoushka Bhutani](https://github.com/anoushka2000)** — developer of companion challenges for the tutorials. These challenges will be integrated in a future update.
+
 ## License
 
 Apache 2.0 — see [LICENSE](LICENSE).
