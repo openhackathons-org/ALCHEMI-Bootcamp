@@ -692,6 +692,7 @@ from aux.ir_display import (
     prepare_monomer_reference_display,
 )
 from aux.hooks import (
+    FusedStageStatusHook,
     NotebookStageProgressHook,
     StageStepCounterHook,
     add_stage_step_counters,
@@ -765,7 +766,7 @@ from aux.structures import (
     make_water_dimer_scan,
     make_water_monomer,
 )
-from aux.ui import callout, figure_with_alt, readable_table
+from aux.ui import FusedStageStatusCard, callout, figure_with_alt, readable_table
 helper_imports_progress.complete("Tutorial helpers loaded")
 """,
             source_hidden=True,
@@ -4581,6 +4582,15 @@ run_progress = NotebookProgress(
     total=TOTAL_DYNAMICS_STEPS,
     unit="steps",
 )
+fused_status_card = FusedStageStatusCard(
+    title="Live NVT → NVE routing", total=batch.num_graphs
+)
+fused_status_hook = FusedStageStatusHook(
+    status_labels={IR_WARMUP_STATUS: "NVT", IR_PRODUCTION_STATUS: "NVE"},
+    frequency=1_000,
+    card=fused_status_card,
+)
+dynamics.register_fused_hook(fused_status_hook)
 dynamics.register_hook(
     NotebookStageProgressHook(run_progress, frequency=1_000, label="NVT + NVE")
 )
@@ -4594,6 +4604,9 @@ elapsed_s = perf_counter() - started
 
 trajectory = ir_hook.result()
 stage_counts = ir_hook.stage_counts
+fused_status_hook.finalize(
+    batch=final_batch, fused_step=dynamics.step_count, workflow=dynamics
+)
 run_progress.complete(
     f"{TOTAL_DYNAMICS_STEPS:,} updates complete in {elapsed_s / 60:.2f} min"
 )
@@ -4612,6 +4625,11 @@ display(readable_table(
         ),
     ], columns=["Trajectory result", "Value"]),
     label="Completed dynamics run",
+    show_index=False,
+))
+display(readable_table(
+    fused_status_hook.table(),
+    label="Observed FusedStage routing",
     show_index=False,
 ))
 """,
@@ -6723,6 +6741,30 @@ display(callout(
 """,
         ),
     )
+    insert_before(
+        "save-relaxed-structures",
+        markdown(
+            "zarr-storage-note",
+            r"""
+### Save Toolkit data with Zarr
+
+Zarr is chunked, directory-backed storage. Toolkit writes one graph per sample,
+so ordered snapshots form a trajectory and other collections form datasets.
+
+`ZarrData` receives structures selected by the workflow or a snapshot hook.
+`AtomicDataZarrWriter` writes or appends `AtomicData` and `Batch` samples;
+`AtomicDataZarrReader` reopens them.
+
+Here we save four relaxed endpoints, not the FIRE2 history. The 20,000-frame IR
+trajectory remains a checksummed NPZ archive.
+"""
+            + "\n\n"
+            + callout_html(
+                "The workflow chooses the frames; Zarr stores them.",
+                kind="note",
+            ),
+        ),
+    )
 
     insert_before(
         "compile-fixed-ir-model",
@@ -6886,12 +6928,26 @@ inflight_stage_progress.complete("counters, trace, neighbors, and safety hooks a
 inflight_run_progress = NotebookProgress(
     title="Run the inflight queue", total=2, unit="steps"
 )
+inflight_status_card = FusedStageStatusCard(
+    title="Live inflight routing", total=INFLIGHT_SYSTEMS
+)
+inflight_status_hook = FusedStageStatusHook(
+    status_labels={IR_WARMUP_STATUS: "NVT", IR_PRODUCTION_STATUS: "NVE"},
+    total_systems=INFLIGHT_SYSTEMS,
+    frequency=1,
+    card=inflight_status_card,
+)
+inflight.register_fused_hook(inflight_status_hook)
 run_result = inflight.run(batch=None)
 assert run_result is None and inflight_sampler.exhausted and inflight.done
 inflight_run_progress.advance(message="every queued system reached HostMemory")
 
 completed = inflight_sink.drain()
 assert completed.num_graphs == INFLIGHT_SYSTEMS
+inflight_status_hook.finalize(
+    completed_count=completed.num_graphs,
+    fused_step=inflight.step_count,
+)
 inflight_run_progress.complete(f"{completed.num_graphs:,} systems returned to CPU")
 """,
         ),
@@ -6941,6 +6997,11 @@ inflight_summary = pd.DataFrame([
 ], columns=["Measure", "Value"])
 display(readable_table(inflight_summary,
     label="Inflight batching result", show_index=False))
+display(readable_table(
+    inflight_status_hook.table(),
+    label="Observed inflight stage occupancy",
+    show_index=False,
+))
 display(readable_table(
     inflight_trace_rows.drop(columns="Failures"),
     label="Observed active-batch refills",
@@ -7667,15 +7728,18 @@ The workflow now changes from independent predictions to repeated updates: compo
         r"""
 ### Hooks: react while a workflow runs
 
-A hook is code that Toolkit calls at a chosen point and frequency. It receives the current `Batch`, so it can inspect results, update workflow state, or record data without changing the integrator.
+A hook chooses a `stage` and `frequency`; Toolkit calls its `__call__(ctx, stage)` method. The `DynamicsContext` named `ctx` carries the current `Batch` and step, so the hook can inspect, record, or update workflow state.
 
 `NaN` means *not a number*; `Inf` means a value overflowed to infinity. Either makes later trajectory steps unreliable. `NaNDetectorHook` checks energy and forces, plus velocities in this workflow, and reports the failing field, step, and structure before stopping.
 
-Other hooks here rebuild neighbors, detect convergence, count stage updates, record dipoles, write a log, and update progress. `register_hook(...)` attaches to one stage; `register_fused_hook(...)` sees the complete batch managed by `FusedStage`.
+`register_hook(...)` attaches a hook to the chosen dynamics object.
+`register_fused_hook(...)` is specific to `FusedStage` and sees its complete
+active batch. The read-only status hook below uses that view to show queued,
+NVT, NVE, and completed counts without changing the simulation.
 """
         + "\n\n"
         + callout_html(
-            "Relaxation checks every step. The longer dynamics run checks every 100 steps to reduce overhead.",
+            "Frequency controls cost: the long run samples status every 1,000 steps, while the short refill demo checks every fused iteration.",
             kind="note",
         ),
     )
@@ -7733,7 +7797,7 @@ passes it to each hook; you do not construct it.
 
 **Toolkit APIs:** `FusedStage`, `Hook`, `ConvergenceHook`, `DynamicsContext`, `register_hook`, and `register_fused_hook`.
 
-**Tutorial helpers:** `PredictedChargeIRHook`, `StageStepCounterHook`, `NotebookStageProgressHook`, and `converge_after_steps`.
+**Tutorial helpers:** `PredictedChargeIRHook`, `StageStepCounterHook`, `FusedStageStatusHook`, `NotebookStageProgressHook`, and `converge_after_steps`.
 """
         + "\n\n"
         + callout_html(
@@ -7746,15 +7810,17 @@ passes it to each hook; you do not construct it.
         r"""
 ### Connect NVT and NVE on one GPU
 
-NVT holds temperature near a target value; NVE then follows constant-energy dynamics without a thermostat. `nvt + nve` creates a Toolkit `FusedStage`.
+NVT approaches the target temperature; NVE continues without a thermostat.
+`nvt + nve` creates a Toolkit `FusedStage`.
 
-For each update:
+For each fused iteration:
 
-1. Toolkit evaluates the model once for the complete active batch.
-2. Each structure's `status` selects either the NVT or NVE update.
-3. A convergence hook advances that structure when its assigned step count is complete.
+1. Toolkit evaluates the first sub-stage's model once for the active batch.
+2. Each structure's `status` selects its NVT or NVE update.
+3. A convergence hook advances it when that stage is complete.
 
-Status belongs to each structure, so different structures can occupy different stages while sharing the model call. `FusedStage` uses the model attached to its first sub-stage for that shared evaluation. Here `nvt + nve` changes the update rule, not the model. The next section uses this fact to replace finished work from a larger queue.
+`nvt + nve` changes the update rule, not the model. Use a compatible model and
+the same device for every sub-stage.
 """
         + "\n\n"
         + process_diagram_html(
@@ -7770,7 +7836,7 @@ Status belongs to each structure, so different structures can occupy different s
         )
         + "\n\n"
         + callout_html(
-            "FusedStage reduces repeated work on one GPU. It is not a multi-GPU API.",
+            "`FusedStageStatusHook` reads the shared `DynamicsContext` without changing it. The run cell shows stage occupancy live and saves the transitions in a table.",
             kind="note",
         ),
     )
@@ -7827,31 +7893,25 @@ MD and DFT are normalized separately. One 10 ps trajectory is enough to demonstr
         r"""
 ### Many small systems: refill the active batch
 
-The queue can be larger than the active GPU `Batch`. Inflight execution
-replaces finished structures between `FusedStage` updates.
+The queue can exceed the active GPU `Batch`. Between model calls, `FusedStage`
+removes finished structures and `SizeAwareSampler` refills the released budget.
 
 The 2,048 entries repeat the eight Stage 2 dimers with copied complete-model
-outputs and new velocities. This tests scheduling and collection, not 2,048
-unique geometries.
+outputs and new velocities. This tests scheduling, not unique geometries.
 
-- `InMemoryDataset` holds the queue; production sources can load lazily.
-- `SizeAwareSampler` sets atom and structure limits only (`max_edges=None`) for
-  these homogeneous six-atom dimers.
+- `InMemoryDataset` holds the queue.
+- `SizeAwareSampler` admits structures that fit atom, edge, and graph limits.
+  These equal-size dimers use `max_edges=None`.
 - `HostMemory` stores completed results on the CPU.
-- `system_id` is stable across refills; `batch_idx` is only its current slot.
+- `system_id` stays stable during this run; `batch_idx` can change after a refill.
 
-Status 0 selects NVT, 1 selects NVE, and 2 means finished.
-The 256-system active limit is chosen so refills are visible; it is not a
-measured GPU capacity.
-`refill_frequency=1` checks for free capacity after every fused update without
-changing the timestep. `run(batch=None)` asks the sampler for the initial
-batch and replacements.
+The 256-system limit makes refills visible; it is not a measured GPU capacity.
+Limits are upper bounds: mixed sizes or the end of the queue can leave capacity
+unused. `refill_frequency=1` checks after every fused iteration, and
+`run(batch=None)` asks the sampler for initial and replacement work.
 
-The result hook observes the run without changing it. It records the actual
-active count and stable IDs at each refill, then checks the CPU result batch.
-`NaNDetectorHook` stops this teaching run if an energy, force, or velocity
-becomes non-finite; the terminal row records zero observed failures only after
-every expected ID has returned exactly once.
+The live hook shows queued, NVT, NVE, and completed counts. The final ID trace
+checks that all 2,048 return once. `NaNDetectorHook` stops on a non-finite value.
 """
         + "\n\n"
         + process_diagram_html(
@@ -10073,6 +10133,7 @@ summary_progress.complete("summary and saved-report records assembled")
         "relax",
         (
             "validate-relaxation",
+            "zarr-storage-note",
             "save-relaxed-structures",
             "reference-preflight",
             "observed-source-links",

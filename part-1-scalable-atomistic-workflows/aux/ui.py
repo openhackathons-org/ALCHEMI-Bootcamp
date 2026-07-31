@@ -8,7 +8,7 @@ network connection.  All caller-provided text is HTML-escaped.
 from __future__ import annotations
 
 import base64
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass
 from html import escape
 from io import BytesIO
@@ -32,6 +32,7 @@ ProgressState = Literal["ready", "running", "complete", "action"]
 
 __all__ = [
     "CalloutKind",
+    "FusedStageStatusCard",
     "NotebookProgress",
     "ProgressState",
     "ResultState",
@@ -41,6 +42,7 @@ __all__ = [
     "figure_placeholder_html",
     "figure_with_alt",
     "format_elapsed",
+    "fused_stage_status_html_string",
     "lesson_summary_html",
     "notebook_hero_html",
     "notebook_progress_html",
@@ -786,6 +788,302 @@ class NotebookProgress:
         """Mark all units complete and refresh the card."""
 
         self.update(done=self.total, message=message, state="complete")
+
+    def _refresh_display(self) -> None:
+        if self._widget is not None:
+            self._widget.value = self.render_string()
+            return
+        if self._display_handle is None:
+            return
+        try:
+            self._display_handle.update(self.render())
+        except Exception:
+            try:
+                self._display(self.render())
+            except Exception:
+                pass
+
+
+_FUSED_STATUS_COLORS = (
+    "#2563EB",
+    "#7C3AED",
+    "#C2410C",
+    "#0F766E",
+    "#BE123C",
+)
+
+
+def fused_stage_status_html_string(
+    *,
+    title: str,
+    total: int,
+    fused_step: int,
+    queued: int,
+    active: int,
+    status_counts: Mapping[str, int],
+    completed: int,
+    state: ProgressState = "running",
+    width_px: int = _CONTENT_WIDTH_PX,
+) -> str:
+    """Return one accessible snapshot of fused-stage batch occupancy."""
+
+    title = str(title).strip()
+    if not title:
+        raise ValueError("title must not be empty")
+    total = _positive_int(total, name="total")
+    width_px = _positive_int(width_px, name="width_px")
+    values = {
+        "fused_step": int(fused_step),
+        "queued": int(queued),
+        "active": int(active),
+        "completed": int(completed),
+    }
+    if any(value < 0 for value in values.values()):
+        raise ValueError("fused-stage counts and step must be non-negative")
+
+    normalized_counts: list[tuple[str, int]] = []
+    for label, count in status_counts.items():
+        clean_label = str(label).strip()
+        if not clean_label:
+            raise ValueError("status labels must not be empty")
+        count = int(count)
+        if count < 0:
+            raise ValueError("status counts must be non-negative")
+        normalized_counts.append((clean_label, count))
+    if len({label for label, _ in normalized_counts}) != len(normalized_counts):
+        raise ValueError("status labels must be unique")
+    if sum(count for _, count in normalized_counts) != values["active"]:
+        raise ValueError("status counts must add up to active")
+    if values["queued"] + values["active"] + values["completed"] != total:
+        raise ValueError("queued, active, and completed must add up to total")
+
+    status = _lookup_style(_PROGRESS_STYLES, state, name="progress state")
+    segments: list[str] = []
+    if values["queued"]:
+        segments.append(
+            f'<span aria-hidden="true" style="display:block;height:100%;'
+            f'width:{100.0 * values["queued"] / total:.4f}%;'
+            f'background:{_RAIL};"></span>'
+        )
+    legend: list[str] = []
+    for index, (label, count) in enumerate(normalized_counts):
+        color = _FUSED_STATUS_COLORS[index % len(_FUSED_STATUS_COLORS)]
+        if count:
+            segments.append(
+                f'<span aria-hidden="true" style="display:block;height:100%;'
+                f'width:{100.0 * count / total:.4f}%;background:{color};"></span>'
+            )
+        legend.append(
+            '<span style="display:inline-flex;align-items:center;gap:5px;">'
+            f'<span aria-hidden="true" style="width:9px;height:9px;border-radius:2px;'
+            f'background:{color};"></span>{_escaped_text(label)} '
+            f'<strong>{count:,}</strong></span>'
+        )
+    if values["completed"]:
+        segments.append(
+            f'<span aria-hidden="true" style="display:block;height:100%;'
+            f'width:{100.0 * values["completed"] / total:.4f}%;'
+            f'background:{_NVIDIA_GREEN};"></span>'
+        )
+    detail = ", ".join(
+        [
+            f"queued {values['queued']}",
+            f"active {values['active']}",
+            *(f"{label} {count}" for label, count in normalized_counts),
+            f"completed {values['completed']}",
+        ]
+    )
+    return (
+        f'<section class="alchemi-ui alchemi-fused-status" role="group" '
+        f'aria-label="{_escaped_attribute(title)} status" '
+        f'style="width:{width_px}px;max-width:100%;margin:10px 0;'
+        f'background:{_SURFACE};border:1px solid {_BORDER};'
+        f'border-radius:{_CARD_RADIUS_PX}px;padding:13px 15px;'
+        f'box-sizing:border-box;font-family:{_FONT_STACK};">'
+        '<div style="display:flex;align-items:flex-start;justify-content:space-between;'
+        'gap:14px;flex-wrap:wrap;margin-bottom:10px;">'
+        f'<strong style="color:{_TEXT};font-size:14px;line-height:1.35;">'
+        f'{_escaped_text(title)}</strong>'
+        f'<span style="display:inline-block;padding:3px 9px;border-radius:999px;'
+        f'background:{status.background};color:{status.foreground};font-size:11px;'
+        f'font-weight:800;letter-spacing:0.05em;">{status.label}</span></div>'
+        '<div style="display:grid;grid-template-columns:repeat(3,minmax(90px,1fr));'
+        'gap:8px;margin-bottom:10px;">'
+        f'<div><span style="color:{_MUTED};font-size:11px;">QUEUED</span><br>'
+        f'<strong style="color:{_TEXT};font-size:17px;">'
+        f'{values["queued"]:,}</strong></div>'
+        f'<div><span style="color:{_MUTED};font-size:11px;">ACTIVE</span><br>'
+        f'<strong style="color:{_TEXT};font-size:17px;">'
+        f'{values["active"]:,}</strong></div>'
+        f'<div><span style="color:{_MUTED};font-size:11px;">COMPLETED</span><br>'
+        f'<strong style="color:{_TEXT};font-size:17px;">'
+        f'{values["completed"]:,}</strong></div></div>'
+        f'<div role="img" aria-label="{_escaped_attribute(detail)}" '
+        f'style="height:10px;width:100%;display:flex;background:{_RAIL};'
+        f'border-radius:999px;overflow:hidden;">{"".join(segments)}</div>'
+        '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-top:9px;'
+        f'color:{_MUTED};font-size:12px;line-height:1.4;">'
+        f'{"".join(legend)}'
+        f'<span>Last routing change <strong>{values["fused_step"]:,}</strong></span>'
+        "</div></section>"
+    )
+
+
+class FusedStageStatusCard:
+    """Update one fused-stage status card in place during a notebook run."""
+
+    def __init__(
+        self,
+        *,
+        title: str,
+        total: int,
+        width_px: int = _CONTENT_WIDTH_PX,
+        auto_display: bool = True,
+    ) -> None:
+        self.title = str(title).strip()
+        if not self.title:
+            raise ValueError("title must not be empty")
+        self.total = _positive_int(total, name="total")
+        self.width_px = _positive_int(width_px, name="width_px")
+        self._snapshot: tuple[int, int, tuple[tuple[str, int], ...], int] | None = None
+        self._fused_step = 0
+        self._state: ProgressState = "running"
+        self._widget = None
+        self._display_handle = None
+        if auto_display:
+            self.show()
+
+    def _display(self, value: Any, *, display_id: bool | None = None) -> Any:
+        from IPython.display import display
+
+        if display_id is None:
+            return display(value)
+        return display(value, display_id=display_id)
+
+    def render_string(self) -> str:
+        """Render the latest snapshot as self-contained HTML."""
+
+        if self._snapshot is None:
+            return (
+                f'<section class="alchemi-ui alchemi-fused-status" role="status" '
+                f'style="width:{self.width_px}px;max-width:100%;margin:10px 0;'
+                f'background:{_SURFACE};border:1px solid {_BORDER};'
+                f'border-radius:{_CARD_RADIUS_PX}px;padding:13px 15px;'
+                f'box-sizing:border-box;font-family:{_FONT_STACK};">'
+                f'<strong style="color:{_TEXT};font-size:14px;">'
+                f'{_escaped_text(self.title)}</strong>'
+                f'<div style="color:{_MUTED};font-size:12px;margin-top:7px;">'
+                "Waiting for the first hook update</div></section>"
+            )
+        queued, active, status_counts, completed = self._snapshot
+        return fused_stage_status_html_string(
+            title=self.title,
+            total=self.total,
+            fused_step=self._fused_step,
+            queued=queued,
+            active=active,
+            status_counts=dict(status_counts),
+            completed=completed,
+            state=self._state,
+            width_px=self.width_px,
+        )
+
+    def render(self):
+        """Return the latest card as ``IPython.display.HTML``."""
+
+        from IPython.display import HTML
+
+        return HTML(self.render_string())
+
+    def show(self) -> None:
+        """Display the card once; subsequent updates replace it."""
+
+        if self._widget is not None or self._display_handle is not None:
+            return
+        try:
+            self._display_handle = self._display(self.render(), display_id=True)
+            if self._display_handle is not None:
+                return
+        except Exception:
+            self._display_handle = None
+        try:
+            import ipywidgets as widgets
+
+            self._widget = widgets.HTML(value=self.render_string())
+            self._display(self._widget)
+        except Exception:
+            self._widget = None
+
+    def update(
+        self,
+        *,
+        fused_step: int,
+        queued: int,
+        active: int,
+        status_counts: Mapping[str, int],
+        completed: int,
+    ) -> bool:
+        """Refresh only when the visible occupancy snapshot changes."""
+
+        snapshot = (
+            int(queued),
+            int(active),
+            tuple((str(label), int(count)) for label, count in status_counts.items()),
+            int(completed),
+        )
+        if snapshot == self._snapshot and self._state == "running":
+            return False
+        # Render once before mutating visible state so invalid values leave the
+        # last good card intact.
+        fused_stage_status_html_string(
+            title=self.title,
+            total=self.total,
+            fused_step=int(fused_step),
+            queued=snapshot[0],
+            active=snapshot[1],
+            status_counts=dict(snapshot[2]),
+            completed=snapshot[3],
+            state="running",
+            width_px=self.width_px,
+        )
+        self._snapshot = snapshot
+        self._fused_step = int(fused_step)
+        self._state = "running"
+        self._refresh_display()
+        return True
+
+    def finalize(
+        self,
+        *,
+        fused_step: int,
+        queued: int,
+        active: int,
+        status_counts: Mapping[str, int],
+        completed: int,
+    ) -> None:
+        """Show the explicitly finalized state after the run returns."""
+
+        snapshot = (
+            int(queued),
+            int(active),
+            tuple((str(label), int(count)) for label, count in status_counts.items()),
+            int(completed),
+        )
+        fused_stage_status_html_string(
+            title=self.title,
+            total=self.total,
+            fused_step=int(fused_step),
+            queued=snapshot[0],
+            active=snapshot[1],
+            status_counts=dict(snapshot[2]),
+            completed=snapshot[3],
+            state="complete",
+            width_px=self.width_px,
+        )
+        self._snapshot = snapshot
+        self._fused_step = int(fused_step)
+        self._state = "complete"
+        self._refresh_display()
 
     def _refresh_display(self) -> None:
         if self._widget is not None:

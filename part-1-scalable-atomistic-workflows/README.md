@@ -111,12 +111,18 @@ classroom pacing.
 | Batched reductions | Toolkit-Ops `segmented_sum` |
 | Framework layers | PyTorch and JAX Toolkit-Ops bindings, with a raw Warp array call |
 | Relaxation and dynamics | `FIRE2`, `NVTLangevin`, `NVE`, `FusedStage`, `initialize_velocities` |
-| Hooks | `Hook`, `ConvergenceHook`, `NaNDetectorHook`, `LoggingHook` |
+| Hooks | `Hook`, `ConvergenceHook`, `NaNDetectorHook`, `LoggingHook`, `register_hook`, `register_fused_hook` |
 | Inflight work | `InMemoryDataset`, `SizeAwareSampler`, `HostMemory` |
 | Periodic electrostatics | `PMEModelWrapper`, `estimate_pme_parameters` |
 | One large distributed system | `DistributedManager`, `initialize_mesh`, `DomainConfig`, `SpatialPartitioner`, `DomainParallel`, and its `partition`, `run`, and `gather` path |
 | Distributed stages | `DistributedPipeline` and `BufferConfig` in a short API sketch, with no timing claim |
 | Saved results | `ZarrData` plus ordinary CSV, NPZ, JSON, and `.extxyz` files |
+
+The Zarr lesson separates storage from frame selection. `ZarrData` writes the
+graph samples selected by the workflow or a snapshot hook.
+`AtomicDataZarrWriter` and `AtomicDataZarrReader` provide direct dataset I/O.
+The notebook writes the four relaxed endpoints to Zarr and reads them back; its
+full 20,000-frame IR analysis trajectory remains a checksummed NPZ archive.
 
 The notebook keeps these calls visible. Code in [aux](aux/) handles structure
 generation, file checks, plotting, signal processing, and notebook
