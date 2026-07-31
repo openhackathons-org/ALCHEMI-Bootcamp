@@ -28,7 +28,13 @@ The tools and frameworks used in this playbook:
 
 ## Runtime snapshot
 
-The updated main environment is pinned for reproducible rebuilds. The Docker image exposes a single Jupyter kernel, `alchemi-main` (`ALCHEMI Main`), backed by the `/opt/conda/envs/alchemi-playbook` Python environment. The full package/commit snapshot is recorded in [RUNTIME_SNAPSHOT.md](RUNTIME_SNAPSHOT.md).
+The updated main environment is pinned for reproducible Linux x86_64 rebuilds.
+The CUDA base image is fixed by digest, the Miniforge installer is fixed by
+version and SHA-256, and all Conda, Python, and Git dependencies are recorded
+in checked-in lock files. The locally built Docker image exposes a single
+Jupyter kernel, `alchemi-main` (`ALCHEMI Main`), backed by the
+`/opt/conda/envs/alchemi-playbook` Python environment. The complete build
+snapshot is recorded in [RUNTIME_SNAPSHOT.md](RUNTIME_SNAPSHOT.md).
 
 ## Playbook duration
 
@@ -65,7 +71,15 @@ Open the Jupyter URL in your browser and launch either notebook:
 
 ### Browsing without live GPU work
 
-The Part 1 notebook's run-configuration cell exposes a `RUN_SCOPE` toggle — `"short"` runs one representative adsorption example with six starting structures, `"full"` runs the complete adsorption grid — and a result-source toggle, where `"saved"` reads pre-computed results so you can step through the tutorial without waiting on the GPU. Part 2 has the same idea via `RESULT_SOURCE="saved"`. These are useful in workshop settings with limited GPU availability.
+The Part 1 notebook's run-configuration cell exposes a `RUN_SCOPE` toggle —
+`"short"` runs one representative adsorption example with six starting
+structures, `"full"` runs the complete adsorption grid — and a result-source
+toggle, where `"saved"` reads pre-computed results so you can step through the
+tutorial without waiting on the GPU.
+
+NOTE: Part 2's pre-computed results have been removed while the workflow is
+being regenerated from the COD crystal input. Its saved-result mode is
+temporarily unavailable.
 
 ## Developers who shaped the tutorials
 
@@ -74,4 +88,21 @@ The Part 1 notebook's run-configuration cell exposes a `RUN_SCOPE` toggle — `"
 
 ## License
 
-Apache 2.0 — see [LICENSE](LICENSE).
+Except where otherwise noted, the original code and documentation in this
+repository are licensed under the [Apache License 2.0](LICENSE).
+
+This repository distributes tutorial source files and a Docker build recipe.
+It does not distribute a prebuilt container image or model checkpoints.
+Building or running the tutorial downloads third-party software and models
+from their official sources under their respective terms.
+
+The NVIDIA ALCHEMI Toolkit and NVIDIA ALCHEMI Toolkit-Ops are separate projects
+governed by their own licenses. Third-party software and other materials remain
+subject to the terms supplied by their official sources or distributions. See
+[Sources and licenses](SOURCES_AND_LICENSES.md) for distributed scientific data
+and visual assets, the
+[direct dependency license inventory](.licenses/direct-dependencies.md), and
+[complete package attributions](.licenses/Third_party_attr.txt) generated for
+this tutorial environment.
+
+No rights are granted to NVIDIA trademarks or branding.

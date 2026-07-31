@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
 services:
   jupyter:
     build:
@@ -19,6 +22,8 @@ services:
       - ../part-2-batched-melting-toolkit:/workspace/part-2-batched-melting-toolkit
       - ../README.md:/workspace/README.md:ro
       - ../LICENSE:/workspace/LICENSE:ro
+      - ../SOURCES_AND_LICENSES.md:/workspace/SOURCES_AND_LICENSES.md:ro
+      - ../.licenses:/workspace/.licenses:ro
     deploy:
       resources:
         reservations:

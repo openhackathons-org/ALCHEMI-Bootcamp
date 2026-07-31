@@ -1,9 +1,14 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# This is the human-maintained dependency input. The Docker build installs the
+# exact Linux x86_64 versions in requirements-linux-64.lock.txt.
+#
 # Unified runtime + tooling dependencies for the ALCHEMI Playbook (Parts 1 + 2).
 #
-# ovito is installed via conda (see dev/environment.yml) so its bundled
+# ovito is installed via conda (see build/environment.yml) so its bundled
 # Qt6 / glib / fontconfig runtime ships with the conda env instead of via
-# apt-get system libs. See dev/Dockerfile and dev/README.md for the
-# full install sequence.
+# apt-get system libs. See build/Dockerfile for the full install sequence.
 
 # Toolkit packages pinned to current main commits for a reproducible updated
 # environment. The Dockerfile installs with `--no-sources-package
@@ -18,6 +23,7 @@ nvalchemi-toolkit[ase,mace,aimnet] @ git+https://github.com/NVIDIA/nvalchemi-too
 # cuEquivariance compiled Torch ops for the CUDA 13 runtime. This matches the
 # cuequivariance/cuequivariance-torch 0.10.0 stack pulled by mace-torch and
 # prevents the MACE path from falling back to the naive implementation.
+torch==2.13.0+cu130
 cuequivariance-ops-torch-cu13==0.10.0
 
 # ORB-v3 foundation model (Part 2; resolved by `--model orb` in the drivers
@@ -26,6 +32,7 @@ orb-models==0.7.0
 loguru
 
 # Part 1 scientific stack
+ase>=3.28
 pymatgen>=2024.1.1
 pydantic>=2.0
 requests>=2.31
@@ -33,12 +40,18 @@ aiohttp>=3.9
 numpy>=1.24
 pandas>=2.0
 matplotlib>=3.7
+Pillow
+lmdb
+tqdm
 
 # Jupyter / interactive
+ipython
 ipykernel
 ipywidgets>=8.0
 jupyterlab
 jupyterlab-vim
+nbclient
+nbformat
 
 # Part 2 packing
 packmol
