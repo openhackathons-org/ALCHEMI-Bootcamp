@@ -1,21 +1,42 @@
-FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+FROM nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:3b8afffc99c6ca801e6bf31a426400432cc8ba9dea77bd27ccf8cd67f06424eb
 
 # Minimal system deps. The conda env (next layer) handles Qt6/glib/X11 for OVITO.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     curl git g++ ca-certificates bzip2 \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Miniforge (open-source conda + mamba). Multiarch installer.
-RUN ARCH=$(uname -m) && \
-    curl -fsSL -o /tmp/miniforge.sh \
-        "https://github.com/conda-forge/miniforge/releases/latest/download/Miniforge3-Linux-${ARCH}.sh" && \
+# Install a checked Miniforge release. OVITO requires linux/amd64, which is
+# also enforced in docker-compose.yml.
+ARG MINIFORGE_VERSION=26.3.2-3
+ARG MINIFORGE_SHA256=848194851a98903134187fbb4ab50efe87b003e0c0f808f97644b7524a62bf2c
+RUN curl -fsSL -o /tmp/miniforge.sh \
+        "https://github.com/conda-forge/miniforge/releases/download/${MINIFORGE_VERSION}/Miniforge3-Linux-x86_64.sh" && \
+    echo "${MINIFORGE_SHA256}  /tmp/miniforge.sh" | sha256sum --check --strict && \
     bash /tmp/miniforge.sh -b -p /opt/conda && \
     rm /tmp/miniforge.sh
 
-# Create the env: Python 3.12 + ovito (from conda.ovito.org, bundles Qt6/glib/fontconfig)
-# + uv (fast pip resolver for the rest).
-COPY build/environment.yml /tmp/environment.yml
-RUN /opt/conda/bin/conda env create -f /tmp/environment.yml && \
+# Recreate the reviewed Linux x86_64 conda environment from exact package URLs.
+# build/environment.yml remains the human-maintained input used when refreshing
+# this lock and the third-party license inventory.
+COPY build/conda-linux-64.lock /tmp/conda-linux-64.lock
+RUN /opt/conda/bin/conda create \
+        --name alchemi-playbook \
+        --file /tmp/conda-linux-64.lock \
+        --yes && \
     /opt/conda/bin/conda clean -afy
 
 # Activate the env for all subsequent commands by prepending its bin dir.
@@ -28,18 +49,16 @@ ENV PATH=/opt/conda/envs/alchemi-playbook/bin:/opt/conda/bin:$PATH \
 
 WORKDIR /workspace
 
-# Install torch from the CUDA 13.0 wheel index first. This satisfies
-# nvalchemi-toolkit's transitive torch requirement so the toolkit install
-# (next layer) skips pulling the CPU wheel.
-RUN uv pip install torch --index-url https://download.pytorch.org/whl/cu130
-
-# Remaining runtime + tooling deps via uv (faster than conda for these PyPI /
-# git packages). Single requirements file -- toolkit and toolkit-ops are
-# pinned to explicit commits for reproducibility. `--no-sources-package`
-# prevents toolkit's stale internal uv source pin for toolkit-ops from
-# overriding the direct URL in requirements.txt.
-COPY build/requirements.txt /tmp/
-RUN uv pip install --no-sources-package nvalchemi-toolkit-ops -r /tmp/requirements.txt
+# Install the reviewed Python environment. Torch is installed first from its
+# CUDA 13 wheel index. The complete lock then fixes every PyPI and Git package,
+# including the two Toolkit commit URLs.
+COPY build/requirements-linux-64.lock.txt /tmp/requirements-linux-64.lock.txt
+RUN uv pip install \
+        "torch==2.13.0+cu130" \
+        --index-url https://download.pytorch.org/whl/cu130 && \
+    uv pip install \
+        --no-sources-package nvalchemi-toolkit-ops \
+        --requirement /tmp/requirements-linux-64.lock.txt
 
 # Fail the build loud if any resolver tug-of-war silently broke an import.
 # cuequivariance_ops_torch itself requires the NVIDIA runtime libraries that
@@ -66,10 +85,10 @@ ENV LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packag
     MPLCONFIGDIR=/tmp/mpl \
     OVITO_GUI_MODE=headless
 
-# Bake tutorial content into the image so a `docker save | docker load`
-# → `docker run` (no bind-mount) still works. Compose uses selective
-# bind-mounts which shadow these at runtime.
-COPY README.md LICENSE CHANGELOG.md RUNTIME_SNAPSHOT.md ./
+# Bake tutorial content into the locally built image so it can run without a
+# bind-mount. Compose uses selective bind-mounts which shadow these at runtime.
+COPY README.md LICENSE CHANGELOG.md RUNTIME_SNAPSHOT.md SOURCES_AND_LICENSES.md ./
+COPY .licenses ./.licenses
 COPY part-1-batched-adsorption-toolkit ./part-1-batched-adsorption-toolkit
 COPY part-2-batched-melting-toolkit ./part-2-batched-melting-toolkit
 

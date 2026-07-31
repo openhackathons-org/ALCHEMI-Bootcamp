@@ -4,7 +4,11 @@ This document records what goes into the updated main Docker environment. It is 
 
 ## Image base
 
-- Base image: `nvidia/cuda:13.2.0-runtime-ubuntu24.04`
+- Base image:
+  `nvidia/cuda:13.2.0-runtime-ubuntu24.04@sha256:3b8afffc99c6ca801e6bf31a426400432cc8ba9dea77bd27ccf8cd67f06424eb`
+- Miniforge installer: `26.3.2-3`
+- Miniforge SHA-256:
+  `848194851a98903134187fbb4ab50efe87b003e0c0f808f97644b7524a62bf2c`
 - Conda environment: `/opt/conda/envs/alchemi-playbook`
 - Python: `3.12.13`
 - Torch wheel source: `https://download.pytorch.org/whl/cu130`
@@ -18,13 +22,18 @@ The image intentionally removes the default `python3`, `ovito-pro`, and old `alc
 - `nvalchemi-toolkit`: `01c99d5cde6f63d6f662b071a9f408d3bfc12b0a`
 - `nvalchemi-toolkit-ops`: `2b7c3c3adfb1ca84b886eecbf14bc60ff6ba1dc2`
 
-`build/requirements.txt` is the source of truth for these pins. The Dockerfile installs with `uv pip install --no-sources-package nvalchemi-toolkit-ops` because the current Toolkit main snapshot still carries an older internal `tool.uv.sources` pin for Toolkit-Ops; the direct URL in `requirements.txt` is the intended resolver input.
+`build/requirements.txt` is the human-maintained source of truth for these
+pins. The Dockerfile installs the exact resolved Git URLs and package versions
+from `build/requirements-linux-64.lock.txt`. It uses
+`uv pip install --no-sources-package nvalchemi-toolkit-ops` because the current
+Toolkit main snapshot still carries an older internal `tool.uv.sources` pin
+for Toolkit-Ops.
 
 Part 1 applies explicit neighbor-list dispatch for these pinned Toolkit and Toolkit-Ops snapshots. The helper layer selects `batch_naive` or `batch_cell_list` to match the pre-allocated neighbor-list buffers used by the Toolkit relaxation path.
 
 ## Core package versions
 
-- `torch`: `2.12.0+cu130`
+- `torch`: `2.13.0+cu130`
 - `nvalchemi-toolkit`: `0.1.0` from the pinned Git commit above
 - `nvalchemi-toolkit-ops`: `0.3.1` from the pinned Git commit above
 - `ovito`: `3.15.4`
@@ -33,15 +42,24 @@ Part 1 applies explicit neighbor-list dispatch for these pinned Toolkit and Tool
 - `cuequivariance-torch`: `0.10.0`
 - `cuequivariance-ops-cu13`: `0.10.0`
 - `cuequivariance-ops-torch-cu13`: `0.10.0`
-- `ase`: `3.28.0`
+- `ase`: `3.29.0`
 - `pymatgen`: `2026.5.4`
 - `pydantic`: `2.13.4`
-- `jupyterlab`: `4.5.8`
+- `jupyterlab`: `4.6.2`
 - `ipykernel`: `7.3.0`
 
 ## Build entrypoints
 
 - Conda package spec: `build/environment.yml`
+- Exact Conda lock: `build/conda-linux-64.lock`
 - Python/runtime package spec: `build/requirements.txt`
+- Exact Python and Git lock: `build/requirements-linux-64.lock.txt`
 - Docker recipe: `build/Dockerfile`
 - Compose service: `build/docker-compose.yml`
+
+The lock files and `.licenses/` inventory describe the same reviewed
+environment. Refresh them together with:
+
+```bash
+.licenses/generate_licenses.sh
+```

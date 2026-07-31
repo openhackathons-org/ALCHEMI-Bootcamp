@@ -1,0 +1,10 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Preserve upstream CIF text exactly. Some source records contain trailing
+# spaces that should not fail the repository-wide whitespace check.
+*.cif whitespace=-blank-at-eol
+
+# Preserve generated third-party license texts verbatim. Upstream notices may
+# contain trailing spaces or delimiter lines that resemble conflict markers.
+.licenses/Third_party_attr.txt -diff

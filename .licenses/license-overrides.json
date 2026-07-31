@@ -1,0 +1,76 @@
+{
+  "_spdx_file_copyright_text": "SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.",
+  "_spdx_license_identifier": "SPDX-License-Identifier: Apache-2.0",
+  "_comment": [
+    "Manual license determinations for installed packages whose metadata does",
+    "not expose a useful identifier or complete terms. Each override must cite",
+    "the bundled license file, package metadata, or official upstream page.",
+    "Regenerate the inventory after changing this file."
+  ],
+  "overrides": {
+    "antlr4-python3-runtime": {
+      "license": "BSD-3-Clause AND MIT",
+      "evidence": "The official ANTLR 4.9.3 LICENSE.txt supplies the BSD-3-Clause terms for ANTLR and MIT notices for its included JavaScript-derived code: https://github.com/antlr/antlr4/blob/4.9.3/LICENSE.txt",
+      "license_text_file": ".licenses/manual-license-texts/antlr4-python3-runtime-4.9.3.txt"
+    },
+    "cuda-toolkit": {
+      "license": "NVIDIA CUDA Toolkit EULA (proprietary)",
+      "evidence": "No license file is shipped in the wheel. The current NVIDIA Toolkit inventory identifies the governing terms as the NVIDIA CUDA Toolkit EULA: https://docs.nvidia.com/cuda/eula/"
+    },
+    "cuequivariance-ops-cu13": {
+      "license": "NVIDIA Math Libraries SDK License Agreement (proprietary)",
+      "evidence": "The installed 0.10.0 wheel includes the governing agreement and bundled third-party notices under cuequivariance_ops_cu13-0.10.0.dist-info/licenses/."
+    },
+    "cuequivariance-ops-torch-cu13": {
+      "license": "NVIDIA Math Libraries SDK License Agreement (proprietary)",
+      "evidence": "The installed 0.10.0 wheel includes the governing agreement and bundled third-party notices under cuequivariance_ops_torch_cu13-0.10.0.dist-info/licenses/."
+    },
+    "google-crc32c": {
+      "license": "Apache-2.0",
+      "evidence": "Bundled LICENSE file contains the Apache License 2.0. This matches the current NVIDIA Toolkit inventory."
+    },
+    "imageio-ffmpeg": {
+      "license": "BSD-2-Clause AND GPL-3.0-or-later",
+      "evidence": "The Python wrapper is BSD-2-Clause. The 0.6.0 Linux wheel also bundles ffmpeg-linux-x86_64-v7.0.2; `-version` reports `--enable-gpl --enable-version3 --enable-static --enable-libx264 --enable-libx265`, making that executable GPL-3.0-or-later. Upstream confirms its wheels include the FFmpeg executable: https://github.com/imageio/imageio-ffmpeg"
+    },
+    "loguru": {
+      "license": "MIT",
+      "evidence": "https://github.com/Delgan/loguru/blob/0.7.3/LICENSE",
+      "license_text": "MIT License\n\nCopyright (c) 2017\n\nPermission is hereby granted, free of charge, to any person obtaining a copy\nof this software and associated documentation files (the \"Software\"), to deal\nin the Software without restriction, including without limitation the rights\nto use, copy, modify, merge, publish, distribute, sublicense, and/or sell\ncopies of the Software, and to permit persons to whom the Software is\nfurnished to do so, subject to the following conditions:\n\nThe above copyright notice and this permission notice shall be included in all\ncopies or substantial portions of the Software.\n\nTHE SOFTWARE IS PROVIDED \"AS IS\", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\nIMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\nFITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\nAUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\nLIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,\nOUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE\nSOFTWARE."
+    },
+    "nvidia-ml-py": {
+      "license": "BSD-3-Clause",
+      "evidence": "The exact 13.610.43 PyPI source archive declares BSD and carries these terms in pynvml.py.",
+      "license_text_file": ".licenses/manual-license-texts/nvidia-ml-py-13.610.43.txt"
+    },
+    "nvidia-nccl-cu13": {
+      "license": "BSD-3-Clause",
+      "evidence": "The installed 2.29.7 wheel includes its BSD-3-Clause terms in nvidia_nccl_cu13-2.29.7.dist-info/licenses/License.txt."
+    },
+    "nvidia-nvtx": {
+      "license": "Apache-2.0",
+      "evidence": "The installed 13.0.85 wheel declares Apache 2.0 and includes the complete Apache-2.0 text in nvidia_nvtx-13.0.85.dist-info/licenses/License.txt."
+    },
+    "pyside6": {
+      "license": "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+      "evidence": "Official Qt for Python v6.10.2 setup.py SPDX expression: https://github.com/qtproject/pyside-pyside-setup/blob/v6.10.2/setup.py"
+    },
+    "shiboken6": {
+      "license": "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+      "evidence": "Official Qt for Python v6.10.2 setup.py SPDX expression: https://github.com/qtproject/pyside-pyside-setup/blob/v6.10.2/setup.py"
+    },
+    "torch": {
+      "license": "BSD-3-Clause",
+      "evidence": "The installed package includes PyTorch's BSD-style LICENSE file: https://github.com/pytorch/pytorch/blob/main/LICENSE"
+    },
+    "torch-ema": {
+      "license": "MIT",
+      "evidence": "Bundled LICENSE file contains the MIT permission grant (Copyright 2019 Samuel G. Fadel). This matches the current NVIDIA Toolkit inventory."
+    },
+    "webencodings": {
+      "license": "BSD-3-Clause",
+      "evidence": "The exact upstream v0.5.1 LICENSE supplies the BSD-3-Clause terms: https://github.com/gsnedders/python-webencodings/blob/v0.5.1/LICENSE",
+      "license_text_file": ".licenses/manual-license-texts/webencodings-0.5.1.txt"
+    }
+  }
+}

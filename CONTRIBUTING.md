@@ -19,6 +19,17 @@ that you have the right to contribute and redistribute. Record the source,
 license, and required attribution for third-party material. Do not commit
 restricted datasets, model checkpoints, secrets, API keys, or credentials.
 
+New NVIDIA-authored source and build files must carry these identifiers using
+the comment syntax appropriate for the file:
+
+```text
+SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+SPDX-License-Identifier: Apache-2.0
+```
+
+Do not add the NVIDIA notice to an unchanged third-party file. Preserve its
+original notices and record its source, license, and required attribution.
+
 ## Development workflow
 
 1. Fork the repository and clone your fork.
@@ -88,6 +99,13 @@ cd build
 docker compose build
 ```
 
+Dependency changes must also refresh the exact Linux x86_64 lock files and
+third-party license inventory:
+
+```bash
+.licenses/generate_licenses.sh
+```
+
 Visually review changed Markdown, notebook output, plots, images, and
 interactive controls before requesting review.
 
@@ -112,6 +130,8 @@ the contribution under the repository's license.
 - Documentation and examples match the current repository behavior.
 - Relevant checks are listed with their results and environment.
 - New third-party material includes source, license, and attribution details.
+- Dependency changes include refreshed build locks and `.licenses/` files.
+- New NVIDIA-authored source and build files include the required SPDX notice.
 - No secrets, credentials, restricted data, or unapproved model files are
   included.
 - Every commit has a DCO sign-off.
