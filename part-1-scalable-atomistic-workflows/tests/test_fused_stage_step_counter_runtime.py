@@ -43,6 +43,7 @@ from nvalchemi.dynamics import (  # noqa: E402
 import nvalchemi.hooks as toolkit_hooks  # noqa: E402
 from nvalchemi.models.demo import DemoModel, DemoModelWrapper  # noqa: E402
 from aux.hooks import (  # noqa: E402
+    FusedStageStatusHook,
     StageStepCounterHook,
     converge_after_steps,
 )
@@ -232,19 +233,32 @@ def test_exact_stage_budgets_end_run_without_global_cutoff() -> None:
     fused.register_fused_hook(
         StageStepCounterHook({0: "nvt_steps_done", 1: "nve_steps_done"})
     )
+    status_hook = FusedStageStatusHook(
+        status_labels={0: "NVT", 1: "NVE"},
+        track_system_ids=True,
+    )
+    fused.register_fused_hook(status_hook)
     batch = Batch.from_data_list(
         [_graph(801, 0.0), _graph(802, 0.0)],
         device="cpu",
     )
+    # Match an ordinary fixed batch: Toolkit uses -1 until stable inflight IDs
+    # have been assigned.
+    batch.system_id.fill_(-1)
     batch.status = torch.zeros(batch.num_graphs, 1, dtype=torch.int64)
 
     result = fused.run(batch)
+    status_hook.finalize(batch=result, fused_step=fused.step_count)
 
     assert result is not None
     assert fused.step_count == 5
     assert bool((result.status == fused.exit_status).all())
     assert bool((result.nvt_steps_done == 2).all())
     assert bool((result.nve_steps_done == 3).all())
+    assert [event.active for event in status_hook.events] == [2, 2, 0]
+    assert list(status_hook.table()["NVT"]) == [2, 0, 0]
+    assert list(status_hook.table()["NVE"]) == [0, 2, 0]
+    assert "Entered" not in status_hook.table().columns
 
 
 def test_inflight_queue_preserves_exact_stage_budgets() -> None:
@@ -287,9 +301,18 @@ def test_inflight_queue_preserves_exact_stage_budgets() -> None:
         fused.register_fused_hook(
             StageStepCounterHook({0: "nvt_steps_done", 1: "nve_steps_done"})
         )
+        status_hook = FusedStageStatusHook(
+            status_labels={0: "NVT", 1: "NVE"},
+            total_systems=systems,
+        )
+        fused.register_fused_hook(status_hook)
 
         result = fused.run(batch=None)
         completed = sink.drain()
+        status_hook.finalize(
+            completed_count=completed.num_graphs,
+            fused_step=fused.step_count,
+        )
 
         assert result is None
         assert fused.done
@@ -303,6 +326,12 @@ def test_inflight_queue_preserves_exact_stage_budgets() -> None:
             torch.sort(completed.system_id.reshape(-1)).values,
             torch.arange(systems),
         )
+        status_table = status_hook.table()
+        assert list(status_table["Fused step"]) == [0, 2, 5, 7, 10, 12, 15, 17, 20]
+        assert list(status_table["Queued"]) == [12, 12, 8, 8, 4, 4, 0, 0, 0]
+        assert list(status_table["Completed"]) == [0, 0, 4, 4, 8, 8, 12, 12, 16]
+        assert list(status_table["NVT"]) == [4, 0, 4, 0, 4, 0, 4, 0, 0]
+        assert list(status_table["NVE"]) == [0, 4, 0, 4, 0, 4, 0, 4, 0]
     finally:
         dataset.close()
 

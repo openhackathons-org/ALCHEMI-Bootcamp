@@ -39,6 +39,22 @@ class _RecordingNotebookProgress(ui.NotebookProgress):
         return self.recorded_handle
 
 
+class _RecordingFusedStageStatusCard(ui.FusedStageStatusCard):
+    def __init__(self, *, title: str, total: int) -> None:
+        self.recorded_handle = _RecordingDisplayHandle()
+        self.displayed: list[tuple[object, bool | None]] = []
+        super().__init__(title=title, total=total)
+
+    def _display(
+        self,
+        value: object,
+        *,
+        display_id: bool | None = None,
+    ) -> _RecordingDisplayHandle:
+        self.displayed.append((value, display_id))
+        return self.recorded_handle
+
+
 def test_progress_constructor_hides_display_internals() -> None:
     assert "display_fn" not in signature(ui.NotebookProgress).parameters
 
@@ -230,6 +246,68 @@ def test_progress_card_exposes_text_count_and_aria_values() -> None:
     assert "&lt;NVE&gt;" in html
     assert "&quot;run&quot;" in html
     assert 'aria-live="polite"' in html
+
+
+def test_fused_status_card_shows_queue_stages_and_completion() -> None:
+    html = ui.fused_stage_status_html_string(
+        title="Inflight NVT + NVE",
+        total=2_048,
+        fused_step=7,
+        queued=1_280,
+        active=256,
+        status_counts={"NVT": 144, "NVE": 112},
+        completed=512,
+    )
+
+    assert 'aria-label="Inflight NVT + NVE status"' in html
+    assert "QUEUED" in html
+    assert "1,280" in html
+    assert "ACTIVE" in html
+    assert "256" in html
+    assert "NVT <strong>144</strong>" in html
+    assert "NVE <strong>112</strong>" in html
+    assert "COMPLETED" in html
+    assert "512" in html
+    assert "Last routing change <strong>7</strong>" in html
+
+
+def test_fused_status_card_refreshes_only_for_visible_changes() -> None:
+    card = _RecordingFusedStageStatusCard(
+        title="Inflight NVT + NVE",
+        total=4,
+    )
+    update = {
+        "queued": 2,
+        "active": 2,
+        "status_counts": {"NVT": 1, "NVE": 1},
+        "completed": 0,
+    }
+
+    assert card.update(fused_step=0, **update)
+    assert not card.update(fused_step=1, **update)
+    assert len(card.recorded_handle.updates) == 1
+
+    card.finalize(
+        fused_step=2,
+        queued=0,
+        active=0,
+        status_counts={"NVT": 0, "NVE": 0},
+        completed=4,
+    )
+    assert "COMPLETE" in card.render_string()
+
+
+def test_fused_status_card_rejects_inconsistent_counts() -> None:
+    with pytest.raises(ValueError, match="add up to active"):
+        ui.fused_stage_status_html_string(
+            title="Bad status",
+            total=4,
+            fused_step=0,
+            queued=2,
+            active=2,
+            status_counts={"NVT": 1, "NVE": 0},
+            completed=0,
+        )
 
 
 def test_notebook_progress_updates_without_display_side_effects() -> None:

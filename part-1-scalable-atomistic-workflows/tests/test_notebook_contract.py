@@ -620,27 +620,85 @@ def test_notebook_explains_hooks_before_registering_them() -> None:
     by_id = {cell.get("id"): cell for cell in cells}
     order = [cell.get("id") for cell in cells]
     lesson = _source(by_id["hooks-quick-note"])
+    compact_lesson = " ".join(lesson.split())
     registration = _source(by_id["attach-dynamics-hooks"])
 
     for term in (
-        "chosen point and frequency",
-        "current `Batch`",
+        "a `stage` and `frequency`",
+        "`__call__(ctx, stage)`",
+        "`DynamicsContext` named `ctx`",
+        "current `Batch` and step",
         "`NaN` means *not a number*",
         "`Inf` means a value overflowed to infinity",
         "later trajectory steps unreliable",
         "`NaNDetectorHook` checks energy and forces",
-        "rebuild neighbors",
-        "detect convergence",
-        "record dipoles",
-        "write a log",
         "`register_hook(...)`",
         "`register_fused_hook(...)`",
+        "specific to `FusedStage`",
+        "complete active batch",
+        "read-only status hook",
+        "queued, NVT, NVE, and completed counts",
+        "long run samples status every 1,000 steps",
+        "short refill demo checks every fused iteration",
     ):
-        assert term in lesson
+        assert term in compact_lesson
 
     assert order.index("check-ir-dipoles") < order.index("hooks-quick-note")
     assert order.index("hooks-quick-note") < order.index("relax")
     assert 'NaNDetectorHook(frequency=100, extra_keys=["velocities"])' in registration
+
+
+def test_fused_status_hook_is_live_and_preserves_transition_tables() -> None:
+    cells = _notebook()["cells"]
+    by_id = {cell.get("id"): cell for cell in cells}
+    helper_imports = _source(by_id["helper-imports"])
+    main_run = _source(by_id["run-dynamics"])
+    inflight_run = _source(by_id["run-inflight-example"])
+    inflight_validation = _source(by_id["validate-inflight-example"])
+    fused_intro = _source(by_id["fused-stage-intro"])
+    compact_fused_intro = " ".join(fused_intro.split())
+
+    assert "FusedStageStatusHook" in helper_imports
+    assert "FusedStageStatusCard" in helper_imports
+    for detail in (
+        'title="Live NVT → NVE routing"',
+        "total=batch.num_graphs",
+        'status_labels={IR_WARMUP_STATUS: "NVT", IR_PRODUCTION_STATUS: "NVE"}',
+        "frequency=1_000",
+        "dynamics.register_fused_hook(fused_status_hook)",
+        "fused_status_hook.finalize(",
+        "batch=final_batch",
+        "workflow=dynamics",
+        "fused_status_hook.table()",
+        'label="Observed FusedStage routing"',
+    ):
+        assert detail in main_run
+
+    for detail in (
+        'title="Live inflight routing"',
+        "total=INFLIGHT_SYSTEMS",
+        "total_systems=INFLIGHT_SYSTEMS",
+        "frequency=1",
+        "inflight.register_fused_hook(inflight_status_hook)",
+        "inflight_status_hook.finalize(",
+        "completed_count=completed.num_graphs",
+    ):
+        assert detail in inflight_run
+    assert "inflight_status_hook.table()" in inflight_validation
+    assert 'label="Observed inflight stage occupancy"' in inflight_validation
+    assert (
+        by_id["validate-inflight-example"]
+        .get("metadata", {})
+        .get("jupyter", {})
+        .get("outputs_hidden")
+        is not True
+    )
+    assert (
+        "<code>FusedStageStatusHook</code> reads the shared "
+        "<code>DynamicsContext</code> without changing it"
+        in compact_fused_intro
+    )
+    assert "shows stage occupancy live" in compact_fused_intro
 
 
 def test_notebook_wires_raw_sevennet_into_toolkit_for_surface_single_points() -> None:
@@ -1338,13 +1396,55 @@ def test_aimnet_card_and_fused_stage_state_the_important_limits() -> None:
         "selected checkpoint is closed-shell; no multiplicity input is used",
     ):
         assert detail in model_card_helper
-    assert "uses the model attached to its first sub-stage" in fused_intro
     assert "`nvt + nve` changes the update rule, not the model" in fused_intro
+    assert "evaluates the first sub-stage's model once" in fused_intro
+    assert "Use a compatible model" in fused_intro
+    assert "shows stage occupancy live" in fused_intro
+
+
+def test_zarr_lesson_explains_storage_and_current_scope() -> None:
+    cells = _notebook()["cells"]
+    by_id = {cell.get("id"): cell for cell in cells}
+    note = _source(by_id["zarr-storage-note"])
+    compact_note = " ".join(note.split())
+    save = _source(by_id["save-relaxed-structures"])
+
+    for detail in (
+        "Zarr is chunked, directory-backed storage",
+        "`ZarrData` receives structures selected by the workflow",
+        "`AtomicDataZarrWriter`",
+        "`AtomicDataZarrReader`",
+        "four relaxed endpoints",
+        "not the FIRE2 history",
+        "20,000-frame IR trajectory",
+        "checksummed NPZ archive",
+        "The workflow chooses the frames; Zarr stores them",
+    ):
+        assert detail in compact_note
+    for visible_call in (
+        "ZarrData(",
+        ".write(relaxed_batch)",
+        ".read()",
+        "torch.testing.assert_close(",
+    ):
+        assert visible_call in save
+
+    positions = {
+        cell_id: next(i for i, cell in enumerate(cells) if cell.get("id") == cell_id)
+        for cell_id in (
+            "validate-relaxation",
+            "zarr-storage-note",
+            "save-relaxed-structures",
+        )
+    }
+    assert positions["validate-relaxation"] < positions["zarr-storage-note"]
+    assert positions["zarr-storage-note"] < positions["save-relaxed-structures"]
 
 
 def test_inflight_lesson_registers_and_validates_an_actual_refill_trace() -> None:
     by_id = {cell.get("id"): cell for cell in _notebook()["cells"]}
     intro = _source(by_id["inflight-intro"])
+    compact_intro = " ".join(intro.split())
     setup = "\n".join(
         (
             _source(by_id["inflight-example"]),
@@ -1374,6 +1474,13 @@ def test_inflight_lesson_registers_and_validates_an_actual_refill_trace() -> Non
         "max_edges=None",
     ):
         assert setting in setup
+    for explanation in (
+        "`SizeAwareSampler` refills the released budget",
+        "fit atom, edge, and graph limits",
+        "Limits are upper bounds",
+        "leave capacity unused",
+    ):
+        assert explanation in compact_intro
 
     trace_call = _single_call(setup, "register_inflight_trace")
     assert len(trace_call.args) == 1
@@ -1415,13 +1522,12 @@ def test_inflight_lesson_registers_and_validates_an_actual_refill_trace() -> Non
         < run.index("inflight_trace_table(")
     )
 
-    assert "atom and structure limits only" in intro
-    assert "chosen so refills are visible" in intro
-    assert "not a\nmeasured GPU capacity" in intro
-    assert "result hook observes the run without changing it" in " ".join(intro.split())
-    assert "actual active count" in " ".join(intro.split())
-    assert "`NaNDetectorHook` stops this teaching run" in intro
-    assert "zero observed failures" in intro
+    assert "These equal-size dimers use `max_edges=None`" in intro
+    assert "256-system limit makes refills visible" in intro
+    assert "not a measured GPU capacity" in compact_intro
+    assert "live hook shows queued, NVT, NVE, and completed counts" in compact_intro
+    assert "final ID trace checks that all 2,048 return once" in compact_intro
+    assert "`NaNDetectorHook` stops on a non-finite value" in intro
     assert "too short for scientific MD" in intro
 
 
