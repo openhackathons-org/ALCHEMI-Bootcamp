@@ -151,19 +151,22 @@ def test_major_sections_have_one_shared_divider() -> None:
     )
     markdown = joined_source(notebook, "markdown")
     assert "journey-banner-" not in markdown
+    # Section headings carry no lesson number. The deep-dive part each section
+    # maps to is named in that section's closing "Go deeper" link instead.
     for heading in (
-        "## 01 · Build the molecule with ASE",
-        "## 01 · Pack several molecules into one batch",
-        "## 02 · Save records and recover the next model input",
-        "## 03 · Evaluate a pretrained model",
-        "## 03 · Combine model components",
-        "## 04 · Observe and protect a simulation with hooks",
-        "## 05 · Attempt a bounded relaxation with FIRE2",
-        "## 05 · Run a short molecular-dynamics stage",
-        "## 07 · Take a few training steps",
-        "## 08 · Preview domain parallelism in one process",
+        "## Build the molecule with ASE",
+        "## Pack several molecules into one batch",
+        "## Save records and recover the next model input",
+        "## Evaluate a pretrained model",
+        "## Combine model components",
+        "## Observe and protect a simulation with hooks",
+        "## Attempt a bounded relaxation with FIRE2",
+        "## Run a short molecular-dynamics stage",
+        "## Take a few training steps",
+        "## Preview domain parallelism in one process",
     ):
         assert heading in markdown
+    assert not re.search(r"^## \d\d · ", markdown, flags=re.MULTILINE)
 
 
 def test_zarr_round_trip_teaches_the_supported_public_path() -> None:
@@ -480,9 +483,12 @@ def test_every_section_ends_with_a_go_deeper_link() -> None:
         for target in re.findall(r"\]\(([^)#]+)", cell.source):
             if target.startswith(("https://", "http://")):
                 continue
-            resolved = (CORE_DIR / target).resolve()
-            if not resolved.exists():
-                assert "in progress" in cell.source
+            # Deep-dive notebooks live on the v3-deep-dives branch and are not
+            # checked out here, so a sibling lesson link is verified by shape.
+            # Any other relative target must still resolve on disk.
+            if re.fullmatch(r"\.\./\d\d-[a-z0-9-]+/[a-z0-9-]+\.ipynb", target):
+                continue
+            assert (CORE_DIR / target).resolve().exists(), target
 
 
 def test_visuals_are_bounded_and_accessible() -> None:
@@ -554,7 +560,7 @@ def test_capability_map_is_interactive_accessible_and_task_focused() -> None:
     assert source.count('class="capability"') == 4
     assert source.count('class="cap-tooltip"') == 4
     assert "Toolkit-Ops" in source
-    assert "neighbor lists · grouped sums · interactions" in source
+    assert "neighbor lists · segment operations · interactions" in source
     assert "prefers-reduced-motion" in source
     assert "soft-glow" in source
     assert "DEEP DIVES · IN PROGRESS" in source
