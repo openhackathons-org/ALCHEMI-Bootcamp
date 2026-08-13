@@ -247,3 +247,43 @@ def test_saved_outputs_carry_no_errors_or_tracebacks() -> None:
             assert "ename" not in output, cell.id
             text = flattened_output_text(output)
             assert "Traceback (most recent call last)" not in text, cell.id
+
+
+def test_answer_blocks_quote_the_real_atom_counts() -> None:
+    """Folded answers must agree with the molecules the notebook actually builds.
+
+    This is a consistency check, not a content assertion: the truth comes from
+    building `G2_NAMES` with ASE, and the notebook is only required to quote
+    those numbers somewhere in its answers. Rewording the sentences is free.
+    Changing the molecule set without updating the answers is not, which is the
+    failure this catches.
+    """
+
+    notebook = read_notebook_as_authored()
+    source = "\n".join(cell.source for cell in code_cells(notebook))
+    match = re.search(r"^G2_NAMES\s*=\s*(\([^)]*\))", source, flags=re.MULTILINE)
+    assert match, "no G2_NAMES tuple found in the notebook code"
+
+    counts = [len(molecule(name)) for name in ast.literal_eval(match.group(1))]
+    boundaries = [0]
+    for count in counts:
+        boundaries.append(boundaries[-1] + count)
+    total = boundaries[-1]
+
+    answers = "\n".join(
+        cell.source
+        for cell in notebook.cells
+        if cell.cell_type == "markdown" and "<summary>Check" in cell.source
+    )
+    assert answers, "no folded answer blocks found"
+
+    for count in counts:
+        assert re.search(rf"\b{count}\b", answers), (
+            f"no answer block mentions the {count}-atom molecule"
+        )
+    # The boundary list is quoted as a literal, so compare it as one.
+    expected = "[" + ", ".join(str(edge) for edge in boundaries) + "]"
+    assert expected in answers, f"answer blocks do not quote boundaries {expected}"
+    assert re.search(rf"\b{total}\b", answers), (
+        f"answer blocks do not quote the {total} packed atom rows"
+    )
