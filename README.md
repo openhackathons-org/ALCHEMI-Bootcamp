@@ -1,4 +1,4 @@
-# ALCHEMI Playbook
+# ALCHEMI Toolkit tutorials v3
 
 Hands-on tutorials for building batched atomistic workflows with NVIDIA
 ALCHEMI Toolkit. The playbook focuses on the Toolkit data model, model adapters,
@@ -9,25 +9,26 @@ The curriculum is Toolkit-first. Scientific examples provide meaningful inputs
 and outputs, but they do not limit which reusable ALCHEMI capabilities the
 series teaches.
 
-## Tutorials
+## Core session
 
-| Tutorial | Focus |
-|---|---|
-| [Part 1: From one structure to scalable atomistic workflows](part-1-scalable-atomistic-workflows/) | Follow one seven-stage path from a single result through NCI Atlas batching, model composition, a custom materials-model adapter, dynamics, infrared analysis, inflight queues, and spatial domain decomposition. |
-| [Part 2: Batched adsorption](part-2-batched-adsorption-toolkit/) | Enumerate and relax adsorbate-surface candidates with a materials model. |
-| [Part 3: OLED melting-point prediction](part-3-batched-melting-toolkit/) | Use a molecular potential in a solid-liquid coexistence workflow. |
+The ACS 2026 Chicago fundamentals session is paced for 90 minutes, including
+transitions and discussion.
 
-These part numbers and directory names are the permanent curriculum order. The
-archived `research-toolkit-foundations` notebook contains the research version
-of the NCI Atlas lesson now incorporated into Part 1. It is not included in the
-Part 1 image, is not an active tutorial, and is not a source of part numbering.
+| Notebook | Live target | Focus |
+|---|---:|---|
+| 01 — AtomicData and Batch | 20 min | Build, validate, batch, inspect, and recover molecular graphs. |
+| 02 — Data loading with Zarr | 12 min | Read individual records and stream Toolkit batches. |
+| 03 — Model interfaces and composite potentials | 18 min | Wrap a model and combine learned, electrostatic, and dispersion terms. |
+| 04 — Hooks | 12 min | Add reusable observation and behavior through the Hook protocol. |
+| 05 — BaseDynamics | 18 min | Build a small batched optimizer from Toolkit dynamics pieces. |
 
-The v2 image targets the remastered Part 1. The retained adsorption notebook,
-now Part 2, requires its separate historical MACE environment. The retained
-OLED notebook, now Part 3 and historically Part 2, requires its separate
-historical Orb environment. The Part 1 image intentionally does not install
-`orb-models` or the legacy-only `loguru` dependency. The retained notebooks
-still need updated environments and validation before learner use.
+The five notebooks are under active development in `notebooks/`. See the
+[tutorial guide](TUTORIAL_GUIDE.md) for the curriculum and design system, and
+[WORKLOG.md](WORKLOG.md) for ownership and current work.
+
+GPU pipelines, training, and domain decomposition are planned as advanced
+follow-up notebooks. Adsorption and melting notebooks are maintained on other
+branches and are outside this release.
 
 ## What the playbook teaches
 
@@ -54,50 +55,36 @@ still need updated environments and validation before learner use.
 |---|---|
 | Background | Python, plus basic computational chemistry, atomistic simulation, or machine-learning experience |
 | Host | x86_64 Linux host with an NVIDIA GPU |
-| Container runtime | Docker Engine, Docker Compose v2, and NVIDIA Container Toolkit |
-| Storage and network | Enough space for the image and model checkpoints; network access during image build and the first D3 setup, unless a checked D3 cache is supplied |
+| Environment tool | `uv` |
+| Storage and network | Scratch space for the locked environment and model caches; network access for first setup |
 
-The main remastered notebook is paced for an H100-class GPU. It can be opened
-on weaker hardware, but runtimes will differ. The notebook does not silently
-shorten the declared scientific workload to fit a smaller device.
+The live performance path is paced for an H100-class GPU. Runtimes on other
+hardware will differ.
 
 ## Start JupyterLab
 
-From the repository root:
+From the repository root, create the saved environment once:
 
 ```bash
-cd build
-docker compose up
+./scripts/v3-sync
 ```
 
-Open `http://localhost:8888/lab`, then launch
-`part-1-scalable-atomistic-workflows/alchemi-water-ir.ipynb`. Other tutorial
-folders remain visible for reference, but they need the separate environments
-listed above.
-
-Compose bind-mounts the local tutorial directories so edits appear immediately;
-it is the development path, not the clean-image release check. Rebuild after
-changing package pins. To inspect the files baked into the image with no host
-source mounted over them, stop Compose and run the command below. The clean
-v2 image contains the remastered Part 1 plus the Part 2/3 status READMEs; it
-does not package their historical notebooks or scientific data.
+Then launch JupyterLab through the frozen environment:
 
 ```bash
-docker run --rm --gpus all --shm-size=8g \
-  -p 8888:8888 alchemi-playbook:latest
+./scripts/v3-run jupyter lab
 ```
 
-The image definition and package pins live in [build/Dockerfile](build/Dockerfile),
-[build/environment.yml](build/environment.yml), and
-[build/requirements.txt](build/requirements.txt).
+The exact Python resolution is saved in [`uv.lock`](uv.lock). Immutable Toolkit,
+Toolkit-Ops, model, and data identities are recorded in
+[`environment/runtime-pins.toml`](environment/runtime-pins.toml).
 
 ## Documentation
 
 | Document | Purpose |
 |---|---|
-| [Fundamental tutorial design principles](TUTORIAL_DESIGN_PRINCIPLES.md) | General rules derived from strong PyTorch, TorchSim, Warp, BioNeMo, and large-scale computing tutorials |
-| [ALCHEMI tutorial principles and visual style](ALCHEMI_TUTORIAL_PRINCIPLES.md) | Toolkit-first curriculum, public API exposure, live compute, helper-code, and notebook-style rules |
-| [Toolkit API curriculum](TOOLKIT_API_CURRICULUM.md) | Separate list of the Toolkit capabilities and public APIs the playbook should cover |
+| [ALCHEMI tutorial guide](TUTORIAL_GUIDE.md) | The single teaching standard, curriculum, visual system, helper boundary, and review process |
+| [Toolkit API reference](TOOLKIT_API_REFERENCE.md) | Exact public Toolkit capabilities, names, shapes, relationships, and release-specific constraints |
 | [Third-party notices](THIRD_PARTY_NOTICES.md) | Software, model, checkpoint, and redistribution notes |
 | [Changelog](CHANGELOG.md) | User-visible changes to the playbook |
 

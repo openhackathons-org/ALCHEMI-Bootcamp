@@ -12,6 +12,17 @@ earlier in the notebook. Packmol placed the two kinds of molecule independently
 when this base box was prepared. The count is a 1:1 composition count, not a
 count of bound dimers. The checked files live in `prebuilt_base_box/`.
 
+Those source geometries are provided by Jan Řezáč and NCI Atlas contributors
+under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/), from
+[NCI Atlas](https://github.com/Honza-R/NCIAtlas) at revision
+`1816bfc72609d7deb1d4f93ab9e27eb13bb44bec`. Upstream states that license in its
+[`README.md`](https://github.com/Honza-R/NCIAtlas/blob/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec/README.md)
+and publishes no `LICENSE` file. The base-box manifest records the
+`nci_system_id` and `nci_subset_sha256` that bind this box to that source.
+Modifications: single-system selection, fragment extraction, and Packmol
+replication into a periodic box. Each molecule is placed as a rigid unit, so the
+source internal geometries are unchanged.
+
 The 3,200-atom box is used for the one-GPU PME-versus-Ewald check. The
 multi-GPU comparison uses one deterministic 51,200-atom integer supercell of
 that box on 1, 2, and 4 H100s. This keeps the density, composition, and

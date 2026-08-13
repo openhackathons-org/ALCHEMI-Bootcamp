@@ -101,17 +101,13 @@ ENV LD_LIBRARY_PATH="/opt/conda/envs/alchemi-playbook/lib/python3.12/site-packag
 # bind-mounts which shadow these at runtime.
 COPY .dockerignore .gitattributes .gitignore ./
 COPY README.md LICENSE THIRD_PARTY_NOTICES.md CHANGELOG.md RUNTIME_SNAPSHOT.md ./
-COPY TUTORIAL_DESIGN_PRINCIPLES.md ALCHEMI_TUTORIAL_PRINCIPLES.md TOOLKIT_API_CURRICULUM.md ./
+COPY TUTORIAL_GUIDE.md TOOLKIT_API_REFERENCE.md ./
 COPY build/Dockerfile build/docker-compose.yml build/environment.yml ./build/
 COPY build/requirements.txt ./build/requirements.txt
 COPY build/prewarm_aimnet.py ./build/prewarm_aimnet.py
 COPY build/prewarm_d3.py ./build/prewarm_d3.py
 COPY build/prewarm_sevennet.py ./build/prewarm_sevennet.py
 COPY part-1-scalable-atomistic-workflows ./part-1-scalable-atomistic-workflows
-# Retained Parts 2 and 3 need separate historical environments and contain
-# data that is outside the Part 1 release. Include only their status READMEs.
-COPY part-2-batched-adsorption-toolkit/README.md ./part-2-batched-adsorption-toolkit/README.md
-COPY part-3-batched-melting-toolkit/README.md ./part-3-batched-melting-toolkit/README.md
 # Stage 7 and the Compute Lab runbook link to these maintained sources.
 # Learners do not launch the Slurm jobs during class, but the complete public
 # API, validation, and recorded-result paths must remain inspectable.

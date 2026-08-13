@@ -9,14 +9,13 @@
 .dockerignore
 .gitattributes
 .gitignore
-ALCHEMI_TUTORIAL_PRINCIPLES.md
 CHANGELOG.md
 LICENSE
 README.md
 RUNTIME_SNAPSHOT.md
 THIRD_PARTY_NOTICES.md
-TOOLKIT_API_CURRICULUM.md
-TUTORIAL_DESIGN_PRINCIPLES.md
+TOOLKIT_API_REFERENCE.md
+TUTORIAL_GUIDE.md
 build/Dockerfile
 build/docker-compose.yml
 build/environment.yml
@@ -47,8 +46,6 @@ scripts/slurm_part1_nci_stage3.sbatch
 scripts/slurm_part1_remaster_h100.sbatch
 scripts/slurm_part1_sevennet_setup.sbatch
 scripts/validate_part1_ir_run.py
-part-2-batched-adsorption-toolkit/README.md
-part-3-batched-melting-toolkit/README.md
 part-1-scalable-atomistic-workflows/COMPUTE_LAB_RUNBOOK.md
 part-1-scalable-atomistic-workflows/README.md
 part-1-scalable-atomistic-workflows/alchemi-water-ir.ipynb

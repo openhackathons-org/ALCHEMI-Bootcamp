@@ -1,0 +1,37 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+runtime_root="${ALCHEMI_V3_RUNTIME_ROOT:-/tmp/alchemi-v3-runtime}"
+
+mkdir -p \
+    "${runtime_root}/aimnet" \
+    "${runtime_root}/cache" \
+    "${runtime_root}/dftd3" \
+    "${runtime_root}/huggingface" \
+    "${runtime_root}/ipython" \
+    "${runtime_root}/jupyter-config" \
+    "${runtime_root}/jupyter-data" \
+    "${runtime_root}/matplotlib" \
+    "${runtime_root}/ruff" \
+    "${runtime_root}/torch" \
+    "${runtime_root}/uv-cache" \
+    "${runtime_root}/warp"
+export AIMNET_CACHE_DIR="${runtime_root}/aimnet"
+export ALCHEMI_D3_PARAM_FILE="${runtime_root}/dftd3/dftd3_parameters.pt"
+export HF_HOME="${runtime_root}/huggingface"
+export IPYTHONDIR="${runtime_root}/ipython"
+export JUPYTER_CONFIG_DIR="${runtime_root}/jupyter-config"
+export JUPYTER_DATA_DIR="${runtime_root}/jupyter-data"
+export MATTERVIZ_ANYWIDGET_DIR="${repository_root}/shared/matterviz-anywidget-0.4.0"
+export MPLCONFIGDIR="${runtime_root}/matplotlib"
+export RUFF_CACHE_DIR="${runtime_root}/ruff"
+export TORCH_HOME="${runtime_root}/torch"
+export UV_CACHE_DIR="${runtime_root}/uv-cache"
+export UV_PROJECT_ENVIRONMENT="${runtime_root}/venv"
+export WARP_CACHE_PATH="${runtime_root}/warp"
+export XDG_CACHE_HOME="${runtime_root}/cache"
+
+uv sync --project "${repository_root}" --frozen
+uv run --project "${repository_root}" --frozen --no-sync \
+    python "${repository_root}/environment/prewarm_assets.py"

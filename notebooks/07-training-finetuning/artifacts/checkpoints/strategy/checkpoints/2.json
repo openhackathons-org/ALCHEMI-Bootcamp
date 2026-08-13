@@ -1,0 +1,78 @@
+{
+  "optimizer_configs": {
+    "main": [
+      {
+        "cls_path": "nvalchemi.training.optimizers.OptimizerConfig",
+        "timestamp": "2026-08-13T14:52:38.768601+00:00",
+        "optimizer_cls": "torch.optim.adam.Adam",
+        "optimizer_kwargs": {
+          "lr": 0.03
+        },
+        "scheduler_cls": null,
+        "scheduler_kwargs": {},
+        "scheduler_metric_adapter": null
+      }
+    ]
+  },
+  "num_epochs": null,
+  "num_steps": 49,
+  "epoch_step_modifier": 1.0,
+  "devices": [
+    "cpu"
+  ],
+  "loss_fn_spec": {
+    "cls_path": "nvalchemi.training.losses.composition.ComposedLossFunction",
+    "timestamp": "2026-08-13T14:52:38.767753+00:00",
+    "components": [
+      {
+        "cls_path": "nvalchemi.training.losses.terms.EnergyMSELoss",
+        "timestamp": "2026-08-13T14:52:38.766527+00:00",
+        "target_key": "energy",
+        "prediction_key": "predicted_energy",
+        "per_atom": false,
+        "ignore_nonfinite": false,
+        "dtype_policy": "strict"
+      },
+      {
+        "cls_path": "nvalchemi.training.losses.terms.ForceMSELoss",
+        "timestamp": "2026-08-13T14:52:38.766993+00:00",
+        "target_key": "forces",
+        "prediction_key": "predicted_forces",
+        "normalize_by_atom_count": true,
+        "ignore_nonfinite": false,
+        "dtype_policy": "strict"
+      }
+    ],
+    "weights": [
+      2500.0,
+      2500.0
+    ],
+    "normalize_weights": false,
+    "dtype_policy": null
+  },
+  "model_specs": {
+    "main": {
+      "cls_path": "helpers.models.TrainableLennardJones",
+      "timestamp": "2026-08-13T14:52:38.768978+00:00",
+      "epsilon_eV": 0.007,
+      "sigma_A": 3.1,
+      "cutoff_A": 7.0
+    }
+  },
+  "single_model_input": true,
+  "training_fn": "nvalchemi.training.strategy.default_training_fn",
+  "freeze_patterns": [],
+  "trainable_patterns": [
+    "main.log_epsilon",
+    "main.log_sigma"
+  ],
+  "freeze_mode": "requires_grad",
+  "strategy_cls": "nvalchemi.training.finetune.FineTuningStrategy",
+  "runtime_state": {
+    "step_count": 14,
+    "global_step_count": 14,
+    "batch_count": 14,
+    "epoch_count": 1,
+    "epoch_step_count": 7
+  }
+}
