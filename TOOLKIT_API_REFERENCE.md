@@ -111,7 +111,7 @@ Teach these operations directly:
 |---|---|
 | `AtomicData.from_atoms(...)` | Convert ASE structures without handwritten coordinate blocks. |
 | `AtomicData.from_structure(...)` | Convert pymatgen structures through the public path. |
-| `add_node_property(...)` | Add per-atom values such as masses, velocities, or categories. |
+| `add_node_property(...)` | Do not teach at this pin; see the mutation note below. Use `Batch.add_key(..., level="node")` for custom per-atom values. |
 | `add_system_property(...)` | Add graph-level values such as charge, multiplicity, or stable ID. |
 | `AtomicData.to(...)` | Move data across device or dtype boundaries explicitly. |
 | `data.use_default_masses()`, `data.use_default_categories()` | Add standard atom properties without tutorial-local lookup tables. |
@@ -127,10 +127,20 @@ Teach these operations directly:
 pinned implementation decide when that is the right check:
 
 - The comparison is exact, not numerical. `chemical_hash` formats sorted atomic
-  numbers and positions as text and applies BLAKE2s, so a 1e-7 Å coordinate
-  change produces a different hash. Use `==` for structural identity such as a
-  save and reload round trip, and `torch.allclose(...)` whenever the question is
-  whether values agree within tolerance.
+  numbers and positions as text and applies BLAKE2s, so any change the tensor
+  actually stores produces a different hash. The resolution is the dtype's, not
+  the formatter's: at `float32` with coordinates near 2 Å the spacing between
+  representable values is 2.38e-7 Å, so a 1e-7 Å shift is discarded on write and
+  the hash is unchanged. It changes from roughly 3e-7 Å upward at `float32`, and
+  from 1e-8 Å at `float64`. Use `==` for structural identity such as a save and
+  reload round trip, and `torch.allclose(...)` whenever the question is whether
+  values agree within tolerance.
+- The hash covers absolute coordinates, with no translation or rotation
+  invariance. A rigid 1 Å shift of an otherwise identical structure hashes
+  unequal while every interatomic distance is preserved.
+- `chemical_hash` is a plain property recomputed from the current tensors on
+  every read. There is no cache and no invalidation call, so an in-place edit to
+  `positions` changes the next comparison immediately.
 - The docstring claims invariance to atom ordering, but the implementation sorts
   by atomic number alone. Atoms that share an atomic number keep their input
   order, so the same molecule listed in a different order hashes unequal.
@@ -139,6 +149,35 @@ pinned implementation decide when that is the right check:
 `chemical_hash` moves tensors with `.cpu()` before hashing, so a CPU and CUDA
 pair of the same structure hashes equal and `==` will not detect a device
 difference.
+
+Mutating an `AtomicData` object in place behaves differently per route at commit
+`8c2c307c…`. Verified by execution on CPU:
+
+- Assigning a declared field such as `positions` re-runs the field and model
+  validators. A shape or dtype mismatch is caught at the field level and the
+  receiver is left unchanged, which makes it safe to demonstrate. A transposed
+  coordinate block is the clearest example.
+- A **row-count** mismatch is not transactional. The validator raises, but the
+  bad tensor has already been written, so `chemical_hash` then raises
+  `IndexError` and the object stays unusable until a correctly sized tensor is
+  assigned. Never demonstrate this on a live object a later cell depends on.
+  The message can also name a field the caller never touched, because the
+  validator walks an unordered set.
+- `add_system_property(...)` is the sound path for graph-level values. The key
+  lands in the model, appears in `model_dump()` and `system_properties`, survives
+  `clone()` and `to()`, and `Batch.from_data_list` packs one row per graph. Shape
+  is unchecked for a new key, and a repeated key overwrites without warning.
+- `add_node_property(...)` writes through `object.__setattr__`, so it validates
+  nothing and its `node_dim` argument is ignored. The key is invisible to
+  `model_dump()`, `node_properties`, `clone()`, `to()`, and
+  `Batch.from_data_list`, so every copy drops it.
+- `add_edge_property(...)` does not enforce an edge count in practice, because
+  the key joins the edge keys only after the validated assignment.
+- `del data.charge` succeeds silently and leaves the field unreadable while the
+  system keys still list it.
+- At `float64` on CPU the tensor returned by `from_atoms` can share memory with
+  the source ASE positions, so an in-place edit moves the ASE object too. At
+  `float32` the dtype conversion forces a copy and the ASE object is untouched.
 
 Show important fields when they matter: `positions`, `atomic_numbers`, `cell`,
 `pbc`, `energy`, `forces`, `stress`, `charge`, `mult`, and `velocities`.
