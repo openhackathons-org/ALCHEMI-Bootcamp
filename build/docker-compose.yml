@@ -15,9 +15,7 @@ services:
     # Selective bind-mounts. Students see only tutorial content under
     # /workspace; build/, start-*, and dotfiles stay hidden.
     volumes:
-      - ../part-2-batched-adsorption-toolkit:/workspace/part-2-batched-adsorption-toolkit
       - ../part-1-scalable-atomistic-workflows:/workspace/part-1-scalable-atomistic-workflows
-      - ../part-3-batched-melting-toolkit:/workspace/part-3-batched-melting-toolkit
       - ../research-toolkit-foundations:/workspace/research-toolkit-foundations
       - ../README.md:/workspace/README.md:ro
       - ../LICENSE:/workspace/LICENSE:ro

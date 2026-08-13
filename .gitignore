@@ -6,33 +6,20 @@
 # their SHA256SUMS file.
 !part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/job-records/*/logs/
 !part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/job-records/*/logs/*.log
-# Cache CSVs shipped to students for FAST_DEMO progress-replay
-!part-3-batched-melting-toolkit/assets/
-!part-3-batched-melting-toolkit/assets/naphthalene_long_2025/
-!part-3-batched-melting-toolkit/assets/naphthalene_long_2025/logs/
-!part-3-batched-melting-toolkit/assets/naphthalene_long_2025/logs/**
-# Banner + figures + partner logos embedded in the Part 1 notebook
-!part-2-batched-adsorption-toolkit/assets/
-!part-2-batched-adsorption-toolkit/assets/images/
-!part-2-batched-adsorption-toolkit/assets/images/**
 # Art-only banner candidates embedded in the rebuilt Water IR notebook
 !part-1-scalable-atomistic-workflows/assets/
 !part-1-scalable-atomistic-workflows/assets/images/
 !part-1-scalable-atomistic-workflows/assets/images/banner_candidates/
 !part-1-scalable-atomistic-workflows/assets/images/banner_candidates/**
-# Banner + figures + partner logos embedded in the Part 2 notebook
-!part-3-batched-melting-toolkit/assets/images/
-!part-3-batched-melting-toolkit/assets/images/*.jpg
-!part-3-batched-melting-toolkit/assets/images/*.png
-!part-3-batched-melting-toolkit/assets/images/logos/
-!part-3-batched-melting-toolkit/assets/images/logos/**
-part-3-batched-melting-toolkit/assets/images/.anim_cache/
+# v3 notebook assets are part of the lesson, not build output: notebooks embed
+# these SVGs directly and helpers read them at runtime, so a clone needs them.
+!notebooks/*/assets/
+!notebooks/*/assets/**
+# The re-include above out-ranks the general __pycache__ rule further down, so
+# bytecode inside an assets directory needs its own exclusion.
+notebooks/*/assets/**/__pycache__/
 # New notebook image directories need an explicit re-include above before they
 # can be staged.
-# tools/assets is a convenience symlink to ../assets (not tracked)
-part-3-batched-melting-toolkit/tools/assets
-# Reference PDFs (cited by DOI in the notebook; not redistributed)
-part-3-batched-melting-toolkit/refs/
 __pycache__/
 *.pyc
 benchmarking/

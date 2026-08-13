@@ -1,0 +1,47 @@
+schema = "alchemi.tutorials-v3.runtime-pins.v1"
+python = "3.12"
+torch = "2.12.0"
+cuda_index = "cu130"
+
+[toolkit]
+distribution = "nvalchemi-toolkit"
+version = "0.2.0"
+repository = "https://github.com/NVIDIA/nvalchemi-toolkit.git"
+commit = "8c2c307c1c0c76baee6f7a68eb75a45da83ffd18"
+verified_remote = "refs/heads/main"
+verified_date = "2026-08-11"
+
+[toolkit_ops]
+distribution = "nvalchemi-toolkit-ops"
+version = "0.4.1"
+repository = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git"
+commit = "c1e23460859a784e1d78043bcd1c8af0d1095fa2"
+verified_remote = "refs/heads/main"
+verified_date = "2026-08-11"
+
+[model]
+package = "aimnet"
+package_version = "0.2.0"
+checkpoint_alias = "aimnet2-wb97m-d3_0"
+checkpoint_sha256 = "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28"
+checkpoint_distribution = "runtime download from the official AIMNet2 model card"
+checkpoint_license = "MIT"
+
+[dispersion]
+generated_parameter_sha256 = "b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84"
+redistribution = "runtime cache only; see THIRD_PARTY_NOTICES.md"
+
+[visualization]
+package = "pymatviz"
+package_version = "0.18.0"
+matterviz_anywidget_version = "0.4.0"
+directory = "shared/matterviz-anywidget-0.4.0"
+javascript_sha256 = "f9a9341baa6128c0d97a2d40af1ec200d289e48cb2c3538b7c72ba8002e7d96f"
+stylesheet_sha256 = "8e745b14419c5793b792329006fd655d760ed566a4fd5fc5c509f5ab6acc09f4"
+license = "MIT"
+license_sha256 = "f519d155d7ed90bd0e8e3ee2a669b70d9ad9f03fa532e008b1b397769f1f175b"
+
+[data]
+directory = "data/nci_atlas"
+manifest_sha256 = "c3e189fb8e96a7aec8e587631659f6424fae51cf42243d9f4c54d64e5ed3207d"
+extxyz_sha256 = "331b087fc7ced6eaec25fae9dccba767fc47e4ae5e0523fcaddfa4fbf49c455f"

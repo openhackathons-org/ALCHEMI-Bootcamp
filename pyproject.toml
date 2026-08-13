@@ -1,0 +1,45 @@
+[project]
+name = "alchemi-tutorials-v3"
+version = "0.0.0"
+description = "Locked authoring and runtime environment for the ALCHEMI Toolkit v3 tutorials"
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "aimnet==0.2.0",
+    "ase==3.27.0",
+    "matplotlib>=3.10,<4",
+    "nvalchemi-toolkit[aimnet,ase] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@8c2c307c1c0c76baee6f7a68eb75a45da83ffd18",
+    "nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2",
+    "numpy>=2,<2.4",
+    "pandas>=2.3,<3",
+    "rich==14.1.0",
+    "scipy>=1.16,<2",
+    "torch==2.12.0",
+    "zarr>=3,<4",
+    "pymatviz==0.18.0",
+]
+
+[dependency-groups]
+notebook = [
+    "ipykernel>=7,<8",
+    "ipywidgets>=8,<9",
+    "jupyterlab>=4,<5",
+    "nbclient>=0.10,<1",
+    "nbformat>=5.10,<6",
+]
+test = [
+    "pytest>=8,<9",
+    "ruff>=0.11,<1",
+]
+
+[tool.uv]
+default-groups = ["notebook", "test"]
+index-strategy = "unsafe-best-match"
+package = false
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true

@@ -1,0 +1,40 @@
+@page {
+  size: 1440px 1000px;
+  margin: 30px;
+}
+
+html,
+body,
+#notebook,
+#notebook-container {
+  position: static !important;
+  height: auto !important;
+  overflow: visible !important;
+}
+
+#notebook-container {
+  box-shadow: none !important;
+  margin: 0 auto;
+  max-width: 1140px;
+}
+
+.cell,
+.output_wrapper,
+.output {
+  break-inside: avoid;
+}
+
+img,
+object {
+  height: auto;
+  max-width: 100%;
+}
+
+/* The classic nbconvert print stylesheet suppresses all backgrounds. */
+.text_cell_render div[style*="background:#111619"] {
+  background: #111619 !important;
+}
+
+.text_cell_render div[style*="background:#F2F3F1"] {
+  background: #f2f3f1 !important;
+}

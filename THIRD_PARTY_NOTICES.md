@@ -4,6 +4,21 @@ This file summarizes the external software, models, checkpoints, and datasets
 used by the current tutorial tree. A software license does not automatically
 cover model weights, data, figures, or downloaded runtime files.
 
+## pymatviz and MatterViz
+
+Part 01 uses `pymatviz 0.18.0` and its notebook-native `StructureWidget` to
+display ASE molecules with the MatterViz renderer. The shared tutorial assets
+include the JavaScript and CSS from `matterviz-anywidget 0.4.0`, together with
+the upstream license, so the widget can load without fetching frontend code
+during the lesson.
+
+- pymatviz source: <https://github.com/janosh/pymatviz>
+- MatterViz source: <https://github.com/janosh/matterviz>
+- both projects use the MIT license
+
+The fixed versions and asset SHA-256 values are recorded in
+`environment/runtime-pins.toml`.
+
 ## PyTorch, JAX, NVIDIA Warp, and Toolkit-Ops
 
 The Part 1 framework primer uses PyTorch and JAX arrays through Toolkit-Ops and
@@ -86,9 +101,24 @@ image, article text, experimental spectrum, or intensity data is redistributed.
 
 ## Interaction datasets
 
-The curated NCI Atlas subset used in Part 1 is provided under CC BY 4.0 and
-retains source identifiers and attribution. See
-[the data README](part-1-scalable-atomistic-workflows/data/nci_atlas/README.md).
+The curated NCI Atlas subset used in Part 1 is provided under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/) and retains source
+identifiers and attribution. Two curated files are packaged, each with its own
+data README:
+
+- interaction-energy curves (`nci-atlas-curves.csv.gz`):
+  [the Part 1 data README](part-1-scalable-atomistic-workflows/data/nci_atlas/README.md)
+- shared molecule collection (`ir-molecule-library.extxyz`), which the notebook
+  lessons load: [the shared data README](data/nci_atlas/README.md)
+
+Creator: Jan Řezáč and NCI Atlas contributors. Upstream source:
+<https://github.com/Honza-R/NCIAtlas> at pinned revision
+`1816bfc72609d7deb1d4f93ab9e27eb13bb44bec`. Upstream states its license in
+[`README.md`](https://github.com/Honza-R/NCIAtlas/blob/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec/README.md)
+and publishes no `LICENSE` file, so that README is the citable license source.
+
+Modifications: subset selection, single-fragment extraction, and reformatting to
+CSV and extxyz; coordinates and energies are unchanged.
 
 The archived research notebook's DESS66 input is not included in the Part 1
 image. The full repository checkout keeps the upstream DESRES redistribution

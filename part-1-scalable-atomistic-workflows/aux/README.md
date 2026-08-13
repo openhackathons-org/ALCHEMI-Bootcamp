@@ -1,4 +1,9 @@
-# Part 1 support code
+# Historical v2 Part 1 support code
+
+> This directory supports the preserved v2 seven-stage notebook. It does not
+> define helper or presentation rules for the active v3 notebooks. Use
+> [TUTORIAL_GUIDE.md](../../TUTORIAL_GUIDE.md) for
+> current guidance.
 
 `aux/` contains tested support code that would interrupt the notebook's Toolkit
 learning path. It is not a second user-facing API. The package `__init__.py`
@@ -73,7 +78,7 @@ Long tensor validation and graph assembly may remain in helper functions. The
 notebook must still compare the Toolkit adapter with the model's native path
 before using it in a workflow.
 
-## Notebook presentation
+## Historical notebook presentation
 
 `ui.py` is the single implementation of the 880 px notebook presentation
 system. It provides the hero, stage cards, progress cards, callouts, complete
@@ -84,5 +89,6 @@ scientific calculation or Toolkit workflow logic.
 layout. Plot functions return figure objects; the notebook decides when to
 display and save them.
 
-The complete visual and writing rules are in
-[ALCHEMI_TUTORIAL_PRINCIPLES.md](../../ALCHEMI_TUTORIAL_PRINCIPLES.md).
+The hero, stage-card, progress-card, and presentation-helper system described
+here belongs to v2. The current visual and writing rules are in
+[TUTORIAL_GUIDE.md](../../TUTORIAL_GUIDE.md).

@@ -1,4 +1,9 @@
-# Part 1: From one structure to scalable atomistic workflows
+# Historical v2 Part 1: From one structure to scalable atomistic workflows
+
+> This seven-stage notebook is preserved as v2 source material. The active v3
+> Part 01 is `notebooks/01-atomicdata-batch/atomicdata-and-batch.ipynb`. The
+> current curriculum and visual system are in
+> [TUTORIAL_GUIDE.md](../TUTORIAL_GUIDE.md).
 
 This tutorial starts with one ALCHEMI Toolkit model call and grows through
 batched intermolecular interactions, a custom materials-model adapter, and a
@@ -129,7 +134,7 @@ generation, file checks, plotting, signal processing, and notebook
 presentation. Those helpers are not Toolkit APIs.
 
 The complete API map is in
-[TOOLKIT_API_CURRICULUM.md](../TOOLKIT_API_CURRICULUM.md).
+[TOOLKIT_API_REFERENCE.md](../TOOLKIT_API_REFERENCE.md).
 
 ## Scientific scope
 
@@ -422,4 +427,4 @@ The exact two-revision H100 and multi-GPU release sequence is in
 [COMPUTE_LAB_RUNBOOK.md](COMPUTE_LAB_RUNBOOK.md).
 
 Tutorial-writing and visual rules are in
-[ALCHEMI_TUTORIAL_PRINCIPLES.md](../ALCHEMI_TUTORIAL_PRINCIPLES.md).
+[TUTORIAL_GUIDE.md](../TUTORIAL_GUIDE.md).

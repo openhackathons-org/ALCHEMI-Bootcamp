@@ -1,0 +1,36 @@
+<mxGraphModel adaptiveColors="auto" grid="1" gridSize="10" page="0">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="toolkit" value="ALCHEMI Toolkit&lt;br&gt;&lt;font style='font-size:10px'&gt;reusable data, model, workflow, and training tools&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#081005;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="24" y="40" width="892" height="58" as="geometry" />
+    </mxCell>
+    <mxCell id="ops" value="Toolkit-Ops&lt;br&gt;&lt;font style='font-size:9px'&gt;neighbors · reductions · interactions&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#172119;strokeColor=#43533B;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="646" y="49" width="254" height="40" as="geometry" />
+    </mxCell>
+    <mxCell id="data" value="Data and state&lt;br&gt;&lt;font style='font-size:9px'&gt;01 AtomicData + Batch · 02 Zarr&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#68737E;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="24" y="240" width="202" height="86" as="geometry" />
+    </mxCell>
+    <mxCell id="models" value="Models and potentials&lt;br&gt;&lt;font style='font-size:9px'&gt;03 Models + composition&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#68737E;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="254" y="240" width="202" height="86" as="geometry" />
+    </mxCell>
+    <mxCell id="workflows" value="Simulation workflows&lt;br&gt;&lt;font style='font-size:9px'&gt;04 Hooks · 05 Dynamics · 06 GPU&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#68737E;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="484" y="240" width="202" height="86" as="geometry" />
+    </mxCell>
+    <mxCell id="scale" value="Training and scale&lt;br&gt;&lt;font style='font-size:9px'&gt;07 Training · 08 Domain decomposition&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#68737E;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+      <mxGeometry x="714" y="240" width="202" height="86" as="geometry" />
+    </mxCell>
+    <mxCell id="capability-edge-1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#68737E;strokeWidth=1.2;startArrow=none;endArrow=block;endFill=1;" edge="1" parent="1" source="toolkit" target="data">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="capability-edge-2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#68737E;strokeWidth=1.2;startArrow=none;endArrow=block;endFill=1;" edge="1" parent="1" source="toolkit" target="models">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="capability-edge-3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#68737E;strokeWidth=1.2;startArrow=none;endArrow=block;endFill=1;" edge="1" parent="1" source="toolkit" target="workflows">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="capability-edge-4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;html=1;strokeColor=#68737E;strokeWidth=1.2;startArrow=none;endArrow=block;endFill=1;" edge="1" parent="1" source="toolkit" target="scale">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>

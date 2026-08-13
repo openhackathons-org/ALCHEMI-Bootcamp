@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="158" viewBox="0 0 920 158" role="img" aria-labelledby="title desc">
+<title id="title">Molecular structure, AtomicData, and Batch</title>
+<desc id="desc">A molecular structure becomes one AtomicData graph. Batch packs several graphs into shared tensors while batch index and batch pointer preserve graph boundaries.</desc>
+<defs><marker id="data-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#68737E"/></marker></defs>
+<rect width="920" height="158" rx="8" fill="#11161B"/>
+<g font-family="NVIDIA Sans,Arial,sans-serif" text-anchor="middle">
+<rect x="28" y="38" width="238" height="82" rx="7" fill="#3A332C" stroke="#68737E"/>
+<text x="147" y="70" fill="#F3F4F6" font-size="17" font-weight="700">Molecule or structure</text>
+<text x="147" y="96" fill="#A8B0B8" font-size="13">ASE Atoms or pymatgen</text>
+<rect x="341" y="38" width="238" height="82" rx="7" fill="#76B900" stroke="#76B900"/>
+<text x="460" y="70" fill="#081005" font-size="17" font-weight="700">AtomicData</text>
+<text x="460" y="96" fill="#15200D" font-size="13">one system, one graph</text>
+<rect x="654" y="38" width="238" height="82" rx="7" fill="#20262C" stroke="#76B900"/>
+<text x="773" y="67" fill="#F3F4F6" font-size="17" font-weight="700">Batch</text>
+<text x="773" y="91" fill="#A8B0B8" font-size="13">many graphs, packed tensors</text>
+<text x="773" y="108" fill="#A8B0B8" font-size="11">batch_idx maps rows; batch_ptr marks bounds</text>
+<path d="M274 79H331" stroke="#68737E" stroke-width="1.5" marker-end="url(#data-arrow)"/>
+<path d="M587 79H644" stroke="#68737E" stroke-width="1.5" marker-end="url(#data-arrow)"/>
+<text x="302" y="63" fill="#A8B0B8" font-size="10">from_atoms</text>
+<text x="615" y="63" fill="#A8B0B8" font-size="10">from_data_list</text>
+</g>
+</svg>

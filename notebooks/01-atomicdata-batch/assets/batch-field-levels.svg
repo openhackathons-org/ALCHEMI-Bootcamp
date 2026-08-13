@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="350" viewBox="0 0 820 350" role="img" aria-labelledby="title desc">
+  <title id="title">Field levels inside a Toolkit Batch</title>
+  <desc id="desc">One Batch branches into system, node, and edge fields. System fields have one row per molecule, node fields one row per atom, and edge fields one row per neighbor relation.</desc>
+  <defs>
+    <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto">
+      <path d="M0 0L8 4L0 8Z" fill="#7C8794"/>
+    </marker>
+  </defs>
+  <rect width="820" height="350" rx="16" fill="#0B0F10"/>
+  <g font-family="NVIDIA Sans, Arial, sans-serif">
+    <rect x="210" y="24" width="400" height="72" rx="12" fill="#76B900" stroke="#8DD21A"/>
+    <text x="410" y="55" text-anchor="middle" fill="#071004" font-size="20" font-weight="700">Batch</text>
+    <text x="410" y="79" text-anchor="middle" fill="#132004" font-size="14" font-weight="550">3 molecules · 17 atoms</text>
+
+    <path d="M410 96V126H140V154" fill="none" stroke="#7C8794" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+    <path d="M410 96V154" fill="none" stroke="#7C8794" stroke-width="2" marker-end="url(#arrow)"/>
+    <path d="M410 96V126H680V154" fill="none" stroke="#7C8794" stroke-width="2" stroke-linejoin="round" marker-end="url(#arrow)"/>
+
+    <g text-anchor="middle">
+      <rect x="30" y="162" width="220" height="142" rx="12" fill="#20252B" stroke="#30363D"/>
+      <text x="140" y="197" fill="#F3F4F6" font-size="18" font-weight="650">System fields</text>
+      <text x="140" y="224" fill="#C7CDD4" font-size="14">one row per molecule</text>
+      <text x="140" y="264" fill="#76B900" font-size="14" font-weight="650">molecule_id</text>
+      <text x="140" y="286" fill="#9BA4AE" font-size="13">shape [3]</text>
+
+      <rect x="300" y="162" width="220" height="142" rx="12" fill="#20252B" stroke="#30363D"/>
+      <text x="410" y="197" fill="#F3F4F6" font-size="18" font-weight="650">Node fields</text>
+      <text x="410" y="224" fill="#C7CDD4" font-size="14">one row per atom</text>
+      <text x="410" y="264" fill="#76B900" font-size="14" font-weight="650">is_carbon</text>
+      <text x="410" y="286" fill="#9BA4AE" font-size="13">shape [17]</text>
+
+      <rect x="570" y="162" width="220" height="142" rx="12" fill="#20252B" stroke="#30363D"/>
+      <text x="680" y="197" fill="#F3F4F6" font-size="18" font-weight="650">Edge fields</text>
+      <text x="680" y="224" fill="#C7CDD4" font-size="14">one row per neighbor pair</text>
+      <text x="680" y="264" fill="#9BA4AE" font-size="14">added with neighbors</text>
+      <text x="680" y="286" fill="#9BA4AE" font-size="13">shape [E, …]</text>
+    </g>
+  </g>
+</svg>
