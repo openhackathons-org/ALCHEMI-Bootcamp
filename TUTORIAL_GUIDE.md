@@ -94,6 +94,11 @@ Part 01 introduces ALCHEMI and the course. Later notebooks use a short folded
 orientation, link the exact earlier lesson they reuse, and state the one new
 capability they add. Every notebook rebuilds its inputs from a fresh kernel.
 
+Section headings carry no lesson number. A heading names the action the learner
+performs. The deep-dive part that owns a section is named in that section's
+closing **Go deeper** link, which keeps the mapping without forcing the
+headings into an order the notebook's own dependencies do not follow.
+
 The shared course map is an orientation graphic. It uses a compact vertical
 course spine and six larger capability groups. The current part and its primary
 capability use NVIDIA green. Course-map copy stays short enough to fit

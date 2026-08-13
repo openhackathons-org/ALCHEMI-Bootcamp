@@ -231,23 +231,6 @@ def show_molecule(
     )
 
 
-def charge_badge(data: AtomicData) -> Any:
-    """Return an accessible net-charge badge populated from Toolkit metadata."""
-
-    from IPython.display import HTML
-
-    charge = float(data.charge.item())
-    formatted = f"{charge:+g}".replace("-", "−")
-    return HTML(
-        '<div role="note" aria-label="Net charge from Toolkit metadata" '
-        'style="display:inline-flex;align-items:center;gap:0.45rem;'
-        "background:#F2F3F1;color:#1B1E20;border:1px solid #D6D9D4;"
-        'border-radius:999px;padding:0.35rem 0.72rem;font-size:0.92rem;">'
-        f"<strong>Net charge: {formatted} e</strong>"
-        '<span style="color:#555E63;">Toolkit system field</span></div>'
-    )
-
-
 def show_capability_map() -> Any:
     """Display the Toolkit map with native HTML hover details and links."""
 
