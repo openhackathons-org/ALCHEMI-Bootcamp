@@ -346,25 +346,26 @@ def capability_map_svg() -> str:
 
 
 def zarr_data_flow_svg() -> str:
-    """Render the pinned storage-to-model-device data path."""
+    """Render the pinned storage-to-selected-device data path."""
 
     boxes = (
         ("Zarr store", "disk or CPU storage", 20, SURFACE, TEXT, MUTED),
         ("Reader", "CPU tensors", 200, SURFACE, TEXT, MUTED),
-        ("Dataset", "target device", 380, SURFACE, TEXT, MUTED),
+        ("Dataset", "validate + move", 380, SURFACE, TEXT, MUTED),
         ("DataLoader", "batch + prefetch", 560, SURFACE, TEXT, MUTED),
-        ("Batch", "model device", 740, GREEN, "#081005", "#15200D"),
+        ("Batch", "selected device", 740, GREEN, "#081005", "#15200D"),
     )
     parts = [
         (
             '<svg xmlns="http://www.w3.org/2000/svg" width="920" height="96" '
             'viewBox="0 0 920 96" role="img" aria-labelledby="title desc">'
         ),
-        '<title id="title">Saved Zarr records to a model-device Batch</title>',
+        '<title id="title">Saved Zarr records to a selected-device Batch</title>',
         (
             '<desc id="desc">A Zarr store on disk or in CPU storage feeds a Reader '
-            "that returns CPU tensors. Dataset chooses the target device, DataLoader "
-            "batches and prefetches, and the result is a Batch on the model device.</desc>"
+            "that returns CPU tensors. Dataset validates records and moves them to "
+            "the configured device. DataLoader batches and prefetches, and the "
+            "resulting Batch stays on that device.</desc>"
         ),
         (
             '<defs><marker id="zarr-flow-arrow" viewBox="0 0 10 10" refX="9" refY="5" '
@@ -424,7 +425,7 @@ def zarr_drawio_xml() -> str:
         ),
         (
             "dataset",
-            "Dataset<br><font color='#A8B0B8'>target device</font>",
+            "Dataset<br><font color='#A8B0B8'>validate + move</font>",
             380,
             SURFACE,
             TEXT,
@@ -438,7 +439,7 @@ def zarr_drawio_xml() -> str:
         ),
         (
             "batch",
-            "Batch<br><font color='#15200D'>model device</font>",
+            "Batch<br><font color='#15200D'>selected device</font>",
             740,
             GREEN,
             "#081005",
