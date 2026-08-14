@@ -27,21 +27,29 @@ checkpoint_sha256 = "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec
 checkpoint_distribution = "runtime download from the official AIMNet2 model card"
 checkpoint_license = "MIT"
 
+[mace]
+package = "mace-torch"
+package_version = "0.3.15"
+checkpoint_alias = "medium-0b2"
+checkpoint_distribution = "runtime download from the official MACE-MP registry"
+checkpoint_license = "MIT"
+
 [dispersion]
 generated_parameter_sha256 = "b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84"
 redistribution = "runtime cache only; see THIRD_PARTY_NOTICES.md"
 
-[visualization]
-package = "pymatviz"
-package_version = "0.18.0"
-matterviz_anywidget_version = "0.4.0"
-directory = "shared/matterviz-anywidget-0.4.0"
-javascript_sha256 = "f9a9341baa6128c0d97a2d40af1ec200d289e48cb2c3538b7c72ba8002e7d96f"
-stylesheet_sha256 = "8e745b14419c5793b792329006fd655d760ed566a4fd5fc5c509f5ab6acc09f4"
-license = "MIT"
-license_sha256 = "f519d155d7ed90bd0e8e3ee2a669b70d9ad9f03fa532e008b1b397769f1f175b"
-
-[data]
-directory = "data/nci_atlas"
-manifest_sha256 = "c3e189fb8e96a7aec8e587631659f6424fae51cf42243d9f4c54d64e5ed3207d"
-extxyz_sha256 = "331b087fc7ced6eaec25fae9dccba767fc47e4ae5e0523fcaddfa4fbf49c455f"
+[structure_viewer]
+package = "py3Dmol"
+package_version = "2.5.5"
+package_license = "MIT"
+javascript_library = "3Dmol.js"
+javascript_version = "2.5.5"
+javascript_license = "BSD-3-Clause"
+# Provenance: the npm registry integrity for 3dmol@2.5.5, whose build/ directory
+# supplied the bundle and its two license files below.
+npm_tarball = "https://registry.npmjs.org/3dmol/-/3dmol-2.5.5.tgz"
+npm_integrity = "sha512-kqNHouGqq3YfW58174tdERvm0XYTmP0tavQKOqIw1ouc2OJ7epkXEFrtEkVXV0clBZT2Ze2xHRC/qxX0u0qCdw=="
+directory = "shared/3dmol-2.5.5"
+javascript_sha256 = "f7cc78921ae72e7623e89cdd111434f58c2efddd2ffda1cd212644b406fb8016"
+javascript_notice_sha256 = "ae3bfc688d0c9687b76e0ecc7fece0b393bcb4acf2aee09e19dda697eaa10b16"
+license_sha256 = "4c6eaaed856f3f28a3b1a98e74f4a8a71618de7d51ea4155c29f6f793bcef861"

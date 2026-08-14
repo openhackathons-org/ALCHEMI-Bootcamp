@@ -1,0 +1,79 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="445" viewBox="0 0 920 445" role="img" aria-labelledby="title desc">
+  <title id="title">Inflight refill replaces completed C with waiting D</title>
+  <desc id="desc">Before refill, molecules D, E, and F are waiting, molecule C has completed, and molecules A and B are running in the active Batch. The vertical refill check moves C to HostMemory and inserts D. After refill, D is running beside A and B, while E and F remain waiting.</desc>
+  <defs>
+    <marker id="inflight-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#68737E"/>
+    </marker>
+  </defs>
+  <rect width="920" height="445" rx="8" fill="#11161B"/>
+  <g font-family="NVIDIA Sans,Arial,sans-serif">
+    <text x="460" y="28" text-anchor="middle" fill="#F3F4F6" font-size="17" font-weight="700">One inflight refill</text>
+
+    <text x="40" y="54" fill="#A8B0B8" font-size="12">Before refill</text>
+    <rect x="40" y="65" width="210" height="105" rx="8" fill="#20262C"/>
+    <text x="145" y="89" text-anchor="middle" fill="#F3F4F6" font-size="14" font-weight="700">Waiting samples</text>
+    <rect x="61" y="101" width="48" height="54" rx="7" fill="#2B3238"/>
+    <text x="85" y="128" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">D</text>
+    <text x="85" y="147" text-anchor="middle" fill="#A8B0B8" font-size="10">waiting</text>
+    <rect x="121" y="101" width="48" height="54" rx="7" fill="#2B3238"/>
+    <text x="145" y="128" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">E</text>
+    <text x="145" y="147" text-anchor="middle" fill="#A8B0B8" font-size="10">waiting</text>
+    <rect x="181" y="101" width="48" height="54" rx="7" fill="#2B3238"/>
+    <text x="205" y="128" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">F</text>
+    <text x="205" y="147" text-anchor="middle" fill="#A8B0B8" font-size="10">waiting</text>
+
+    <rect x="270" y="65" width="420" height="105" rx="8" fill="#20262C"/>
+    <text x="480" y="89" text-anchor="middle" fill="#F3F4F6" font-size="14" font-weight="700">Active Batch</text>
+    <rect x="300" y="101" width="112" height="54" rx="7" fill="#314A59"/>
+    <text x="356" y="128" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">A</text>
+    <text x="356" y="147" text-anchor="middle" fill="#B7E3F1" font-size="10">running</text>
+    <rect x="424" y="101" width="112" height="54" rx="7" fill="#314A59"/>
+    <text x="480" y="128" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">B</text>
+    <text x="480" y="147" text-anchor="middle" fill="#B7E3F1" font-size="10">running</text>
+    <rect x="548" y="101" width="112" height="54" rx="7" fill="#3A332C"/>
+    <text x="604" y="128" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">C</text>
+    <text x="604" y="147" text-anchor="middle" fill="#CFC1B3" font-size="10">complete</text>
+
+    <rect x="710" y="65" width="170" height="105" rx="8" fill="#20262C"/>
+    <text x="795" y="89" text-anchor="middle" fill="#F3F4F6" font-size="14" font-weight="700">HostMemory</text>
+    <text x="795" y="133" text-anchor="middle" fill="#A8B0B8" font-size="12">empty</text>
+
+    <path d="M460 170V204" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" marker-end="url(#inflight-arrow)"/>
+    <rect x="150" y="204" width="620" height="58" rx="8" fill="#76B900"/>
+    <text x="460" y="228" text-anchor="middle" fill="#081005" font-size="15" font-weight="700">Refill check</text>
+    <text x="330" y="250" text-anchor="middle" fill="#15200D" font-size="12" font-weight="700">C → HostMemory</text>
+    <text x="590" y="250" text-anchor="middle" fill="#15200D" font-size="12" font-weight="700">D → Active Batch</text>
+    <path d="M460 262V296" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" marker-end="url(#inflight-arrow)"/>
+
+    <text x="40" y="286" fill="#A8B0B8" font-size="12">After refill</text>
+    <rect x="40" y="296" width="210" height="105" rx="8" fill="#20262C"/>
+    <text x="145" y="320" text-anchor="middle" fill="#F3F4F6" font-size="14" font-weight="700">Waiting samples</text>
+    <rect x="79" y="332" width="60" height="54" rx="7" fill="#2B3238"/>
+    <text x="109" y="359" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">E</text>
+    <text x="109" y="378" text-anchor="middle" fill="#A8B0B8" font-size="10">waiting</text>
+    <rect x="151" y="332" width="60" height="54" rx="7" fill="#2B3238"/>
+    <text x="181" y="359" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">F</text>
+    <text x="181" y="378" text-anchor="middle" fill="#A8B0B8" font-size="10">waiting</text>
+
+    <rect x="270" y="296" width="420" height="105" rx="8" fill="#20262C"/>
+    <text x="480" y="320" text-anchor="middle" fill="#F3F4F6" font-size="14" font-weight="700">Active Batch</text>
+    <rect x="300" y="332" width="112" height="54" rx="7" fill="#314A59"/>
+    <text x="356" y="359" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">A</text>
+    <text x="356" y="378" text-anchor="middle" fill="#B7E3F1" font-size="10">running</text>
+    <rect x="424" y="332" width="112" height="54" rx="7" fill="#314A59"/>
+    <text x="480" y="359" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">B</text>
+    <text x="480" y="378" text-anchor="middle" fill="#B7E3F1" font-size="10">running</text>
+    <rect x="548" y="332" width="112" height="54" rx="7" fill="#314A59"/>
+    <text x="604" y="359" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">D</text>
+    <text x="604" y="378" text-anchor="middle" fill="#B7E3F1" font-size="10">running · refilled</text>
+
+    <rect x="710" y="296" width="170" height="105" rx="8" fill="#20262C"/>
+    <text x="795" y="320" text-anchor="middle" fill="#F3F4F6" font-size="14" font-weight="700">HostMemory</text>
+    <rect x="740" y="332" width="110" height="54" rx="7" fill="#3A332C"/>
+    <text x="795" y="359" text-anchor="middle" fill="#F3F4F6" font-size="23" font-weight="700">C</text>
+    <text x="795" y="378" text-anchor="middle" fill="#CFC1B3" font-size="10">completed</text>
+
+    <text x="460" y="429" text-anchor="middle" fill="#A8B0B8" font-size="11">The next model evaluation uses the refilled Batch: A, B, and D.</text>
+  </g>
+</svg>

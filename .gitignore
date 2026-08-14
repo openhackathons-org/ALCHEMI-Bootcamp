@@ -2,64 +2,22 @@
 **/logs/
 **/assets/
 **/_fullrun_status.log
-# Checked domain-decomposition results include the scheduler logs named in
-# their SHA256SUMS file.
-!part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/job-records/*/logs/
-!part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/job-records/*/logs/*.log
-# Art-only banner candidates embedded in the rebuilt Water IR notebook
-!part-1-scalable-atomistic-workflows/assets/
-!part-1-scalable-atomistic-workflows/assets/images/
-!part-1-scalable-atomistic-workflows/assets/images/banner_candidates/
-!part-1-scalable-atomistic-workflows/assets/images/banner_candidates/**
-# v3 notebook assets are part of the lesson, not build output: notebooks embed
-# these SVGs directly and helpers read them at runtime, so a clone needs them.
+
+# Notebook assets are release files. Re-include them after the general rule.
 !notebooks/*/assets/
 !notebooks/*/assets/**
-# The re-include above out-ranks the general __pycache__ rule further down, so
-# bytecode inside an assets directory needs its own exclusion.
 notebooks/*/assets/**/__pycache__/
-# New notebook image directories need an explicit re-include above before they
-# can be staged.
+
 __pycache__/
 *.pyc
-benchmarking/
 .ipynb_checkpoints/
-.env
 .pytest_cache/
 .ruff_cache/
+.venv/
+.env
+.alchemi-runtime/
+.DS_Store
 .claude/
 CLAUDE.md
-.DS_Store
 matplotlib-*/
 tmp*/
-docker-compose.override.yml
-**/monitoring/grafana/data/
-
-# Retired Part 1 research kept locally for reference. These files used an older
-# patched Toolkit path and are not part of the learner tutorial or release run.
-part-1-scalable-atomistic-workflows/data/compute_lab_distributed_pipeline.provenance.md
-part-1-scalable-atomistic-workflows/data/compute_lab_distributed_pipeline/
-part-1-scalable-atomistic-workflows/aux/benchmark_results.py
-part-1-scalable-atomistic-workflows/aux/models/orbmol.py
-part-1-scalable-atomistic-workflows/aux/models/orbmol_checks.py
-part-1-scalable-atomistic-workflows/aux/models/orbmol_config.py
-part-1-scalable-atomistic-workflows/aux/models/orbmol_wrapper.py
-part-1-scalable-atomistic-workflows/tests/test_distributed_benchmark_assembler.py
-part-1-scalable-atomistic-workflows/tests/test_distributed_benchmark_results.py
-part-1-scalable-atomistic-workflows/tests/test_distributed_failure_recorder.py
-part-1-scalable-atomistic-workflows/tests/test_orbmol_adapter.py
-part-1-scalable-atomistic-workflows/tests/test_orbmol_checks.py
-part-1-scalable-atomistic-workflows/tests/test_orbmol_config.py
-build/prewarm_mace.py
-build/prewarm_orbmol.py
-scripts/assemble_part1_distributed_benchmark.py
-scripts/benchmark_part1_distributed_pipeline.py
-scripts/part1_distributed_contract.py
-scripts/record_part1_distributed_failure.py
-scripts/regress_nvalchemi_buffer_put.py
-scripts/regress_nvalchemi_sustained_pipeline.py
-scripts/slurm_part1_buffer_regression.sbatch
-scripts/slurm_part1_distributed_benchmark.sbatch
-scripts/slurm_part1_sustained_pipeline_regression.sbatch
-scripts/patches/nvalchemi-toolkit-b770ee6-buffer-put-compat.patch
-scripts/patches/nvalchemi-toolkit-b770ee6-sustained-pipeline-compat.patch

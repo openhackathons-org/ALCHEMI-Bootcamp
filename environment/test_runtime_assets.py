@@ -6,6 +6,7 @@ import errno
 import hashlib
 import threading
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from pathlib import Path
 from typing import NoReturn
 
@@ -232,16 +233,12 @@ def test_destination_is_invisible_until_verified_asset_is_complete(
     assert _staging_entries(target) == []
 
 
-def test_atomic_no_clobber_unavailable_fails_clearly(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_atomic_no_clobber_unavailable_fails_clearly(tmp_path: Path) -> None:
     payload = b"verified but unpublished"
     target = tmp_path / "runtime" / "dftd3" / "dftd3_parameters.pt"
 
     def unavailable_link(_source: Path, _destination: Path) -> NoReturn:
         raise OSError(errno.EOPNOTSUPP, "hard links unavailable")
-
-    monkeypatch.setattr(prewarm_assets.os, "link", unavailable_link)
 
     with pytest.raises(
         RuntimeError, match="atomic no-clobber publication.*hard link.*unavailable"
@@ -251,6 +248,7 @@ def test_atomic_no_clobber_unavailable_fails_clearly(
             expected_sha256=_sha256(payload),
             label="D3 parameters",
             create=lambda staged_path: staged_path.write_bytes(payload),
+            publish_link=unavailable_link,
         )
 
     assert not target.exists()
@@ -272,7 +270,9 @@ def test_runtime_check_rejects_mismatched_d3_parameter_file(tmp_path: Path) -> N
     parameter_file = tmp_path / "dftd3_parameters.pt"
     parameter_file.write_bytes(b"not the pinned D3 parameters")
 
-    with pytest.raises(RuntimeError, match="D3 parameter file SHA-256.*expected.*found"):
+    with pytest.raises(
+        RuntimeError, match="D3 parameter file SHA-256.*expected.*found"
+    ):
         check_runtime.require_file_sha256(
             "D3 parameter file",
             parameter_file,
@@ -281,7 +281,6 @@ def test_runtime_check_rejects_mismatched_d3_parameter_file(tmp_path: Path) -> N
 
 
 def test_main_preserves_aimnet_prepare_and_verify_behavior(
-    monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,
     capsys: pytest.CaptureFixture[str],
 ) -> None:
@@ -294,52 +293,44 @@ def test_main_preserves_aimnet_prepare_and_verify_behavior(
     d3_path.write_bytes(b"verified D3 parameters")
     resolved_aliases: list[str] = []
 
-    monkeypatch.setitem(prewarm_assets.PINS["model"], "checkpoint_alias", alias)
-    monkeypatch.setitem(
-        prewarm_assets.PINS["model"],
-        "checkpoint_sha256",
-        _sha256(checkpoint.read_bytes()),
-    )
-    monkeypatch.setitem(
-        prewarm_assets.PINS["dispersion"],
-        "generated_parameter_sha256",
-        _sha256(d3_path.read_bytes()),
-    )
-    monkeypatch.setenv("ALCHEMI_D3_PARAM_FILE", str(d3_path))
+    pins = deepcopy(prewarm_assets.PINS)
+    pins["model"]["checkpoint_alias"] = alias
+    pins["model"]["checkpoint_sha256"] = _sha256(checkpoint.read_bytes())
+    pins["dispersion"]["generated_parameter_sha256"] = _sha256(d3_path.read_bytes())
 
     def resolve_model(requested_alias: str) -> Path:
         resolved_aliases.append(requested_alias)
         return checkpoint
 
-    monkeypatch.setattr(prewarm_assets, "get_model_path", resolve_model)
-    prewarm_assets.main()
+    prewarm_assets.main(
+        pins=pins,
+        environment={"ALCHEMI_D3_PARAM_FILE": str(d3_path)},
+        model_resolver=resolve_model,
+    )
 
     assert resolved_aliases == [alias]
     assert f"AIMNet checkpoint verified: {checkpoint}" in capsys.readouterr().out
     assert checkpoint.read_bytes() == b"verified AIMNet checkpoint"
 
 
-def test_main_rejects_aimnet_mismatch_before_d3_preparation(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
+def test_main_rejects_aimnet_mismatch_before_d3_preparation(tmp_path: Path) -> None:
     checkpoint = tmp_path / "checkpoint.pt"
     checkpoint.write_bytes(b"mismatched AIMNet checkpoint")
     d3_create_called = False
 
-    monkeypatch.setitem(
-        prewarm_assets.PINS["model"],
-        "checkpoint_sha256",
-        _sha256(b"expected AIMNet checkpoint"),
-    )
-    monkeypatch.setattr(prewarm_assets, "get_model_path", lambda _alias: checkpoint)
+    pins = deepcopy(prewarm_assets.PINS)
+    pins["model"]["checkpoint_sha256"] = _sha256(b"expected AIMNet checkpoint")
 
     def create_d3(_path: Path) -> None:
         nonlocal d3_create_called
         d3_create_called = True
 
-    monkeypatch.setattr(prewarm_assets, "generate_d3_parameter_file", create_d3)
-
     with pytest.raises(RuntimeError, match="AIMNet checkpoint.*expected.*found"):
-        prewarm_assets.main()
+        prewarm_assets.main(
+            pins=pins,
+            environment={},
+            model_resolver=lambda _alias: checkpoint,
+            d3_generator=create_d3,
+        )
 
     assert d3_create_called is False

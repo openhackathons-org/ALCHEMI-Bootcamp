@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="540" viewBox="0 0 920 540" role="img" aria-labelledby="title desc">
+  <title id="title">FusedStage selects ordered workflow stages before one shared MLIP evaluation</title>
+  <desc id="desc">Molecules A and B select FIRE2 with status zero. Molecule C selects NVTLangevin with status one. The shared MLIP then evaluates A, B, and C together before the active Batch begins its next fused iteration.</desc>
+  <defs>
+    <marker id="fused-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto">
+      <path d="M0 0L10 5L0 10Z" fill="#68737E"/>
+    </marker>
+  </defs>
+  <rect width="920" height="540" rx="8" fill="#11161B"/>
+  <g font-family="NVIDIA Sans,Arial,sans-serif">
+    <text x="460" y="28" text-anchor="middle" fill="#F3F4F6" font-size="17" font-weight="700">FusedStage: ordered stage selection, then one shared MLIP call</text>
+
+    <rect x="70" y="45" width="780" height="90" rx="8" fill="#20262C"/>
+    <text x="92" y="72" fill="#F3F4F6" font-size="14" font-weight="700">Active Batch</text>
+    <text x="92" y="94" fill="#A8B0B8" font-size="11">one stage code per molecule</text>
+    <text x="92" y="115" fill="#A8B0B8" font-size="11">0 FIRE2 · 1 NVTLangevin · 2 complete</text>
+    <rect x="430" y="59" width="112" height="61" rx="7" fill="#314A59"/>
+    <text x="486" y="86" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">A</text>
+    <text x="486" y="106" text-anchor="middle" fill="#B7E3F1" font-size="10">status 0</text>
+    <rect x="554" y="59" width="112" height="61" rx="7" fill="#314A59"/>
+    <text x="610" y="86" text-anchor="middle" fill="#B7E3F1" font-size="23" font-weight="700">B</text>
+    <text x="610" y="106" text-anchor="middle" fill="#B7E3F1" font-size="10">status 0</text>
+    <rect x="678" y="59" width="112" height="61" rx="7" fill="#51402E"/>
+    <text x="734" y="86" text-anchor="middle" fill="#F0C98A" font-size="23" font-weight="700">C</text>
+    <text x="734" y="106" text-anchor="middle" fill="#F0C98A" font-size="10">status 1</text>
+
+    <path d="M460 135V154" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" marker-end="url(#fused-arrow)"/>
+    <rect x="120" y="160" width="680" height="62" rx="8" fill="#20262C"/>
+    <text x="148" y="186" fill="#F3F4F6" font-size="14" font-weight="700">Stage 0 · Optimization</text>
+    <text x="148" y="206" fill="#A8B0B8" font-size="11">FIRE2 selected for status 0</text>
+    <rect x="619" y="177" width="34" height="28" rx="7" fill="#314A59"/>
+    <text x="636" y="196" text-anchor="middle" fill="#B7E3F1" font-size="13" font-weight="700">A</text>
+    <rect x="661" y="177" width="34" height="28" rx="7" fill="#314A59"/>
+    <text x="678" y="196" text-anchor="middle" fill="#B7E3F1" font-size="13" font-weight="700">B</text>
+    <rect x="703" y="177" width="34" height="28" rx="7" fill="#2A3035"/>
+    <text x="720" y="196" text-anchor="middle" fill="#68737E" font-size="13" font-weight="700">C</text>
+
+    <path d="M460 222V244" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" marker-end="url(#fused-arrow)"/>
+    <rect x="120" y="250" width="680" height="62" rx="8" fill="#20262C"/>
+    <text x="148" y="276" fill="#F3F4F6" font-size="14" font-weight="700">Stage 1 · Dynamics</text>
+    <text x="148" y="296" fill="#A8B0B8" font-size="11">NVTLangevin selected for status 1</text>
+    <rect x="619" y="267" width="34" height="28" rx="7" fill="#2A3035"/>
+    <text x="636" y="286" text-anchor="middle" fill="#68737E" font-size="13" font-weight="700">A</text>
+    <rect x="661" y="267" width="34" height="28" rx="7" fill="#2A3035"/>
+    <text x="678" y="286" text-anchor="middle" fill="#68737E" font-size="13" font-weight="700">B</text>
+    <rect x="703" y="267" width="34" height="28" rx="7" fill="#51402E"/>
+    <text x="720" y="286" text-anchor="middle" fill="#F0C98A" font-size="13" font-weight="700">C</text>
+
+    <path d="M460 312V334" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" marker-end="url(#fused-arrow)"/>
+    <rect x="120" y="340" width="680" height="78" rx="8" fill="#76B900"/>
+    <text x="460" y="364" text-anchor="middle" fill="#15200D" font-size="11">shared model evaluation after stage selection</text>
+    <text x="384" y="392" text-anchor="end" fill="#081005" font-size="16" font-weight="700">MLIP · model(batch)</text>
+    <rect x="400" y="373" width="30" height="25" rx="7" fill="#314A59"/>
+    <text x="415" y="390" text-anchor="middle" fill="#B7E3F1" font-size="12" font-weight="700">A</text>
+    <rect x="438" y="373" width="30" height="25" rx="7" fill="#314A59"/>
+    <text x="453" y="390" text-anchor="middle" fill="#B7E3F1" font-size="12" font-weight="700">B</text>
+    <rect x="476" y="373" width="30" height="25" rx="7" fill="#51402E"/>
+    <text x="491" y="390" text-anchor="middle" fill="#F0C98A" font-size="12" font-weight="700">C</text>
+    <text x="520" y="390" fill="#15200D" font-size="10">evaluated together</text>
+
+    <path d="M460 418V439" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" marker-end="url(#fused-arrow)"/>
+    <rect x="120" y="445" width="680" height="55" rx="8" fill="#20262C"/>
+    <text x="460" y="468" text-anchor="middle" fill="#F3F4F6" font-size="13" font-weight="700">Next fused iteration</text>
+    <text x="460" y="487" text-anchor="middle" fill="#A8B0B8" font-size="11">the active Batch returns with updated model outputs and stage status</text>
+    <path d="M800 472H875V90H850" fill="none" stroke="#68737E" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" marker-end="url(#fused-arrow)"/>
+  </g>
+</svg>

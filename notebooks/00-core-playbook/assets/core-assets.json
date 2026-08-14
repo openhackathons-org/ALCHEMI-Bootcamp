@@ -1,64 +1,20 @@
 {
   "assets": {
-    "core-journey.svg": {
-      "filename": "core-journey-f2eaa08858ff35e1.svg",
-      "sha256": "f2eaa08858ff35e153bd4c606c44cd35ab5895afe169bc9f6e41a126fa40fae1"
+    "fused-stage-flow.svg": {
+      "filename": "fused-stage-flow-6ec61b45df06fd4e.svg",
+      "sha256": "6ec61b45df06fd4e9c05dbe35ae472ceccbe898175ea30a6cbdf8b9ca5595385"
     },
-    "framework-bindings.svg": {
-      "filename": "framework-bindings-10dc3443f13552ac.svg",
-      "sha256": "10dc3443f13552acc71988a878988cae5af45a57f613fc46fd20d4338079fe1a"
-    },
-    "journey-banner-atomicdata.svg": {
-      "filename": "journey-banner-atomicdata-732a9699acc3260c.svg",
-      "sha256": "732a9699acc3260c5d573ba906eb12e63aea060352109ca390048587ba4af67d"
-    },
-    "journey-banner-batches.svg": {
-      "filename": "journey-banner-batches-b1f254fb68d97187.svg",
-      "sha256": "b1f254fb68d97187d9d21288e7777c71d58fe50304915c2d855e081f4d12f47c"
-    },
-    "journey-banner-built-in-models.svg": {
-      "filename": "journey-banner-built-in-models-9ec7601658b92773.svg",
-      "sha256": "9ec7601658b92773be006b4c324e37ec6bd6672e4390b6dd0e83f1b2fa4c80b7"
-    },
-    "journey-banner-data-loaders.svg": {
-      "filename": "journey-banner-data-loaders-fa16419ffe6806a5.svg",
-      "sha256": "fa16419ffe6806a5e57a3e2016d875b82d51a651b44302ca67b806441247de7c"
-    },
-    "journey-banner-domain-decomposition.svg": {
-      "filename": "journey-banner-domain-decomposition-8f407aebddf60732.svg",
-      "sha256": "8f407aebddf607329863ef3393b1662476f967c985dc3038393a4a12b39f2c0a"
-    },
-    "journey-banner-fine-tuning.svg": {
-      "filename": "journey-banner-fine-tuning-00efd0ed8ee4b30f.svg",
-      "sha256": "00efd0ed8ee4b30fb69d4431352b081c8f39577ef5444e31478b2392cdec0d6a"
-    },
-    "journey-banner-hooks.svg": {
-      "filename": "journey-banner-hooks-497dd910561a903c.svg",
-      "sha256": "497dd910561a903c2340cdea26e0eaf1ff059a1a305b2f5b00bc48a2bc2b1917"
-    },
-    "journey-banner-molecular-dynamics.svg": {
-      "filename": "journey-banner-molecular-dynamics-f867aad0f60384af.svg",
-      "sha256": "f867aad0f60384affd2e4cbed8600a72dfcc0867b55240261c4137a2a928f97c"
-    },
-    "journey-banner-structure-relaxation.svg": {
-      "filename": "journey-banner-structure-relaxation-4f2e1d5229fc22ec.svg",
-      "sha256": "4f2e1d5229fc22ec15050d35bc59284e2e8ca8134aa2e52297f16db48099b869"
-    },
-    "journey-banner-wrapping-your-model.svg": {
-      "filename": "journey-banner-wrapping-your-model-4a9b472cf1d51a87.svg",
-      "sha256": "4a9b472cf1d51a87c938425d20d3415a9eb200a9729b4eacd8efc7f7ca262652"
-    },
-    "molecule-atomicdata-batch.svg": {
-      "filename": "molecule-atomicdata-batch-051e1298190498fe.svg",
-      "sha256": "051e1298190498fe73333aee2f10c44bb5b5d985fe2617cb6e263dd9ddb7faf1"
+    "inflight-batching-flow.svg": {
+      "filename": "inflight-batching-flow-e79cea47c0cffe44.svg",
+      "sha256": "e79cea47c0cffe44d18cdb0fa95fb5dba27cee828419866a6fc6173a485488b7"
     },
     "toolkit-capability-map.svg": {
-      "filename": "toolkit-capability-map-a0b37e456248828f.svg",
-      "sha256": "a0b37e456248828f187766c899b6f04b959daaf2b6a09808668295b26e0ad564"
+      "filename": "toolkit-capability-map-3e553dc33f60f1ff.svg",
+      "sha256": "3e553dc33f60f1ffba735df650af3f79c2104c8bf26ed4dadf740fdcc097d198"
     },
     "zarr-data-flow.svg": {
-      "filename": "zarr-data-flow-71a1aace19612fd3.svg",
-      "sha256": "71a1aace19612fd3ba88e351ba4f023b81ef75f4d19b86435cae6ff0786c1387"
+      "filename": "zarr-data-flow-c89db1c3acc369a4.svg",
+      "sha256": "c89db1c3acc369a4183b5e2f01945b4864b18b6fc5fcf06c4453cbec97e94c76"
     }
   },
   "schema": "alchemi.core-assets.v1"
