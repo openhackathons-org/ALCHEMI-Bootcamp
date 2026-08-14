@@ -143,15 +143,6 @@ Planned work is grouped into three tracks:
 - **Domain challenges:** larger, open-ended exercises with a scientific goal,
   a defined starting point, and results learners can inspect and compare.
 
-## Project references
-
-| Document | Purpose |
-|---|---|
-| [Tutorial guide](TUTORIAL_GUIDE.md) | Curriculum, notebook structure, writing, and visual style |
-| [Toolkit API reference](TOOLKIT_API_REFERENCE.md) | Public objects, operations, shapes, and release-specific details |
-| [Environment guide](environment/README.md) | Saved runtime, setup commands, package pins, and model assets |
-| [Third-party notices](THIRD_PARTY_NOTICES.md) | Software, models, data, and redistribution terms |
-
 ## Developers who shaped the tutorials
 
 - [Ryan Reese](https://github.com/Ryan-Reese) created the melting-point study
