@@ -5,7 +5,7 @@
     <mxCell id="toolkit" value="ALCHEMI Toolkit&lt;br&gt;&lt;font style='font-size:10px'&gt;reusable data, model, workflow, and training tools&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#081005;fontStyle=1;fontSize=12;" vertex="1" parent="1">
       <mxGeometry x="24" y="40" width="892" height="58" as="geometry" />
     </mxCell>
-    <mxCell id="ops" value="Toolkit-Ops&lt;br&gt;&lt;font style='font-size:9px'&gt;neighbors · reductions · interactions&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#172119;strokeColor=#43533B;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
+    <mxCell id="ops" value="Toolkit-Ops&lt;br&gt;&lt;font style='font-size:9px'&gt;neighbor lists · segment operations · interactions&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#172119;strokeColor=#43533B;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">
       <mxGeometry x="646" y="49" width="254" height="40" as="geometry" />
     </mxCell>
     <mxCell id="data" value="Data and state&lt;br&gt;&lt;font style='font-size:9px'&gt;01 AtomicData + Batch · 02 Zarr&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#68737E;fontColor=#F3F4F6;fontStyle=1;fontSize=12;" vertex="1" parent="1">

@@ -2,8 +2,8 @@
 
 This document records the public Toolkit and Toolkit-Ops capabilities relevant
 to the tutorial series. The [ALCHEMI tutorial guide](TUTORIAL_GUIDE.md) controls
-teaching order, lesson design, visuals, and review. Notebook worklogs record
-implementation and compute history.
+teaching order, lesson design, visuals, and review. Review issues or pull
+requests record implementation decisions and compute history.
 
 Verify every learner-facing import and example against the immutable versions
 in [`environment/runtime-pins.toml`](environment/runtime-pins.toml) and the
@@ -412,6 +412,21 @@ Teach:
 `FusedStage` takes the shared model from its first sub-stage. The `+` operator
 does not switch models; fused sub-stages must be intended to use the same model
 and device path.
+
+One fused iteration follows an ordered loop:
+
+1. visit each sub-stage in order and apply its masked `pre_update`;
+2. call the shared model once on the full active `Batch`;
+3. visit each sub-stage in order and apply its masked `post_update`; and
+4. evaluate stage completion and update each molecule's status for the next
+   iteration.
+
+A molecule remains in the shared model call after it advances to a later stage.
+Its current status selects one sub-stage update and skips the stages it already
+completed. A molecule at `exit_status` receives no further sub-stage update.
+With an inflight sampler, the next refill writes completed molecules to a sink,
+keeps unfinished molecules, and inserts new dataset samples within the available
+graph, atom, and edge limits.
 
 Important hooks include:
 

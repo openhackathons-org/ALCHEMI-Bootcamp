@@ -3,33 +3,85 @@
 from __future__ import annotations
 
 import json
+from base64 import b64encode
 from collections.abc import Sequence
 from hashlib import sha256
-from io import StringIO
+from html import escape
+from io import BytesIO, StringIO
 from pathlib import Path
+from time import perf_counter
 from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
 from ase import Atoms
-from ase.data import chemical_symbols, covalent_radii
-from ase.io import read, write
-from ase.neighborlist import natural_cutoffs, neighbor_list
+from ase.data import chemical_symbols
+from ase.io import write
 from nvalchemi.data import AtomicData, Batch
 from nvalchemi.dynamics import DynamicsStage
-from nvalchemi.models.base import BaseModelMixin, ModelConfig
 from nvalchemi.training import TrainingStage
+from rich.console import Group
+from rich.live import Live
+from rich.progress import (
+    BarColumn,
+    Progress,
+    ProgressColumn,
+    SpinnerColumn,
+    Task,
+    TextColumn,
+    TimeElapsedColumn,
+)
+from rich.table import Column
+from rich.text import Text
 from torch.utils.data import DataLoader as TorchDataLoader
-from torch.utils.data import Dataset as TorchDataset
 
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
-_EXTXYZ_SHA256 = "331b087fc7ced6eaec25fae9dccba767fc47e4ae5e0523fcaddfa4fbf49c455f"
-_MANIFEST_SHA256 = "c3e189fb8e96a7aec8e587631659f6424fae51cf42243d9f4c54d64e5ed3207d"
-_BENZOATE_SHA256 = "deb718970a5eb750955ab98963b089e9eab93370092fd6c69a3088fe7da7fb2d"
 _MODEL_ALIAS = "aimnet2-wb97m-d3_0"
 _MODEL_SHA256 = "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28"
-_ELEMENT_COLORS = {1: "#E8ECEF", 6: "#5C6770", 7: "#00A3E0", 8: "#E05252"}
+_ELEMENT_COLORS = {
+    1: "#E8ECEF",
+    6: "#5C6770",
+    7: "#00A3E0",
+    8: "#E05252",
+    18: "#80D1E3",
+}
+_ELEMENT_FALLBACK_COLOR = "#76B900"
+_VIEWER_BUNDLE = _PROJECT_ROOT / "shared" / "3dmol-2.5.5" / "3Dmol-min.js"
+_VIEWER_BACKGROUND = "#111619"
+_VIEWER_CELL_COLOR = "#59656E"
+_PROGRESS_UPDATE_STRUCTURES = 100
+
+
+class _ActiveSpinnerColumn(SpinnerColumn):
+    """Spin for the current route and keep the other routes quiet."""
+
+    def __init__(self) -> None:
+        super().__init__(
+            "dots",
+            style="#76B900",
+            finished_text=Text("✓", style="#76B900"),
+        )
+        self.pending_text = Text("·", style="#59636F")
+
+    def render(self, task: Task) -> Any:
+        if task.finished:
+            return self.finished_text
+        if task.fields.get("active", False):
+            return self.spinner.render(task.get_time())
+        return self.pending_text
+
+
+class _AlignedCountColumn(ProgressColumn):
+    """Right-align completed and total work."""
+
+    def __init__(self) -> None:
+        super().__init__(table_column=Column(justify="right", no_wrap=True))
+
+    def render(self, task: Task) -> Text:
+        completed = int(task.completed)
+        total = int(task.total) if task.total is not None else 0
+        return Text(f"{completed:,} / {total:,}", style="progress.download")
 
 
 def _sha256_file(path: Path) -> str:
@@ -38,72 +90,6 @@ def _sha256_file(path: Path) -> str:
         for chunk in iter(lambda: stream.read(1024 * 1024), b""):
             digest.update(chunk)
     return digest.hexdigest()
-
-
-def load_molecules(labels: Sequence[str]) -> tuple[list[Atoms], list[dict[str, Any]]]:
-    """Load an ordered selection after checking the shared data artifacts."""
-
-    data_dir = _PROJECT_ROOT / "data" / "nci_atlas"
-    xyz_path = data_dir / "ir-molecule-library.extxyz"
-    manifest_path = data_dir / "ir-molecule-library-manifest.json"
-    if _sha256_file(xyz_path) != _EXTXYZ_SHA256:
-        raise RuntimeError(f"Unexpected molecule-library checksum: {xyz_path}")
-    if _sha256_file(manifest_path) != _MANIFEST_SHA256:
-        raise RuntimeError(f"Unexpected molecule-manifest checksum: {manifest_path}")
-
-    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
-    by_label = {record["label"]: record for record in manifest["molecules"]}
-    missing = [label for label in labels if label not in by_label]
-    if missing:
-        raise KeyError(f"Labels absent from the pinned manifest: {missing}")
-
-    all_atoms = list(read(xyz_path, index=":"))
-    selected: list[Atoms] = []
-    records: list[dict[str, Any]] = []
-    for label in labels:
-        record = by_label[label]
-        atoms = all_atoms[int(record["extxyz_index"])].copy()
-        atoms.info["charge"] = int(record["formal_charge"])
-        if len(atoms) != int(record["atom_count"]):
-            raise RuntimeError(f"Atom-count mismatch for {label}")
-        selected.append(atoms)
-        records.append(
-            {
-                "label": label,
-                "formula": record["formula"],
-                "atoms": record["atom_count"],
-                "charge": record["formal_charge"],
-                "source": f"{record['dataset']} / {record['system_id']}",
-            }
-        )
-    return selected, records
-
-
-def load_benzoate_anion() -> tuple[Atoms, dict[str, Any]]:
-    """Load the checked benzoate fragment from NCI Atlas system 08.007."""
-
-    path = (
-        _PROJECT_ROOT
-        / "notebooks"
-        / "00-core-playbook"
-        / "data"
-        / "nci-benzoate-08.007_100.xyz"
-    )
-    if _sha256_file(path) != _BENZOATE_SHA256:
-        raise RuntimeError(f"Unexpected benzoate checksum: {path}")
-
-    atoms = read(path)
-    charge = int(atoms.info["charge"])
-    if atoms.get_chemical_formula() != "C7H5O2" or charge != -1:
-        raise RuntimeError("Checked benzoate identity or charge drifted")
-    return atoms, {
-        "label": "Benzoate",
-        "formula": "C7H5O2",
-        "atoms": 14,
-        "charge": charge,
-        "source": "NCI Atlas IHB100x10 / 08.007 / scale 1.00 / fragment B",
-        "source_revision": "1816bfc72609d7deb1d4f93ab9e27eb13bb44bec",
-    }
 
 
 def model_checkpoint() -> Path:
@@ -126,6 +112,337 @@ def freeze_model[T: torch.nn.Module](model: T) -> T:
     return model
 
 
+def prepare_dynamics_batch(batch: Batch) -> Batch:
+    """Clone a batch and allocate the fields updated by dynamics workflows."""
+
+    prepared = batch.clone()
+    # Dynamics owns a fresh autograd graph for each compute step.
+    prepared.positions = prepared.positions.detach().clone()
+    dtype = prepared.positions.dtype
+    device = prepared.device
+    counts = prepared.num_nodes_per_graph.tolist()
+    if "energy" not in prepared:
+        prepared.add_key(
+            "energy",
+            [torch.zeros((1, 1), dtype=dtype, device=device) for _ in counts],
+            level="system",
+        )
+    if "forces" not in prepared:
+        prepared.add_key(
+            "forces",
+            [torch.zeros((count, 3), dtype=dtype, device=device) for count in counts],
+            level="node",
+        )
+    if "velocities" not in prepared:
+        prepared.add_key(
+            "velocities",
+            [torch.zeros((count, 3), dtype=dtype, device=device) for count in counts],
+            level="node",
+        )
+    return prepared
+
+
+def probe_nan_detector(model: torch.nn.Module, batch: Batch, detector: Any) -> str:
+    """Exercise a NaN detector through one real dynamics step on a clone."""
+
+    from nvalchemi.dynamics import BaseDynamics, DynamicsStage
+
+    class InjectNonFiniteForce:
+        stage = DynamicsStage.AFTER_COMPUTE
+        frequency = 1
+
+        def __call__(self, ctx: Any, stage: DynamicsStage) -> None:
+            ctx.batch.forces[0, 0] = torch.nan
+
+    probe = prepare_dynamics_batch(batch)
+    hooks = [*model.make_neighbor_hooks(), InjectNonFiniteForce(), detector]
+    workflow = BaseDynamics(model=model, n_steps=1, hooks=hooks)
+    try:
+        workflow.run(probe)
+    except RuntimeError as error:
+        if "Non-finite" not in str(error):
+            raise
+        return str(error)
+    raise RuntimeError("NaNDetectorHook did not report the injected non-finite force")
+
+
+class InflightStatusPrinter:
+    """Print live membership and status counts for a fused workflow."""
+
+    stage = DynamicsStage.BEFORE_STEP
+    frequency = 1
+
+    def __init__(
+        self,
+        sink: Any,
+        stage_labels: dict[int, str],
+        *,
+        sampler: Any | None = None,
+        system_labels: dict[int, str] | None = None,
+    ) -> None:
+        self.sink = sink
+        self.stage_labels = stage_labels
+        self.sampler = sampler
+        self.system_labels = system_labels or {}
+        self._header_printed = False
+        self._previous_ids: tuple[int, ...] | None = None
+
+    def __call__(self, ctx: Any, stage: DynamicsStage) -> None:
+        if not self._header_printed:
+            print(
+                f"{'step':>4}  {'active molecules':<30} "
+                f"{'waiting':>7} {'done':>5}  event"
+            )
+            self._header_printed = True
+
+        status = ctx.batch.status.reshape(-1)
+        stage_codes = [int(value) for value in status.detach().cpu().tolist()]
+        active_ids = tuple(
+            int(value)
+            for value in ctx.batch.system_id.reshape(-1).detach().cpu().tolist()
+        )
+        active_text = " ".join(
+            f"{self.system_labels.get(system_id, str(system_id))}:"
+            f"{self.stage_labels.get(code, str(code))}"
+            for system_id, code in zip(active_ids, stage_codes, strict=True)
+        )
+        waiting = len(self.sampler) if self.sampler is not None else 0
+
+        if self._previous_ids is None:
+            event = "initial fill"
+        else:
+            entered = [value for value in active_ids if value not in self._previous_ids]
+            left = [value for value in self._previous_ids if value not in active_ids]
+            events = []
+            if entered:
+                entered_text = ",".join(
+                    self.system_labels.get(value, str(value)) for value in entered
+                )
+                events.append(f"refill +[{entered_text}]")
+            if left:
+                left_text = ",".join(
+                    self.system_labels.get(value, str(value)) for value in left
+                )
+                events.append(f"finished [{left_text}]")
+            event = " | ".join(events)
+
+        print(
+            f"{ctx.step_count:>4}  {active_text:<30} "
+            f"{waiting:>7} {len(self.sink):>5}  {event}"
+        )
+        self._previous_ids = active_ids
+
+
+def benchmark_repeated_molecule(
+    atoms: Atoms,
+    *,
+    batch_size: int = 2048,
+    device: torch.device | str = "cuda",
+) -> list[dict[str, Any]]:
+    """Compare individual and batched model calls on CPU and CUDA."""
+
+    import warnings
+
+    from nvalchemi.models import AIMNet2Wrapper
+    from nvalchemi.neighbors import compute_neighbors
+
+    target = torch.device(device)
+    if target.type == "cuda" and not torch.cuda.is_available():
+        target = torch.device("cpu")
+
+    def load_model(run_device: torch.device) -> AIMNet2Wrapper:
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Converting a tensor with requires_grad=True to a scalar.*",
+                category=UserWarning,
+            )
+            model = AIMNet2Wrapper.from_checkpoint(
+                model_checkpoint(), device=run_device, compile_model=False
+            ).eval()
+        freeze_model(model)
+        model.set_config("active_outputs", {"energy", "forces"})
+        return model
+
+    route_devices = {"CPU": torch.device("cpu")}
+    if target.type == "cuda":
+        route_devices["GPU"] = target
+
+    models: dict[str, AIMNet2Wrapper] = {}
+    singles: dict[str, Batch] = {}
+    batches: dict[str, Batch] = {}
+    for label, run_device in route_devices.items():
+        model = load_model(run_device)
+        graph = AtomicData.from_atoms(atoms, device=run_device)
+        single = Batch.from_data_list([graph], device=run_device)
+        batch = Batch.from_data_list([graph] * batch_size, device=run_device)
+        compute_neighbors(single, config=model.model_config.neighbor_config)
+        compute_neighbors(batch, config=model.model_config.neighbor_config)
+        _ = model(single)
+        _ = model(batch)
+        models[label], singles[label], batches[label] = model, single, batch
+
+    routes = []
+    for label in route_devices:
+        routes.append((f"{label} · individual", label, "individual", batch_size))
+    for label in route_devices:
+        routes.append((f"{label} · Batch", label, "Batch", 1))
+
+    progress = Progress(
+        _ActiveSpinnerColumn(),
+        TextColumn("{task.description}"),
+        BarColumn(
+            bar_width=28,
+            style="#25303A",
+            complete_style="#76B900",
+            finished_style="#76B900",
+        ),
+        _AlignedCountColumn(),
+        TimeElapsedColumn(),
+        refresh_per_second=10,
+    )
+    overall = Progress(
+        TextColumn("[bold]{task.description}"),
+        TimeElapsedColumn(),
+        console=progress.console,
+    )
+    overall_task = overall.add_task(
+        f"Energy + forces · {batch_size:,} molecules", total=None
+    )
+    tasks = {
+        mode: progress.add_task(
+            f"{label} · "
+            + (
+                f"{batch_size:,} individual calls"
+                if route == "individual"
+                else f"1 Batch call · {batch_size:,} molecules"
+            ),
+            total=total,
+            active=False,
+            start=False,
+        )
+        for mode, label, route, total in routes
+    }
+
+    atoms_per_molecule = len(atoms)
+    rows: list[dict[str, Any]] = []
+    with Live(
+        Group(overall, progress),
+        console=progress.console,
+        refresh_per_second=10,
+        transient=True,
+    ):
+        for mode, label, route, total in routes:
+            run_device = route_devices[label]
+            progress.start_task(tasks[mode])
+            progress.update(tasks[mode], active=True, refresh=True)
+            if run_device.type == "cuda":
+                torch.cuda.reset_peak_memory_stats(run_device)
+            start = perf_counter()
+            if route == "individual":
+                output = None
+                pending = 0
+                for position in range(1, batch_size + 1):
+                    output = models[label](singles[label])
+                    pending += 1
+                    if pending == _PROGRESS_UPDATE_STRUCTURES or position == batch_size:
+                        progress.update(tasks[mode], advance=pending, refresh=True)
+                        pending = 0
+            else:
+                output = models[label](batches[label])
+                progress.update(tasks[mode], advance=1, refresh=True)
+            if run_device.type == "cuda":
+                torch.cuda.synchronize(run_device)
+            seconds = perf_counter() - start
+            progress.update(tasks[mode], completed=total, active=False, refresh=True)
+            peak_memory = (
+                torch.cuda.max_memory_allocated(run_device) / 1024**2
+                if run_device.type == "cuda"
+                else None
+            )
+            rows.append(
+                {
+                    "mode": mode,
+                    "route": route,
+                    "device": label,
+                    "molecules": batch_size,
+                    "atoms": batch_size * atoms_per_molecule,
+                    "seconds": seconds,
+                    "molecules/s": batch_size / seconds,
+                    "peak memory [MiB]": peak_memory,
+                    "energy shape": tuple(output["energy"].shape),
+                    "forces shape": tuple(output["forces"].shape),
+                }
+            )
+        overall.stop_task(overall_task)
+    return rows
+
+
+def plot_batching_benchmark(rows: Sequence[dict[str, Any]]) -> Any:
+    """Plot elapsed time and throughput for the batching comparison."""
+
+    batch_size = int(rows[0]["molecules"])
+    positions = np.arange(2)
+    width = 0.34
+    route_labels = [f"{batch_size:,} individual calls", "1 Batch call"]
+    devices = [
+        name for name in ("CPU", "GPU") if any(r["device"] == name for r in rows)
+    ]
+    colors = {"CPU": "#00A3E0", "GPU": "#76B900"}
+    offsets = (
+        {"CPU": -width / 2, "GPU": width / 2}
+        if len(devices) == 2
+        else {devices[0]: 0.0}
+    )
+    figure, axes = plt.subplots(1, 2, figsize=(10.5, 3.8))
+    for axis, key, title, ylabel in (
+        (axes[0], "seconds", "Evaluation time", "Elapsed time [s]"),
+        (axes[1], "molecules/s", "Throughput", "Molecules/s"),
+    ):
+        for label in devices:
+            selected = {row["route"]: row for row in rows if row["device"] == label}
+            values = [float(selected[route][key]) for route in ("individual", "Batch")]
+            bars = axis.bar(
+                positions + offsets[label],
+                values,
+                width,
+                label=label,
+                color=colors[label],
+            )
+            value_labels = (
+                [f"{value:,.2f} s" for value in values]
+                if key == "seconds"
+                else [f"{value:,.0f}" for value in values]
+            )
+            axis.bar_label(bars, labels=value_labels, padding=3)
+        axis.set(
+            title=title,
+            ylabel=ylabel,
+            xticks=positions,
+            xticklabels=route_labels,
+        )
+        axis.ticklabel_format(axis="y", style="plain", useOffset=False)
+        axis.legend(frameon=False)
+        _polish_axis(axis, grid="y")
+        axis.margins(y=0.18)
+    gpu_batch = next(
+        (row for row in rows if row["device"] == "GPU" and row["route"] == "Batch"),
+        None,
+    )
+    memory_text = (
+        f" · GPU allocated peak {gpu_batch['peak memory [MiB]']:,.0f} MiB"
+        if gpu_batch is not None
+        else ""
+    )
+    figure.suptitle(
+        f"Same {batch_size:,} ethyne molecules · {int(rows[0]['atoms']):,} atoms{memory_text}"
+    )
+    return _display_figure(
+        figure,
+        "Linear-scale evaluation time and throughput for individual and batched CPU and GPU model calls over the same repeated-molecule workload.",
+    )
+
+
 def configure_presentation() -> None:
     """Apply the shared plotting style."""
 
@@ -133,102 +450,261 @@ def configure_presentation() -> None:
 
 
 def atoms_to_xyz(atoms: Atoms) -> str:
-    """Serialize one ASE structure for the pinned MatterViz widget."""
+    """Serialize one ASE structure as XYZ text for the 3Dmol.js viewer."""
 
     stream = StringIO()
     write(stream, atoms, format="xyz")
     return stream.getvalue()
 
 
-def infer_bonds(
-    atoms: Atoms, *, cutoff_scale: float = 1.1
-) -> tuple[tuple[int, int], ...]:
-    """Infer unique molecular bonds from ASE covalent radii."""
+def _viewing_rotation(positions: np.ndarray) -> np.ndarray:
+    """Return a rigid rotation that turns a structure to face the default camera.
 
-    cutoffs = natural_cutoffs(atoms, mult=cutoff_scale)
-    left_indices, right_indices = neighbor_list(
-        "ij", atoms, cutoffs, self_interaction=False
+    3Dmol.js looks down z, so anything built along z is drawn end-on: ASE's
+    linear `molecule("C2H2")` collapses to a single visible atom. Aligning the
+    two broadest principal axes with the screen fixes that for any structure,
+    and picks the same framing `plot_molecule` projects onto, so the interactive
+    view and the flat projection agree.
+    """
+
+    centered = positions - positions.mean(axis=0, keepdims=True)
+    _, _, axes = np.linalg.svd(centered, full_matrices=True)
+    if np.linalg.det(axes) < 0:
+        axes[2] *= -1.0  # keep the viewing frame right-handed
+    return axes
+
+
+def _to_view_frame(
+    points: np.ndarray, origin: np.ndarray, rotation: np.ndarray
+) -> np.ndarray:
+    """Apply one viewing transform to atom positions and lattice corners alike."""
+
+    return (np.atleast_2d(points) - origin) @ rotation.T
+
+
+def _cell_edge_points(cell: Any) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Return the twelve edges of a lattice parallelepiped anchored at the origin."""
+
+    vectors = np.asarray(cell, dtype=float)
+    edges: list[tuple[np.ndarray, np.ndarray]] = []
+    for axis in range(3):
+        first, second = (vectors[index] for index in range(3) if index != axis)
+        for along_first, along_second in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            corner = along_first * first + along_second * second
+            edges.append((corner, corner + vectors[axis]))
+    return edges
+
+
+def _viewer_point(position: np.ndarray) -> dict[str, float]:
+    return {"x": float(position[0]), "y": float(position[1]), "z": float(position[2])}
+
+
+def _zoom_factor(framed: np.ndarray, *, fill: float = 0.82) -> float:
+    """Return the extra zoom that undoes 3Dmol's minimum framing distance.
+
+    `zoomTo` never frames anything closer than its `minimumZoomToDistance`, a
+    10 Å field of view that py3Dmol gives no way to reconfigure, so a four-atom
+    molecule lands as a speck in the middle of the frame. `zoomTo` sizes that
+    field to twice the distance from the bounding-box centre to the outermost
+    point, so scaling by that ratio makes the structure span `fill` of the
+    viewport's short side instead.
+    """
+
+    lower, upper = framed.min(axis=0), framed.max(axis=0)
+    radius = float(np.linalg.norm(framed - (lower + upper) / 2, axis=1).max())
+    if radius < 1.0e-9:
+        return 1.0  # a lone atom has no extent to frame
+    return max(radius, 5.0) * fill / radius
+
+
+def _viewer_html(
+    view: Any,
+    height: int,
+    *,
+    formula: str,
+    atom_count: int,
+) -> str:
+    """Wrap py3Dmol's snippet in a compact, self-contained structure widget.
+
+    py3Dmol always emits a `<script src=...>` pointing at jsDelivr, guarded by
+    `if (typeof $3Dmolpromise === 'undefined')`. Defining that promise ahead of
+    the snippet satisfies the guard, so the vendored bundle inlined here is the
+    only copy of 3Dmol.js the page ever sees. Inlining rather than linking is
+    what keeps the view alive inside a self-contained `nbconvert` export.
+    """
+
+    bundle = _VIEWER_BUNDLE.read_text(encoding="utf-8")
+    # `var define, exports, module` shadows the CommonJS and AMD hooks the UMD
+    # bundle probes. nbconvert's HTML template loads RequireJS, and a defined
+    # `define.amd` would park the bundle in a module registry that nothing here
+    # requires, leaving `window.$3Dmol` undefined and the viewer blank.
+    preamble = (
+        "<script>(function(){var define,exports,module;\n"
+        f"{bundle}\n"
+        "$3Dmolpromise=Promise.resolve();}).call(window);</script>"
     )
-    return tuple(
-        sorted(
-            {
-                tuple(sorted((int(left), int(right))))
-                for left, right in zip(left_indices, right_indices, strict=True)
-                if left != right
-            }
-        )
-    )
+    viewer_markup = view.write_html()
+    formula_text = escape(formula)
+    return f"""
+<div class="alchemi-structure-widget"
+     aria-label="Interactive structure viewer for {formula_text}"
+     style="width:100%; overflow:hidden; border-radius:10px;
+            background:#111619; color:#F3F4F6;
+            font-family:'NVIDIA Sans',Arial,sans-serif;">
+  <div style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between;
+              gap:16px; padding:12px 16px 10px; background:#171D20;">
+    <div style="display:flex; align-items:baseline; gap:10px; min-width:0;">
+      <strong style="font-size:1.05rem; font-weight:650;">{formula_text}</strong>
+      <span style="color:#B8C0C6; font-size:0.84rem;">{atom_count} atoms</span>
+    </div>
+    <span style="color:#A9B3B9; font-size:0.78rem; text-align:right;">
+      Drag to rotate · scroll to zoom · click an atom
+    </span>
+  </div>
+  <div class="alchemi-structure-view"
+       style="width:100%; height:{height}px; overflow:hidden;
+              background:{_VIEWER_BACKGROUND};">
+    {preamble}{viewer_markup}
+  </div>
+  <div data-atom-detail role="status" aria-live="polite"
+       style="min-height:22px; padding:10px 16px 12px; background:#171D20;
+              color:#DCE2E5; font-size:0.84rem; font-variant-numeric:tabular-nums;">
+    Click an atom to inspect it.
+  </div>
+</div>
+"""
 
 
-def bond_rows(
-    atoms: Atoms, bonds: Sequence[tuple[int, int]]
-) -> list[dict[str, int | str]]:
-    """Return compact learner-facing rows for explicit connectivity."""
+def _atom_click_callback(atoms: Atoms) -> str:
+    """Return the 3Dmol.js callback used by the structure widget."""
 
-    return [
-        {
-            "atom 1": left,
-            "element 1": atoms[left].symbol,
-            "atom 2": right,
-            "element 2": atoms[right].symbol,
-        }
-        for left, right in bonds
-    ]
-
-
-def _matterviz_structure(
-    atoms: Atoms, bonds: Sequence[tuple[int, int]]
-) -> dict[str, Any]:
-    """Build MatterViz's public structure dictionary with explicit bonds."""
-
-    explicit_bonds = [
-        {"site_idx_1": left, "site_idx_2": right, "order": 1} for left, right in bonds
-    ]
-    return {
-        "sites": [
-            {
-                "species": [
-                    {
-                        "element": atom.symbol,
-                        "occu": 1,
-                        "oxidation_state": 0,
-                    }
-                ],
-                "abc": [0, 0, 0],
-                "xyz": [float(value) for value in atom.position],
-                "label": f"{atom.symbol}{index + 1}",
-                "properties": {},
-            }
-            for index, atom in enumerate(atoms)
-        ],
-        "charge": float(atoms.info.get("charge", 0)),
-        "properties": {"bonds": explicit_bonds},
+    atomic_numbers = {
+        chemical_symbols[number]: int(number)
+        for number in sorted({int(number) for number in atoms.get_atomic_numbers()})
     }
+    number_map = json.dumps(atomic_numbers, sort_keys=True)
+    return f"""function(atom, viewer, event, container) {{
+      const numbers = {number_map};
+      const host = container && container.jquery ? container[0] : container;
+      const root = host && host.closest
+        ? host.closest('.alchemi-structure-widget')
+        : null;
+      const atomIndex = Number(atom.serial);
+      const atomicNumber = numbers[atom.elem];
+      const detail = root ? root.querySelector('[data-atom-detail]') : null;
+      if (detail) {{
+        detail.textContent = 'Atom row ' + atomIndex + ' · ' + atom.elem
+          + ' · atomic number ' + atomicNumber;
+      }}
+      if (viewer.__alchemiAtomLabel) {{
+        viewer.removeLabel(viewer.__alchemiAtomLabel);
+      }}
+      viewer.__alchemiAtomLabel = viewer.addLabel(
+        atom.elem + ' · row ' + atomIndex + ' · Z=' + atomicNumber,
+        {{
+          position: atom,
+          backgroundColor: '#171D20',
+          backgroundOpacity: 0.92,
+          fontColor: '#F3F4F6',
+          fontSize: 12,
+          borderColor: '#76B900',
+          borderThickness: 1,
+          inFront: true
+        }}
+      );
+      viewer.render();
+    }}"""
 
 
 def show_molecule(
     atoms: Atoms,
     *,
-    bonds: Sequence[tuple[int, int]] | None = None,
-    height: int = 440,
-    show_controls: bool = True,
+    height: int = 360,
+    sphere_scale: float = 0.23,
 ) -> Any:
-    """Return a focused MatterViz view with explicit molecular connectivity."""
+    """Return a compact 3Dmol.js ball-and-stick view of one ASE structure.
 
-    from pymatviz import StructureWidget
+    3Dmol.js perceives connectivity from the coordinates alone, so no explicit
+    bond list is passed in. A periodic structure also gets its lattice drawn as
+    twelve edges: 3Dmol's `addUnitCell` reads crystal metadata that XYZ input
+    cannot carry, so it draws nothing here.
 
-    bonds = infer_bonds(atoms) if bonds is None else tuple(bonds)
-    return StructureWidget(
-        structure=_matterviz_structure(atoms, bonds),
-        show_controls=show_controls,
-        bond_thickness=0.14,
-        bond_color="#D7DEE5",
-        atom_radius=0.72,
-        same_size_atoms=False,
-        background_color="#111619",
-        background_opacity=1.0,
-        style=f"width:100%; height:{height}px; border-radius:8px;",
+    The structure is turned to face the camera before it is handed over. That is
+    a rigid rotation, so every bond length and angle a learner reads off the
+    printed `Atoms` object is unchanged.
+    """
+
+    import py3Dmol
+    from IPython.display import HTML
+
+    positions = atoms.get_positions()
+    origin = positions.mean(axis=0)
+    rotation = _viewing_rotation(positions)
+    oriented = atoms.copy()
+    oriented.set_positions(_to_view_frame(positions, origin, rotation))
+
+    view = py3Dmol.view(
+        width="100%",
+        height=height,
+        # Never fetched: `_viewer_html` pre-resolves py3Dmol's loader promise.
+        # Kept as the repository-relative provenance of the inlined bundle.
+        js="shared/3dmol-2.5.5/3Dmol-min.js",
     )
+    view.addModel(atoms_to_xyz(oriented), "xyz")
+    # One `setStyle` per element rather than a single `colorscheme` map: 3Dmol
+    # 2.5.5 tests a custom map with `scheme[element]` but reads the colour back
+    # from `scheme.map[element]`, so the map never applies and carbon keeps its
+    # near-white default next to hydrogen.
+    for number in sorted({int(number) for number in atoms.get_atomic_numbers()}):
+        color = _ELEMENT_COLORS.get(number, _ELEMENT_FALLBACK_COLOR)
+        view.setStyle(
+            {"elem": chemical_symbols[number]},
+            {
+                "sphere": {"scale": sphere_scale, "color": color},
+                "stick": {"radius": 0.09, "color": color},
+            },
+        )
+    view.setClickable({}, True, _atom_click_callback(atoms))
+    framed = [oriented.get_positions()]
+    if atoms.pbc.any():
+        for edge in _cell_edge_points(atoms.cell):
+            start, end = _to_view_frame(np.asarray(edge), origin, rotation)
+            framed.append(np.stack([start, end]))
+            view.addLine(
+                {
+                    "start": _viewer_point(start),
+                    "end": _viewer_point(end),
+                    "color": _VIEWER_CELL_COLOR,
+                }
+            )
+    view.setBackgroundColor(_VIEWER_BACKGROUND)
+    view.zoomTo()
+    view.zoom(_zoom_factor(np.concatenate(framed)))
+    # A fixed oblique tilt, so a linear or planar structure and a lattice box all
+    # still read as three-dimensional instead of as a rod or a flat outline.
+    view.rotate(-24, "y")
+    view.rotate(16, "x")
+    return HTML(
+        _viewer_html(
+            view,
+            height,
+            formula=atoms.get_chemical_formula(mode="hill"),
+            atom_count=len(atoms),
+        )
+    )
+
+
+def show_argon_batch(batch: Batch, *, height: int = 280) -> Any:
+    """Show the first periodic argon system in a compact interactive viewer."""
+
+    data = batch.get_data(0)
+    atoms = Atoms(
+        numbers=data.atomic_numbers.detach().cpu().numpy(),
+        positions=data.positions.detach().cpu().numpy(),
+        cell=data.cell.detach().cpu().numpy().reshape(3, 3),
+        pbc=data.pbc.detach().cpu().numpy().reshape(3),
+    )
+    return show_molecule(atoms, height=height, sphere_scale=0.42)
 
 
 def show_capability_map() -> Any:
@@ -242,10 +718,7 @@ def show_capability_map() -> Any:
         (
             1.702,
             "Data and state",
-            (
-                "Keep atomistic data as tensors",
-                "on the model device.",
-            ),
+            ("Keep atomistic data as tensors", "on the model device."),
             "inputs · datasets · trajectories",
             (
                 (
@@ -290,10 +763,7 @@ def show_capability_map() -> Any:
         (
             75.106,
             "Training and scale",
-            (
-                "Train and fine-tune models.",
-                "Split one large system across GPUs.",
-            ),
+            ("Train and fine-tune models.", "Split one large system across GPUs."),
             "TrainingStrategy · DomainParallel",
             (
                 (
@@ -360,7 +830,7 @@ def show_capability_map() -> Any:
 
 
 def _polish_axis(axis: Any, *, grid: str | None = "y") -> None:
-    """Apply the restrained Part 01 scientific-figure treatment."""
+    """Apply the restrained Core playbook scientific-figure treatment."""
 
     axis.spines["top"].set_visible(False)
     axis.spines["right"].set_visible(False)
@@ -369,61 +839,37 @@ def _polish_axis(axis: Any, *, grid: str | None = "y") -> None:
     else:
         axis.grid(axis=grid, color="#2F3A44", alpha=0.58, linewidth=0.75)
     axis.tick_params(length=3.5, width=0.8)
-    axis.title.set_fontweight("semibold")
+    axis.title.set_fontweight("bold")
 
 
-def _display_figure(figure: Any, alt: str) -> None:
-    from IPython.display import display
+def _display_figure(
+    figure: Any,
+    alt: str,
+    *,
+    max_width: int | None = None,
+) -> None:
+    from IPython.display import HTML, display
 
     figure.tight_layout(pad=1.15)
-    display(figure, metadata={"alt": alt})
-    plt.close(figure)
-
-
-def plot_molecule(graph: AtomicData, label: str) -> Any:
-    """Draw one compact molecular projection from the position tensor."""
-
-    positions = graph.positions.detach().cpu().numpy()
-    numbers = graph.atomic_numbers.detach().cpu().numpy()
-    centered = positions - positions.mean(axis=0, keepdims=True)
-    _, _, basis = np.linalg.svd(centered, full_matrices=False)
-    projection = centered @ basis[:2].T
-    figure, axis = plt.subplots(figsize=(7.4, 3.4))
-    for left in range(len(numbers)):
-        for right in range(left + 1, len(numbers)):
-            distance = np.linalg.norm(positions[left] - positions[right])
-            limit = 1.2 * (
-                covalent_radii[numbers[left]] + covalent_radii[numbers[right]]
-            )
-            if distance <= limit:
-                axis.plot(
-                    projection[[left, right], 0],
-                    projection[[left, right], 1],
-                    color="#8E969E",
-                    linewidth=2.2,
-                    zorder=1,
-                )
-    for atomic_number in sorted(set(numbers)):
-        mask = numbers == atomic_number
-        axis.scatter(
-            projection[mask, 0],
-            projection[mask, 1],
-            s=190,
-            color=_ELEMENT_COLORS.get(int(atomic_number), "#76B900"),
-            edgecolor="#111315",
-            linewidth=1.2,
-            label=chemical_symbols[int(atomic_number)],
-            zorder=2,
-        )
-    axis.set_title(f"{label} · {len(numbers)} atoms", pad=10)
-    axis.set_aspect("equal")
-    axis.margins(0.22)
-    axis.axis("off")
-    axis.legend(frameon=False, ncol=4, loc="upper right")
-    return _display_figure(
-        figure,
-        f"Principal-axis projection of {label}; atoms are colored by element and connecting lines are covalent-radius visual guides.",
+    buffer = BytesIO()
+    figure.savefig(
+        buffer,
+        format="png",
+        bbox_inches="tight",
+        facecolor=figure.get_facecolor(),
     )
+    payload = b64encode(buffer.getvalue()).decode("ascii")
+    width_style = (
+        f"width:100%;max-width:{max_width}px;" if max_width else "max-width:100%;"
+    )
+    display(
+        HTML(
+            '<img src="data:image/png;base64,'
+            f'{payload}" alt="{escape(alt, quote=True)}" '
+            f'style="display:block;{width_style}height:auto;margin:0 auto;">'
+        )
+    )
+    plt.close(figure)
 
 
 def plot_batch_ownership(batch: Batch, labels: Sequence[str]) -> Any:
@@ -435,22 +881,22 @@ def plot_batch_ownership(batch: Batch, labels: Sequence[str]) -> Any:
     owners = batch.batch_idx.detach().cpu().numpy()
     pointers = batch.batch_ptr.detach().cpu().numpy()
     palette = ("#76B900", "#00A3E0", "#F5B642")
-    figure, axis = plt.subplots(figsize=(11.5, 3.0), dpi=140)
+    figure, axis = plt.subplots(figsize=(11.5, 3.2), dpi=160)
     for row, (number, owner) in enumerate(zip(numbers, owners, strict=True)):
         color = palette[int(owner) % len(palette)]
         axis.add_patch(
             FancyBboxPatch(
-                (row - 0.42, 0.48),
-                0.84,
-                0.44,
+                (row + 0.06, 0.54),
+                0.88,
+                0.40,
                 boxstyle="round,pad=0.02,rounding_size=0.06",
                 facecolor=color,
                 edgecolor="none",
             )
         )
         axis.text(
-            row,
-            0.70,
+            row + 0.5,
+            0.74,
             chemical_symbols[int(number)],
             color="#0B0F10",
             ha="center",
@@ -458,187 +904,102 @@ def plot_batch_ownership(batch: Batch, labels: Sequence[str]) -> Any:
             fontsize=8,
             fontweight="bold",
         )
-    for pointer in pointers[1:-1]:
-        axis.axvline(pointer - 0.5, color="#CDD2D8", linestyle="--", linewidth=1.0)
+        axis.add_patch(
+            FancyBboxPatch(
+                (row + 0.06, 0.10),
+                0.88,
+                0.27,
+                boxstyle="round,pad=0.01,rounding_size=0.05",
+                facecolor=color,
+                edgecolor="none",
+                alpha=0.76,
+            )
+        )
+        axis.text(
+            row + 0.5,
+            0.235,
+            str(int(owner)),
+            color="#0B0F10",
+            ha="center",
+            va="center",
+            fontsize=7.2,
+            fontweight="bold",
+        )
+
+    for pointer in pointers:
+        axis.vlines(
+            pointer,
+            ymin=0.02,
+            ymax=1.02,
+            color="#CDD2D8",
+            linestyle="--",
+            linewidth=1.0,
+            zorder=0,
+        )
     for graph, (label, start, stop) in enumerate(
         zip(labels, pointers[:-1], pointers[1:], strict=True)
     ):
         color = palette[graph % len(palette)]
         axis.add_patch(
             Rectangle(
-                (start - 0.5, 0.08),
+                (start, 0.02),
                 stop - start,
-                0.25,
+                1.0,
                 facecolor=color,
                 edgecolor="none",
-                alpha=0.78,
+                alpha=0.055,
+                zorder=-1,
             )
         )
-        center = (start + stop - 1) / 2
-        axis.text(center, 1.15, f"{label} · {stop - start} atoms", ha="center")
+        center = (start + stop) / 2
         axis.text(
             center,
-            0.205,
-            f"rows {start}:{stop}  |  batch_idx {graph}",
+            1.22,
+            f"{graph} · {label}\nrows {start}:{stop}",
             color="#F3F4F6",
             ha="center",
             va="center",
-            fontsize=7.2,
+            fontsize=8.2,
         )
-    axis.set_xlim(-0.75, len(owners) + 0.25)
-    axis.set_ylim(-0.02, 1.36)
+    axis.text(-0.35, 0.74, "atomic_numbers", ha="right", va="center", fontsize=8)
+    axis.text(-0.35, 0.235, "batch_idx", ha="right", va="center", fontsize=8)
+    axis.set_xlim(-2.25, len(owners) + 0.25)
+    axis.set_ylim(-0.02, 1.42)
     axis.set_xticks(pointers)
-    axis.set_xlabel("Atom-row offsets stored in batch_ptr")
+    axis.set_xlabel(f"batch_ptr boundaries: {pointers.tolist()}")
     axis.set_yticks([])
     _polish_axis(axis, grid=None)
     axis.spines[["left", "right", "top"]].set_visible(False)
     return _display_figure(
         figure,
-        "Packed atomic-number tiles for three molecules. Colored bands show coordinate slices and batch indexes; vertical boundaries are batch pointer offsets.",
-    )
-
-
-def plot_fire2_evidence(
-    rows: Sequence[dict[str, float]],
-    threshold: float,
-    labels: Sequence[str],
-) -> Any:
-    """Plot per-system FIRE2 energy changes and maximum-force histories."""
-
-    figure, axes = plt.subplots(1, 2, figsize=(10.2, 3.6))
-    colors = ("#76B900", "#00A3E0", "#F5B642")
-    for graph, label in enumerate(labels):
-        graph_rows = [row for row in rows if int(row["graph"]) == graph]
-        steps = [int(row["step"]) for row in graph_rows]
-        energies = np.asarray([float(row["energy_ev"]) for row in graph_rows])
-        forces = [float(row["fmax_ev_per_a"]) for row in graph_rows]
-        axes[0].plot(
-            steps,
-            energies - energies[0],
-            marker="o",
-            markersize=4.2,
-            linewidth=1.8,
-            color=colors[graph % len(colors)],
-            label=label,
-        )
-        axes[1].plot(
-            steps,
-            forces,
-            marker="o",
-            markersize=4.2,
-            linewidth=1.8,
-            color=colors[graph % len(colors)],
-            label=label,
-        )
-    axes[0].set(
-        title="Relative energy",
-        xlabel="FIRE2 step",
-        ylabel="Energy change [eV]",
-    )
-    axes[0].legend(frameon=False, fontsize=8, ncol=1)
-    axes[1].axhline(threshold, color="#F5B642", linestyle="--", linewidth=1.4)
-    axes[1].set(
-        title="Maximum force",
-        xlabel="FIRE2 step",
-        ylabel="Maximum force [eV/Å]",
-    )
-    axes[1].set_yscale("log")
-    axes[1].set_ylim(threshold * 0.72, None)
-    axes[1].annotate(
-        f"target {threshold:g} eV/Å",
-        xy=(0.99, threshold),
-        xycoords=("axes fraction", "data"),
-        xytext=(-4, 5),
-        textcoords="offset points",
-        color="#F5B642",
-        fontsize=8,
-        ha="right",
-    )
-    for axis in axes:
-        _polish_axis(axis)
-    return _display_figure(
-        figure,
-        "FIRE2 evidence: per-molecule energy change and maximum force versus optimizer step.",
-    )
-
-
-def plot_structure_change(before: AtomicData, after: AtomicData, label: str) -> Any:
-    """Compare initial and returned coordinates with identical plot limits."""
-
-    initial = before.positions.detach().cpu().numpy()
-    final = after.positions.detach().cpu().numpy()
-    numbers = before.atomic_numbers.detach().cpu().numpy()
-    colors = [_ELEMENT_COLORS.get(int(number), "#76B900") for number in numbers]
-    combined = np.concatenate([initial[:, :2], final[:, :2]])
-    low, high = combined.min(axis=0), combined.max(axis=0)
-    center = (low + high) / 2
-    span = max(float((high - low).max()), 1.0) * 0.62
-    figure, axes = plt.subplots(1, 2, figsize=(8.8, 3.7), sharex=True, sharey=True)
-    for axis, coordinates, title in zip(
-        axes, (initial, final), ("Initial", "Returned coordinates"), strict=True
-    ):
-        axis.scatter(
-            coordinates[:, 0],
-            coordinates[:, 1],
-            s=70,
-            c=colors,
-            edgecolors="#111315",
-            linewidth=1.0,
-        )
-        axis.set(
-            title=title,
-            xlabel="x [Å]",
-            ylabel="y [Å]",
-            aspect="equal",
-            xlim=(center[0] - span, center[0] + span),
-            ylim=(center[1] - span, center[1] + span),
-        )
-        _polish_axis(axis)
-    maximum_displacement = np.linalg.norm(final - initial, axis=1).max()
-    figure.suptitle(
-        f"{label}: bounded FIRE2 update, max displacement {maximum_displacement:.3f} Å",
-        fontsize=12,
-        fontweight="semibold",
-    )
-    return _display_figure(
-        figure,
-        f"Side-by-side initial and returned-coordinate projections of {label} after bounded FIRE2, using identical axes.",
+        "Packed atom rows for three molecules. The repeated batch_idx row assigns each atom to a molecule, and vertical lines align with the batch_ptr boundaries.",
     )
 
 
 def build_argon_batch(
     device: torch.device,
     dtype: torch.dtype,
-    *,
-    temperature_k: float = 50.0,
 ) -> Batch:
     """Build the periodic 27-atom argon sandbox used by the official NVE example."""
 
     sigma = 3.40
     spacing = 2 ** (1 / 6) * sigma
-    coords = torch.arange(3, device=device, dtype=dtype) * spacing
+    coords = (torch.arange(3, device=device, dtype=dtype) + 0.5) * spacing
     gx, gy, gz = torch.meshgrid(coords, coords, coords, indexing="ij")
     positions = torch.stack([gx.flatten(), gy.flatten(), gz.flatten()], dim=-1)
-    generator = torch.Generator(device=device).manual_seed(42)
-    velocity_scale = (8.617333262e-5 * temperature_k / 39.948) ** 0.5
-    velocities = torch.randn(
-        positions.shape, generator=generator, device=device, dtype=dtype
-    )
-    velocities = velocity_scale * (velocities - velocities.mean(dim=0, keepdim=True))
     graph = AtomicData(
         positions=positions,
         atomic_numbers=torch.full(
             (len(positions),), 18, device=device, dtype=torch.long
         ),
         atomic_masses=torch.full((len(positions),), 39.948, device=device, dtype=dtype),
+        velocities=torch.zeros_like(positions),
         forces=torch.zeros_like(positions),
         energy=torch.zeros((1, 1), device=device, dtype=dtype),
         cell=torch.eye(3, device=device, dtype=dtype).unsqueeze(0) * (3 * spacing),
         pbc=torch.ones((1, 3), device=device, dtype=torch.bool),
     )
-    batch = Batch.from_data_list([graph], device=device)
-    batch.add_key("velocities", [velocities], level="node", overwrite=True)
-    return batch
+    return Batch.from_data_list([graph], device=device)
 
 
 class NVETraceHook:
@@ -666,195 +1027,126 @@ class NVETraceHook:
         )
 
 
-def plot_nve_trace(rows: Sequence[dict[str, float]]) -> Any:
-    """Plot five recorded NVE updates as control-flow evidence."""
+def prepare_lj_finetuning_experiment(
+    seed_batch: Batch,
+    *,
+    sigma: float,
+    cutoff: float,
+    reference_epsilon: float,
+    baseline_epsilon: float,
+    displacement_std: float = 0.08,
+    initial_fit_noise: float = 2.0,
+    fine_tune_noise: float = 0.005,
+    initial_fit_samples: int = 32,
+    fine_tune_samples: int = 128,
+    test_samples: int = 64,
+    batch_size: int = 16,
+) -> tuple[float, TorchDataLoader, Batch]:
+    """Create a noisy initial fit, cleaner fine-tuning data, and an LJ test set."""
 
-    steps = [row["step"] for row in rows]
-    figure, axis = plt.subplots(figsize=(8.2, 3.6))
-    for key, label, style in (
-        ("potential_ev", "potential", "--"),
-        ("kinetic_ev", "kinetic", ":"),
-        ("total_ev", "total", "-"),
-    ):
-        axis.plot(
-            steps,
-            [row[key] for row in rows],
-            marker="o",
-            markersize=4.5,
-            linewidth=1.8,
-            linestyle=style,
-            label=label,
-        )
-    axis.set(
-        title="Energy components over five NVE updates",
-        xlabel="Post-update index",
-        ylabel="Energy [eV]",
-        xticks=steps,
+    from nvalchemi.models.lj import LennardJonesModelWrapper
+    from nvalchemi.neighbors import compute_neighbors
+
+    sample_counts = (initial_fit_samples, fine_tune_samples, test_samples)
+    if any(count < 1 for count in sample_counts) or batch_size < 1:
+        raise ValueError("Sample counts and batch_size must be positive")
+    if initial_fit_noise < 0.0 or fine_tune_noise < 0.0:
+        raise ValueError("Label-noise scales must be non-negative")
+
+    seed_data = seed_batch.get_data(0).to(torch.device("cpu"))
+    split_specs = (
+        (initial_fit_samples, 1000),
+        (fine_tune_samples, 2000),
+        (test_samples, 3000),
     )
-    _polish_axis(axis)
-    axis.legend(frameon=False, ncol=3, loc="center right")
-    return _display_figure(
-        figure,
-        "Potential, kinetic, and total energy recorded over five Lennard-Jones NVE updates.",
+    split_records: list[list[AtomicData]] = []
+    for count, seed_start in split_specs:
+        records = []
+        for index in range(count):
+            generator = torch.Generator().manual_seed(seed_start + index)
+            offset = torch.randn(
+                seed_data.positions.shape,
+                generator=generator,
+                dtype=seed_data.positions.dtype,
+            )
+            records.append(
+                AtomicData(
+                    positions=seed_data.positions + displacement_std * offset,
+                    atomic_numbers=seed_data.atomic_numbers,
+                    cell=seed_data.cell,
+                    pbc=seed_data.pbc,
+                )
+            )
+        split_records.append(records)
+
+    all_records = [record for records in split_records for record in records]
+    all_batch = Batch.from_data_list(all_records)
+    unit_lj = LennardJonesModelWrapper(
+        epsilon=1.0,
+        sigma=sigma,
+        cutoff=cutoff,
     )
+    unit_lj.set_config("active_outputs", {"energy"})
+    compute_neighbors(all_batch, config=unit_lj.model_config.neighbor_config)
+    unit_energy = unit_lj(all_batch)["energy"].detach().cpu()
 
-
-class NativeQuadraticCorrection(torch.nn.Module):
-    """Deterministic native tensor term used only to demonstrate adaptation."""
-
-    def __init__(self, scale: float = 1.0e-4) -> None:
-        super().__init__()
-        self.register_buffer("scale", torch.tensor(scale))
-
-    def forward(
-        self,
-        positions: torch.Tensor,
-        batch_idx: torch.Tensor,
-        graph_count: int,
-    ) -> torch.Tensor:
-        node_energy = self.scale * positions.square().sum(dim=1)
-        graph_energy = torch.zeros(
-            graph_count,
-            device=positions.device,
-            dtype=positions.dtype,
-        )
-        return graph_energy.index_add(0, batch_idx, node_energy).unsqueeze(-1)
-
-
-def plot_wrapper_flow(parity_delta: float) -> Any:
-    """Draw the native-to-wrapper-to-composition boundary and parity check."""
-
-    figure, axis = plt.subplots(figsize=(8.6, 2.2))
-    axis.set(xlim=(-0.25, 2.25), ylim=(-0.55, 0.55))
-    axis.axis("off")
-    labels = (
-        ("Native PyTorch term", "positions + batch_idx"),
-        ("Toolkit model contract", "Batch → energy"),
-        ("Additive pipeline", "LJ energy + toy energy"),
+    initial_stop = initial_fit_samples
+    fine_tune_stop = initial_stop + fine_tune_samples
+    initial_unit = unit_energy[:initial_stop]
+    fine_tune_unit = unit_energy[initial_stop:fine_tune_stop]
+    true_correction = reference_epsilon - baseline_epsilon
+    initial_generator = torch.Generator().manual_seed(21)
+    initial_residual = true_correction * initial_unit + initial_fit_noise * torch.randn(
+        initial_unit.shape,
+        generator=initial_generator,
+        dtype=initial_unit.dtype,
     )
-    for x, (label, detail) in enumerate(labels):
-        axis.text(
-            x,
-            0.18,
-            label,
-            ha="center",
-            va="center",
-            color="#F3F5F7",
-            fontweight="semibold",
-        )
-        axis.text(
-            x, -0.02, detail, ha="center", va="center", color="#A8B0B8", fontsize=9
-        )
-    for start in (0, 1):
-        axis.annotate(
-            "",
-            xy=(start + 0.68, 0.18),
-            xytext=(start + 0.32, 0.18),
-            arrowprops={"arrowstyle": "->", "color": "#76B900", "linewidth": 1.8},
-        )
-    axis.text(
-        1.0,
-        -0.40,
-        f"max |pipeline - manual sum| = {parity_delta:.2e} eV",
-        ha="center",
-        color="#F5B642",
-        fontsize=9.5,
-    )
-    return _display_figure(
-        figure,
-        "A native quadratic toy term passes through a Toolkit wrapper and is added to Lennard-Jones; the displayed delta checks implementation identity.",
+    initial_epsilon = float(
+        (initial_unit.flatten() @ initial_residual.flatten())
+        / (initial_unit.flatten() @ initial_unit.flatten())
     )
 
-
-class SyntheticEnergyDataset(TorchDataset[AtomicData]):
-    """Deterministic fixed-size systems with a smooth synthetic energy target."""
-
-    def __init__(self, count: int, atoms: int, seed: int, scale: float = 1.0) -> None:
-        self.count, self.atoms, self.seed, self.scale = count, atoms, seed, scale
-
-    def __len__(self) -> int:
-        return self.count
-
-    def __getitem__(self, index: int) -> AtomicData:
-        generator = torch.Generator().manual_seed(self.seed + index)
-        positions = torch.randn(self.atoms, 3, generator=generator)
-        energy = (self.scale * positions.square().sum()).reshape(1, 1)
-        return AtomicData(
-            positions=positions,
-            atomic_numbers=torch.ones(self.atoms, dtype=torch.long),
-            energy=energy,
+    fine_tune_generator = torch.Generator().manual_seed(99)
+    fine_tune_residual = (
+        true_correction * fine_tune_unit
+        + fine_tune_noise
+        * torch.randn(
+            fine_tune_unit.shape,
+            generator=fine_tune_generator,
+            dtype=fine_tune_unit.dtype,
         )
+    )
+    for record, target in zip(split_records[1], fine_tune_residual, strict=True):
+        record.add_system_property("energy", target.reshape(1, 1))
 
-
-class SimpleEnergyMLP(torch.nn.Module, BaseModelMixin):
-    """Small fixed-size MLP adapted from the pinned official DDP example."""
-
-    def __init__(self, num_atoms: int = 4, hidden_dim: int = 24) -> None:
-        super().__init__()
-        self.num_atoms = num_atoms
-        self.network = torch.nn.Sequential(
-            torch.nn.Linear(num_atoms * 3, hidden_dim),
-            torch.nn.SiLU(),
-            torch.nn.Linear(hidden_dim, 1),
-        )
-        self.model_config = ModelConfig(
-            outputs=frozenset({"energy"}),
-            required_inputs=frozenset({"positions"}),
-        )
-
-    @property
-    def embedding_shapes(self) -> dict[str, tuple[int, ...]]:
-        return {}
-
-    def compute_embeddings(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> AtomicData | Batch:
-        return data
-
-    def forward(
-        self, data: AtomicData | Batch, **kwargs: Any
-    ) -> dict[str, torch.Tensor]:
-        graph_count = data.batch_size if isinstance(data, Batch) else 1
-        features = data.positions.reshape(graph_count, self.num_atoms * 3)
-        return {"energy": self.network(features)}
-
-
-def _synthetic_loader(
-    dataset: SyntheticEnergyDataset, batch_size: int
-) -> TorchDataLoader:
-    return TorchDataLoader(
-        dataset,
+    finetune_loader = TorchDataLoader(
+        split_records[1],
         batch_size=batch_size,
         shuffle=False,
         num_workers=0,
         collate_fn=lambda samples: Batch.from_data_list(list(samples)),
     )
+    test_batch = Batch.from_data_list(split_records[2])
+    return initial_epsilon, finetune_loader, test_batch
 
 
-def prepare_synthetic_transfer(
-    device: torch.device,
-) -> tuple[SimpleEnergyMLP, TorchDataLoader, float]:
-    """Fit source-task weights briefly, then return a shifted fine-tuning loader."""
+def build_argon_pair_curve(distances: torch.Tensor) -> Batch:
+    """Build nonperiodic Ar2 systems at the requested pair distances."""
 
-    torch.manual_seed(7)
-    model = SimpleEnergyMLP().to(device)
-    source_loader = _synthetic_loader(SyntheticEnergyDataset(32, 4, 100), batch_size=8)
-    optimizer = torch.optim.Adam(model.parameters(), lr=2.0e-2)
-    last_minibatch_loss = float("nan")
-    model.train()
-    for _ in range(8):
-        for batch in source_loader:
-            batch = batch.to(device)
-            loss = torch.nn.functional.mse_loss(model(batch)["energy"], batch.energy)
-            optimizer.zero_grad()
-            loss.backward()
-            optimizer.step()
-            last_minibatch_loss = float(loss.detach().cpu())
-    shifted_loader = _synthetic_loader(
-        SyntheticEnergyDataset(16, 4, 500, scale=0.8),
-        batch_size=4,
-    )
-    return model, shifted_loader, last_minibatch_loss
+    values = torch.as_tensor(distances)
+    records = []
+    for distance in values:
+        positions = torch.zeros((2, 3), device=values.device, dtype=values.dtype)
+        positions[1, 0] = distance
+        records.append(
+            AtomicData(
+                positions=positions,
+                atomic_numbers=torch.full(
+                    (2,), 18, device=values.device, dtype=torch.long
+                ),
+            )
+        )
+    return Batch.from_data_list(records, device=values.device)
 
 
 class LossHistoryHook:
@@ -874,74 +1166,102 @@ class LossHistoryHook:
         )
 
 
-def plot_training_loss(rows: Sequence[dict[str, float]]) -> Any:
-    """Plot the deliberately tiny fine-tuning loss trace."""
+def plot_lj_transfer_curve(
+    pair_distance: torch.Tensor,
+    reference: torch.Tensor,
+    before: torch.Tensor,
+    after: torch.Tensor,
+) -> Any:
+    """Plot exact, initial, and fine-tuned LJ pair energies."""
 
-    steps = [int(row["step"]) for row in rows]
-    figure, axis = plt.subplots(figsize=(7.6, 3.4))
-    axis.scatter(
-        steps,
-        [row["loss"] for row in rows],
-        color="#76B900",
-        s=52,
-        edgecolor="#111315",
-        linewidth=0.8,
+    distance = pair_distance.detach().cpu().flatten().numpy()
+    truth = reference.detach().cpu().flatten().numpy()
+    initial = before.detach().cpu().flatten().numpy()
+    tuned = after.detach().cpu().flatten().numpy()
+    marker_stride = max(1, len(distance) // 12)
+    figure, axis = plt.subplots(figsize=(8.4, 4.2))
+    axis.plot(
+        distance,
+        initial,
+        color="#D8A657",
+        linewidth=2.0,
+        linestyle="--",
+        zorder=1,
+        label="Initial noisy fit",
     )
+    axis.plot(
+        distance,
+        tuned,
+        color="#76B900",
+        linewidth=3.2,
+        zorder=2,
+        label="Fine-tuned",
+    )
+    axis.plot(
+        distance,
+        truth,
+        color="#F3F5F7",
+        linewidth=1.2,
+        marker="o",
+        markersize=4.2,
+        markevery=marker_stride,
+        markeredgecolor="#11161B",
+        markeredgewidth=0.6,
+        zorder=3,
+        label="Exact LJ",
+    )
+    axis.axhline(0.0, color="#7C8794", linewidth=0.8, alpha=0.55)
     axis.set(
-        title="Synthetic minibatch loss",
-        xlabel="Optimizer update",
-        ylabel="MSE [synthetic units²]",
-        xticks=steps,
+        title="Ar₂ potential after fine-tuning",
+        xlabel="Ar-Ar distance [Å]",
+        ylabel="Pair energy [eV]",
+    )
+    handles, labels = axis.get_legend_handles_labels()
+    axis.legend(
+        [handles[2], handles[0], handles[1]],
+        [labels[2], labels[0], labels[1]],
+        frameon=False,
+        ncol=3,
     )
     _polish_axis(axis)
     return _display_figure(
         figure,
-        "Four unconnected points show MSE on four different synthetic minibatches.",
+        "Exact Lennard-Jones Ar2 pair energy, a fit to noisy labels, and the result after fine-tuning on cleaner labels.",
     )
 
 
-def plot_domain_control(world_size: int, atom_count: int) -> Any:
-    """Draw the ownership result for a world-size-one domain walkthrough."""
+def plot_lj_finetuning_loss(rows: Sequence[dict[str, float]]) -> Any:
+    """Plot the residual-energy loss recorded after each optimizer update."""
 
-    columns = 5
-    rows = int(np.ceil(atom_count / columns))
-    indices = np.arange(atom_count)
-    x = indices % columns
-    y = rows - 1 - indices // columns
-    figure, axis = plt.subplots(figsize=(6.8, 3.2))
-    axis.scatter(
-        x,
-        y,
-        s=130,
+    steps = [int(row["step"]) for row in rows]
+    losses = [row["loss"] for row in rows]
+    if not steps or any(loss <= 0.0 for loss in losses):
+        raise ValueError("Loss history must contain positive values")
+
+    tick_stride = max(1, len(steps) // 6)
+    tick_steps = steps[::tick_stride]
+    if tick_steps[-1] != steps[-1]:
+        tick_steps.append(steps[-1])
+
+    figure, axis = plt.subplots(figsize=(7.2, 3.4))
+    axis.plot(
+        steps,
+        losses,
         color="#76B900",
-        edgecolor="#111315",
-        linewidth=0.9,
+        linewidth=2.6,
+        marker="o",
+        markersize=4.2,
     )
-    axis.add_patch(
-        plt.Rectangle(
-            (-0.65, -0.65),
-            columns - 1 + 1.3,
-            rows - 1 + 1.3,
-            fill=False,
-            edgecolor="#CDD2D8",
-            linewidth=1.1,
-        )
+    axis.set_ylim(bottom=0.0)
+    axis.set(
+        title="Fine-tuning loss",
+        xlabel="Optimizer update",
+        ylabel="Residual MSE [eV²]",
+        xticks=tick_steps,
     )
-    axis.set_title(f"World-size-{world_size} ownership")
-    axis.text(
-        columns + 0.15,
-        (rows - 1) / 2,
-        f"rank 0\nowns all\n{atom_count} atoms",
-        color="#F3F5F7",
-        va="center",
-        fontsize=11,
-        linespacing=1.35,
-    )
-    axis.set_aspect("equal")
-    axis.set_xlim(-0.9, columns + 1.45)
-    axis.set_ylim(-0.9, rows - 0.1)
-    axis.axis("off")
+    _polish_axis(axis)
     return _display_figure(
         figure,
-        f"World-size-{world_size} domain ownership schematic; rank zero owns all {atom_count} atoms.",
+        "Residual-energy mean-squared error recorded after each fine-tuning update.",
+        max_width=760,
     )

@@ -6,42 +6,22 @@ directory contains their reusable implementation files:
 
 - [`banner.md`](banner.md) and
   [`alchemi-banner-left.png`](alchemi-banner-left.png): exact top cell and
-  course banner used by every tutorial notebook;
-- [`render_curriculum_maps.py`](render_curriculum_maps.py) and
-  `curriculum-map-01.svg` through `curriculum-map-08.svg`: one synchronized
-  compact vertical course spine, quiet single-weight icons, six broader
-  capability cards with normalized text and 18 px gaps, independent rounded
-  lesson routes, capability dependencies, and notebook links on available
-  lesson cards;
-  [`curriculum-map.drawio`](curriculum-map.drawio) is the editable source; rerun
-  the generator after a curriculum change;
-- [`callouts.md`](callouts.md): the approved `HIGHLIGHT` and `API` templates;
-- [`alchemi-toolkit-architecture.png`](alchemi-toolkit-architecture.png): the
-  Part 01 ecosystem orientation graphic;
-- [`alchemi-dark.mplstyle`](alchemi-dark.mplstyle): quantitative plot style.
-- [`matterviz-anywidget-0.4.0/`](matterviz-anywidget-0.4.0/): pinned MatterViz
-  JavaScript, CSS, and MIT license used by notebook-native pymatviz structure
-  viewers without a classroom-time network fetch.
+  course banner used by the Core playbook and future lessons;
+- [`callouts.md`](callouts.md): the approved 💡 highlight and muted API
+  blockquote templates;
+- [`alchemi-dark.mplstyle`](alchemi-dark.mplstyle): quantitative plot style;
+- [`3dmol-2.5.5/`](3dmol-2.5.5/): pinned 3Dmol.js renderer and its two
+  BSD-3-Clause license files. `helpers.show_molecule` inlines this JavaScript
+  into its own HTML output, so structure views need no network fetch during the
+  lesson and stay interactive in an exported notebook.
 
 These files implement decisions from the authoring guide, which remains the
 single source for tutorial design.
 
-Render the course map with an HTML `img` and keep navigation in ordinary
-Markdown links below it:
-
-```html
-<img
-  src="../../shared/curriculum-map-01.svg"
-  style="display:block;width:100%;max-width:900px;height:auto;border:0;"
-  alt="ALCHEMI Toolkit curriculum. Part 01 is highlighted."
->
-```
-
-An HTML `object` preserves links inside the SVG, but VS Code and exported
-notebook renderers handle it inconsistently. Use it only after testing every
-course delivery format.
-
-The five core notebooks use [`alchemi-dark.mplstyle`](alchemi-dark.mplstyle) for plots. It follows the adsorption tutorial preserved on another branch: black canvas, NVIDIA green (`#76B900`) as the primary series, blue (`#00A3E0`) for the first comparison or highlight, light text, and restrained gray grids.
+The Core playbook uses [`alchemi-dark.mplstyle`](alchemi-dark.mplstyle) for
+plots: black canvas, NVIDIA green (`#76B900`) as the primary series, blue
+(`#00A3E0`) for the first comparison or highlight, light text, and restrained
+gray grids.
 
 Use it from a notebook launched at the repository root:
 

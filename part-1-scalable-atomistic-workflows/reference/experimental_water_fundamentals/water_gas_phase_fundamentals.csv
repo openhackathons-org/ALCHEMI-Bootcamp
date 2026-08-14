@@ -1,7 +1,0 @@
-isotopologue,exact_isotopologue,mode_index,mode,symmetry_species,wavenumber_cm1,units,phase,value_type,source_id
-H2O,H2-16O,1,symmetric_stretch,A1,3657.1,cm^-1,gas,observed_fundamental,dinu_2019_table1_h2_16o
-H2O,H2-16O,2,bend,A1,1594.8,cm^-1,gas,observed_fundamental,dinu_2019_table1_h2_16o
-H2O,H2-16O,3,antisymmetric_stretch,B2,3755.9,cm^-1,gas,observed_fundamental,dinu_2019_table1_h2_16o
-D2O,D2-16O,1,symmetric_stretch,A1,2671.7,cm^-1,gas,observed_fundamental,dinu_2019_table1_d2_16o
-D2O,D2-16O,2,bend,A1,1178.4,cm^-1,gas,observed_fundamental,dinu_2019_table1_d2_16o
-D2O,D2-16O,3,antisymmetric_stretch,B2,2787.7,cm^-1,gas,observed_fundamental,dinu_2019_table1_d2_16o

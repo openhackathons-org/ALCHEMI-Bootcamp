@@ -1,6 +1,0 @@
-4
-Properties=species:S:1:pos:R:3:is_adsorbate:L:1 structure_key=nh3_gas role=gas adsorbate=NH3 surface=none geometry_status="ASE-generated initial placements; not model-relaxed" relaxed=F pbc="F F F"
-N        0.00000000      -0.23493300       0.19414850  T
-H        0.00000000       0.70479800      -0.19414850  T
-H        0.81383100      -0.70479800      -0.19414850  T
-H       -0.81383100      -0.70479800      -0.19414850  T

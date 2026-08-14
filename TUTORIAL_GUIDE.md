@@ -10,11 +10,9 @@ Other files have narrower jobs:
 - [`shared/README.md`](shared/README.md) documents shared assets and helper
   implementations.
 - [`environment/README.md`](environment/README.md) documents the frozen runtime.
-- [`WORKLOG.md`](WORKLOG.md) and notebook worklogs record current work, measured
-  results, and local decisions.
 
-Keep all tutorial policy in this document. Add a durable rule here, an API fact
-to the technical reference, or a notebook-specific decision to its worklog.
+Keep all tutorial policy in this document. Add API facts to the technical
+reference and keep temporary implementation notes outside the release tree.
 
 ## 1. Purpose and audience
 
@@ -99,29 +97,13 @@ performs. The deep-dive part that owns a section is named in that section's
 closing **Go deeper** link, which keeps the mapping without forcing the
 headings into an order the notebook's own dependencies do not follow.
 
-The shared course map is an orientation graphic. It uses a compact vertical
-course spine and six larger capability groups. The current part and its primary
-capability use NVIDIA green. Course-map copy stays short enough to fit
-fixed-size boxes. Each lesson-to-capability relationship has its own rounded
-route and arrowhead. Capability arrows show real dependencies: fundamentals
-support every downstream path; data management feeds model use, simulation,
-and model development; models and simulation feed multi-GPU execution.
-Notebook navigation sits in ordinary Markdown links below the map.
+The Core playbook opens with a notebook-local capability map. It names the
+work learners can do with data, models, simulations, scaling, and services.
 Keep documentation links visually prominent and repeat them as ordinary
-Markdown below the map. Show unpublished course notebooks as muted,
-non-clickable status text until they are ready for learners.
-Capability cards use one vertical gap. Their height grows by one text-line step
-for each additional body line; heading, body, line spacing, and bottom padding
-stay aligned across the column.
-Use the generated SVG assets described in [`shared/README.md`](shared/README.md)
-so all notebooks show the same geometry, connectors, icons, and typography.
-Render the SVG with Markdown image syntax or an HTML `img`, both of which work
-reliably in VS Code and exported notebooks. Use an interactive `object` only
+Markdown. Show unpublished deep dives as muted, non-clickable status text.
+Render local SVG diagrams with Markdown image syntax or an HTML `img`, both of
+which work in VS Code and exported notebooks. Use an interactive `object` only
 after checking it in every target renderer.
-For hover navigation in a notebook, keep the diagram as the visual layer and
-place ordinary HTML controls above it. SVG anchors can be treated as image
-metadata by notebook renderers. Let mouse hover close on pointer exit; reserve
-persistent focus states for keyboard navigation.
 
 ## 3. Lesson design
 
@@ -140,6 +122,23 @@ A strong lesson usually follows this cycle:
 7. reuse the same operation at a larger scale or in a new composition;
 8. give a bounded exercise with a visible success signal; and
 9. recap the capability and where the course uses it next.
+
+Treat major sections as one connected workflow. Open each section by naming
+the object or result produced just above, then state why the next API is needed.
+Pass that object into the next code path so the connection is executable as
+well as verbal. When a capability needs a different scientific system, explain
+the change and name the Toolkit objects or interfaces that carry forward.
+
+Look for a valid continuation before starting a separate example. A model
+component can be calibrated after composition, a loaded `Batch` can feed the
+next model call, and a computed state can become the input to a workflow. These
+connections should exist in code, not only in the transition text.
+
+When a section starts an independent example, label the transition explicitly.
+Use a short pattern such as: **Switching gears:** this section starts a new
+system or workload to teach `<capability>`. Then name what changes and which
+Toolkit objects, interfaces, or habits carry forward. This gives the learner a
+clean break before the new setup begins.
 
 A short exercise should change an input to the public API being taught and
 inspect that API's result. Supporting libraries may prepare the input. Keep the
@@ -269,8 +268,8 @@ Use the shared assets and implementation patterns in
 - the ALCHEMI banner at the top of each notebook;
 - a compact ALCHEMI ecosystem explanation and links in the first course
   introduction;
-- the generated course-map SVG;
-- MatterViz for interactive molecular or material structures;
+- notebook-local SVG diagrams for capability and workflow explanations;
+- the bundled 3Dmol.js viewer for interactive molecular structures;
 - plain Pandas for tables; and
 - plain Matplotlib with `shared/alchemi-dark.mplstyle` for quantitative plots.
 
@@ -279,9 +278,9 @@ it. Treat its removal by an educator as a design decision and update any checks
 that expected the asset.
 
 Use a light, compact molecular thumbnail when several molecules need visual
-orientation. Use MatterViz when rotation, depth, periodicity, or atom selection
-supports the lesson. Keep the viewer focused on the structure; move embedding,
-HTML, captions, and fallbacks into a presentation helper.
+orientation. Use the bundled viewer when rotation, depth, periodicity, or atom
+selection supports the lesson. Keep the viewer focused on the structure; move
+embedding, HTML, captions, and fallbacks into a presentation helper.
 
 Use NVIDIA green for the primary Toolkit result. Use muted neutral colors for
 context and one restrained comparison color when needed. Plots include units,
@@ -289,8 +288,8 @@ readable labels, and a short question immediately before the figure.
 
 ### Diagrams
 
-Use generated SVG for shared maps or architecture diagrams that need fixed box
-sizes, aligned icons, and controlled routing. Mermaid suits compact local flows
+Use generated SVG for diagrams that need fixed box sizes, aligned icons, and
+controlled routing. Mermaid suits compact local flows
 when it renders consistently in the target notebook and export. Check that
 render before keeping the source. Use a local SVG when Mermaid layout or export
 changes the meaning or breaks the figure.
@@ -303,6 +302,12 @@ Flowcharts use:
 - charcoal or warm-neutral fills for other nodes;
 - NVIDIA Sans with Arial and system fallbacks;
 - equal-sized rounded boxes when nodes have the same role;
+- a prominent identity label and a smaller state label when objects persist
+  across steps;
+- stable size, spacing, and position for unchanged objects in before-and-after
+  views;
+- fixed positions for persistent workflow stages, with changing state or masks
+  shown on the objects that move between those stages;
 - quiet borders and muted connectors;
 - clear arrowheads with consistent direction;
 - angled or gently rounded connector routes; and
@@ -322,16 +327,24 @@ them. Route around collisions and do not merge relationships into shared rails.
 
 ### Callouts
 
-Use two callouts:
+Use two lightweight Markdown blockquotes. The exact templates live in
+[`shared/callouts.md`](shared/callouts.md).
 
-- **Highlight** for one idea that deserves a pause. It uses a warm, neutral
-  surface and must fit both light and dark notebook themes.
-- **ALCHEMI Toolkit API** for a public call learners should reuse. It uses the
-  NVIDIA signature treatment, shows the exact name, input, and result, and fits
-  inside the notebook content width.
+- **Highlight** closes a section with one useful idea. Start with `> 💡`, then
+  state the idea in one or two sentences. Use ordinary inline code for API and
+  object names. The emoji, sentence, and notebook-native blockquote provide the
+  complete treatment.
+- **API** exposes a public call learners should recognize and reuse. Start with
+  the small muted `</> API` line, show the exact signature in inline code, and
+  finish with short **Input** and **Result** lines. Use a quoted Python fence
+  when the signature needs several lines. The notebook supplies the inline-code
+  background; the API label mixes the theme text color with NVIDIA green so it
+  remains legible in light and dark notebook themes.
 
-Each API card shows one signature. Put related constructors, conversion
-methods, and variants in ordinary Markdown or a compact reference table.
+Use this API card for every public call that matters to the lesson. Each card
+shows one signature. Put related constructors, conversion methods, and variants
+in ordinary Markdown or a compact reference table. The plain blockquote, muted
+label, and native inline-code background form the default notebook style.
 
 Write results, notes, limitations, transitions, and exercises as ordinary
 Markdown. Use Rich progress only for work with a visible wait.
@@ -398,6 +411,12 @@ For batched work, check graph counts, atom counts, boundaries, field levels,
 and per-graph recovery before making a speed claim. For composition, check
 component closure, output shapes, and any native-model parity the lesson claims.
 
+An improvement or accuracy experiment should name the reference calculation,
+separate fitting and evaluation structures, report the metric with units, and
+show the same evaluation before and after the intervention. State the data
+generation process and noise level. Limit the conclusion to the systems,
+properties, and distribution represented by the held-out set.
+
 A performance lesson should:
 
 1. name the question;
@@ -435,7 +454,8 @@ terms for a linked checkpoint, dataset, or figure.
 
 ## 8. Authoring and review
 
-Before implementation, record a concise design brief in the notebook worklog:
+Before implementation, record a concise design brief in the notebook's review
+issue or pull request:
 
 - lesson outcome and prior knowledge;
 - cell and visual sequence;
@@ -468,7 +488,7 @@ Review in three passes.
 
 ### Rendered learner review
 
-- The banner, course map, diagrams, viewers, tables, and plots render at normal
+- The banner, capability map, diagrams, viewers, tables, and plots render at normal
   teaching width.
 - Callouts fit the content column in light and dark themes.
 - Text density supports a live workshop pace.
@@ -483,8 +503,8 @@ Treat educator feedback as a delta:
 
 Put durable rules in this guide. Put API facts in the technical reference. Put
 cell IDs, molecules, timings, contributor names, and one-off repairs in the
-notebook worklog. Test a new general rule on another lesson before treating it
-as stable.
+review discussion. Test a new general rule on another lesson before treating
+it as stable.
 
 ## 9. Teaching foundations
 

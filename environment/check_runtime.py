@@ -51,21 +51,26 @@ def require_file_sha256(label: str, path: Path, expected: str) -> None:
 
 
 def main() -> None:
-    """Check Python, package versions, VCS commits, and shared data identities."""
-    require_equal("Python", f"{sys.version_info.major}.{sys.version_info.minor}", PINS["python"])
+    """Check Python, package versions, VCS commits, and runtime assets."""
+    require_equal(
+        "Python", f"{sys.version_info.major}.{sys.version_info.minor}", PINS["python"]
+    )
 
     for section in ("toolkit", "toolkit_ops"):
         pin = PINS[section]
         name = pin["distribution"]
-        require_equal(f"{name} version", importlib.metadata.version(name), pin["version"])
+        require_equal(
+            f"{name} version", importlib.metadata.version(name), pin["version"]
+        )
         require_equal(f"{name} commit", direct_url_commit(name), pin["commit"])
 
     for name, expected in (
         ("torch", PINS["torch"]),
         (PINS["model"]["package"], PINS["model"]["package_version"]),
+        (PINS["mace"]["package"], PINS["mace"]["package_version"]),
         (
-            PINS["visualization"]["package"],
-            PINS["visualization"]["package_version"],
+            PINS["structure_viewer"]["package"],
+            PINS["structure_viewer"]["package_version"],
         ),
         ("ase", "3.27.0"),
     ):
@@ -89,7 +94,9 @@ def main() -> None:
     ):
         value = Path(os.environ[variable]).resolve()
         if runtime_root not in (value, *value.parents):
-            raise RuntimeError(f"{variable} is outside the shared runtime root: {value}")
+            raise RuntimeError(
+                f"{variable} is outside the shared runtime root: {value}"
+            )
 
     require_file_sha256(
         "D3 parameter file",
@@ -97,30 +104,20 @@ def main() -> None:
         PINS["dispersion"]["generated_parameter_sha256"],
     )
 
-    visualization = PINS["visualization"]
-    widget_directory = Path(os.environ["MATTERVIZ_ANYWIDGET_DIR"]).resolve()
-    require_equal(
-        "MatterViz widget directory",
-        str(widget_directory),
-        str((ROOT / visualization["directory"]).resolve()),
-    )
+    # The structure viewer resolves its bundle from the repository itself rather
+    # than from an environment variable: `show_molecule` inlines the JavaScript
+    # into its own HTML output, so nothing outside this tree has to be told where
+    # the file lives.
+    viewer = PINS["structure_viewer"]
+    viewer_directory = ROOT / viewer["directory"]
     for filename, expected in (
-        ("matterviz.js", visualization["javascript_sha256"]),
-        ("matterviz.css", visualization["stylesheet_sha256"]),
-        ("LICENSE", visualization["license_sha256"]),
+        ("3Dmol-min.js", viewer["javascript_sha256"]),
+        ("3Dmol-min.js.LICENSE.txt", viewer["javascript_notice_sha256"]),
+        ("LICENSE", viewer["license_sha256"]),
     ):
         require_file_sha256(
-            f"MatterViz {filename}", widget_directory / filename, expected
+            f"3Dmol.js {filename}", viewer_directory / filename, expected
         )
-
-    data_directory = ROOT / PINS["data"]["directory"]
-    for filename, expected in (
-        ("ir-molecule-library-manifest.json", PINS["data"]["manifest_sha256"]),
-        ("ir-molecule-library.extxyz", PINS["data"]["extxyz_sha256"]),
-    ):
-        path = data_directory / filename
-        actual = hashlib.sha256(path.read_bytes()).hexdigest()
-        require_equal(f"{filename} SHA-256", actual, expected)
 
     checkpoint_name = "aimnet2_wb97m_d3_0.pt"
     checkpoint_path = Path(os.environ["AIMNET_CACHE_DIR"]) / checkpoint_name

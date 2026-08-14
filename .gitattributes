@@ -1,3 +1,0 @@
-# Recorded result bundles own their byte-level identity through SHA256SUMS.
-# Do not let Git rewrite line endings or apply text diffs inside this directory.
-part-1-scalable-atomistic-workflows/data/domain_decomposition/recorded/** binary
