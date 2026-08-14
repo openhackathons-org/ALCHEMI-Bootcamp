@@ -1,108 +1,168 @@
-# ALCHEMI Playbook
+<!-- markdownlint-disable MD033 -->
 
-This playbook gives researchers hands-on, GPU-accelerated workflows for computational chemistry and materials discovery with NVIDIA ALCHEMI. Across two tutorials, participants run a batched adsorption-site search over catalyst surfaces and predict the melting point of a molecular crystal — both running entirely from a single Docker container with JupyterLab at port 8888.
+<img src="shared/alchemi-banner-left.png" alt="NVIDIA ALCHEMI: AI for Chemistry and Materials Science" width="100%">
 
-## Playbook contents
+# NVIDIA ALCHEMI Tutorials
 
-The content is structured in two parts:
+Hands-on notebooks for building GPU-accelerated atomistic simulations with
+NVIDIA ALCHEMI.
 
-- **[Part 1: Batched Adsorption-Site Search with ALCHEMI Toolkit](part-1-batched-adsorption-toolkit/)** — run an AdsorbML-style adsorption-energy workflow on the GPU: enumerate many plausible adsorbate–surface configurations, then relax them together as a single batch with the ALCHEMI Toolkit and the MACE-MPA-0 (`medium-mpa-0`) foundation model, using FIRE2 geometry optimization. The notebook builds up from a batched H₂O "hello world", checks the model against released OC20Dense adsorption data, then searches sites and orientations across the active surface panel.
-- **[Part 2: OLED Melting Point Predictions with ALCHEMI Toolkit](part-2-batched-melting-toolkit/)** — predict molecular-crystal melting points via the Solid–Liquid Coexistence (SLC) pipeline using the ALCHEMI Toolkit Python library and the Orb-v3 (OMol) machine-learned interatomic potential, with naphthalene as a model OLED material.
+[ALCHEMI overview](https://developer.nvidia.com/cuda/cuda-x-libraries/alchemi) ·
+[Toolkit documentation](https://nvidia.github.io/nvalchemi-toolkit/) ·
+[Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/) ·
+[Toolkit source](https://github.com/NVIDIA/nvalchemi-toolkit) ·
+[Toolkit-Ops documentation](https://nvidia.github.io/nvalchemi-toolkit-ops/) ·
+[Toolkit-Ops examples](https://nvidia.github.io/nvalchemi-toolkit-ops/examples/index.html) ·
+[Toolkit-Ops source](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
 
-## Tools and frameworks
+## About ALCHEMI Toolkit
 
-The tools and frameworks used in this playbook:
+NVIDIA ALCHEMI brings together domain-specific NIM microservices, Toolkit, and
+Toolkit-Ops for chemistry and materials simulation. This repository teaches the
+Toolkit path through runnable notebooks.
 
-- [NVIDIA ALCHEMI Toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) — Python library for batched, GPU-native atomistic relaxation and dynamics
-- [NVIDIA ALCHEMI Toolkit-Ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops) — GPU kernels (neighbor lists, DFT-D3, long-range electrostatics) under the Toolkit
-- [MACE-MPA-0](https://github.com/ACEsuit/mace) — materials foundation model (machine-learned interatomic potential) used for the adsorption search in Part 1
-- [Orb-v3](https://github.com/orbital-materials/orb-models) — machine-learned interatomic potential used for molecular dynamics in Part 2
-- [OVITO](https://www.ovito.org/) — atomistic visualization
-- [JupyterLab](https://jupyterlab.readthedocs.io/) — interactive notebook environment
+ALCHEMI Toolkit is a GPU-first Python framework for atomic simulation. Its APIs
+cover graph-aware atomic data, model wrappers, batched relaxation and molecular
+dynamics, hooks, data loading, model composition, and distributed workflows.
+Toolkit-Ops supplies GPU-accelerated primitives for neighbor lists, geometry
+optimization, molecular dynamics, dispersion, and electrostatics.
 
-## Resources
+## Start with the Core Playbook
 
-- **ALCHEMI:** [developer hub](https://developer.nvidia.com/cuda/cuda-x-libraries/alchemi) · [Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) · [Toolkit-Ops docs](https://nvidia.github.io/nvalchemi-toolkit-ops/)
-- **Source (GitHub):** [nvalchemi-toolkit](https://github.com/NVIDIA/nvalchemi-toolkit) · [nvalchemi-toolkit-ops](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
-- **pip:** `pip install nvalchemi-toolkit` ([PyPI](https://pypi.org/project/nvalchemi-toolkit/)) — see the [Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) for GPU wheels and optional extras (`[ase,mace,aimnet]`). This playbook's Docker image installs the pinned build for you (see [RUNTIME_SNAPSHOT.md](RUNTIME_SNAPSHOT.md)).
+**[Open the ALCHEMI Core Playbook](notebooks/00-core-playbook/alchemi-core-playbook.ipynb)**
 
-## Runtime snapshot
+The Core Playbook starts with a simple molecule and moves through the main
+Toolkit objects and workflows:
 
-The updated main environment is pinned for reproducible Linux x86_64 rebuilds.
-The CUDA base image is fixed by digest, the Miniforge installer is fixed by
-version and SHA-256, and all Conda, Python, and Git dependencies are recorded
-in checked-in lock files. The locally built Docker image exposes a single
-Jupyter kernel, `alchemi-main` (`ALCHEMI Main`), backed by the
-`/opt/conda/envs/alchemi-playbook` Python environment. The complete build
-snapshot is recorded in [RUNTIME_SNAPSHOT.md](RUNTIME_SNAPSHOT.md).
+`ASE structure → AtomicData → Batch → Zarr → model → hooks → FIRE2`
 
-## Playbook duration
+You will build and inspect atomic data, pack molecules into a batch, save and
+load records, evaluate an AIMNet2 model, inspect how the same `Batch` is used
+with MACE, attach hooks, and run a batched FIRE2 relaxation. Short previews
+introduce molecular dynamics, fused stages, inflight batching, fine-tuning, and
+domain parallelism.
 
-Approximately **90–120 minutes per part** (~3–4 hours total).
+## Install and run
 
-## Prerequisites
+### Local installation
 
-| Requirement | Details |
-|-------------|---------|
-| Background | Python proficiency; basic familiarity with computational chemistry / atomistic simulation. |
-| GPU host | NVIDIA x86_64 GPU. Tested on A100, H100, B200, L40S, RTX 6000 Ada. |
-| Docker | Latest [Docker Engine](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html#docker) with the [NVIDIA Container Toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/install-guide.html) and the Docker Compose v2 plugin. |
-| Internet | Needed during the initial container build, image pulls, and the first download of the model checkpoints (MACE-MPA-0 for Part 1, Orb-v3 for Part 2). |
-
-## Deploying the Playbook
-
-Both parts run from a single unified Docker container orchestrated via Docker Compose.
+Install [`uv`](https://docs.astral.sh/uv/), then create the saved environment
+from the repository root:
 
 ```bash
-cd build
-docker compose up          # builds the unified image and starts JupyterLab
+./scripts/v3-sync
 ```
 
-Once running, the service is reachable at:
+Launch JupyterLab through the same environment:
 
-| Service    | URL                                  |
-|------------|--------------------------------------|
-| Jupyter    | http://localhost:8888/lab            |
+```bash
+./scripts/v3-run jupyter lab
+```
 
-Open the Jupyter URL in your browser and launch either notebook:
+The notebook uses CUDA when a compatible NVIDIA GPU is available and selects
+smaller workloads for its CPU path. [`uv.lock`](uv.lock) records the Python
+environment, and
+[`environment/runtime-pins.toml`](environment/runtime-pins.toml) records the
+Toolkit, Toolkit-Ops, model, and data sources used by the course.
 
-- `part-1-batched-adsorption-toolkit/alchemi-mace-adsorption-search.ipynb`
-- `part-2-batched-melting-toolkit/melting-point-slc.ipynb`
+### Container installation
 
-### Browsing without live GPU work
+The container uses the same `uv.lock` and runtime checks as the local
+installation. Its build downloads and verifies AIMNet and D3, then downloads
+and loads the `medium-0b2` MACE checkpoint. Docker and the NVIDIA Container
+Toolkit are required on the host.
 
-The Part 1 notebook's run-configuration cell exposes a `RUN_SCOPE` toggle —
-`"short"` runs one representative adsorption example with six starting
-structures, `"full"` runs the complete adsorption grid — and a result-source
-toggle, where `"saved"` reads pre-computed results so you can step through the
-tutorial without waiting on the GPU.
+Build the image with your user and group IDs so files saved from Jupyter remain
+owned by your account:
 
-NOTE: Part 2's pre-computed results have been removed while the workflow is
-being regenerated from the COD crystal input. Its saved-result mode is
-temporarily unavailable.
+```bash
+docker build \
+  --build-arg USER_ID="$(id -u)" \
+  --build-arg GROUP_ID="$(id -g)" \
+  --tag alchemi-v3-core:local \
+  .
+```
+
+Create a Jupyter token and start the container. This example publishes Jupyter
+on the host loopback address at port 8893:
+
+```bash
+mkdir -p .alchemi-runtime
+python3 -c 'import secrets; print(secrets.token_urlsafe(24))' \
+  > .alchemi-runtime/jupyter-token
+chmod 600 .alchemi-runtime/jupyter-token
+
+docker run --detach \
+  --gpus all \
+  --name alchemi-v3-core \
+  --restart unless-stopped \
+  --shm-size=8g \
+  --publish 127.0.0.1:8893:8888 \
+  --env JUPYTER_TOKEN="$(<.alchemi-runtime/jupyter-token)" \
+  --volume "$PWD:/workspace" \
+  alchemi-v3-core:local
+```
+
+Check the server and the saved runtime:
+
+```bash
+docker logs alchemi-v3-core
+docker exec alchemi-v3-core \
+  ./scripts/v3-run python environment/check_runtime.py
+docker exec alchemi-v3-core nvidia-smi
+```
+
+Open `http://127.0.0.1:8893/lab` and enter the token stored in
+`.alchemi-runtime/jupyter-token`.
+
+Use `docker stop alchemi-v3-core` and `docker start alchemi-v3-core` to stop
+and restart the saved server.
+
+### Connect to a remote host
+
+When the container runs on `ws-loc`, keep its published port on the remote
+loopback address. Start this tunnel in a terminal on your computer:
+
+```bash
+ssh -x -N -o ExitOnForwardFailure=yes \
+  -L 127.0.0.1:8891:127.0.0.1:8893 \
+  ws-loc
+```
+
+Keep that terminal open, then visit `http://127.0.0.1:8891/lab` and enter the
+token from the remote `.alchemi-runtime/jupyter-token` file.
+
+## Tentative roadmap
+
+Planned work is grouped into three tracks:
+
+- **Deep dives:** focused notebooks on Toolkit data, model interfaces,
+  simulation workflows, storage, performance, and distributed execution.
+- **R&D examples:** research-oriented adsorption and melting workflows that
+  connect Toolkit APIs to complete computational studies.
+- **Domain challenges:** larger, open-ended exercises with a scientific goal,
+  a defined starting point, and results learners can inspect and compare.
+
+## Project references
+
+| Document | Purpose |
+|---|---|
+| [Tutorial guide](TUTORIAL_GUIDE.md) | Curriculum, notebook structure, writing, and visual style |
+| [Toolkit API reference](TOOLKIT_API_REFERENCE.md) | Public objects, operations, shapes, and release-specific details |
+| [Environment guide](environment/README.md) | Saved runtime, setup commands, package pins, and model assets |
+| [Third-party notices](THIRD_PARTY_NOTICES.md) | Software, models, data, and redistribution terms |
 
 ## Developers who shaped the tutorials
 
-- **[Ryan Reese](https://github.com/Ryan-Reese)** — creator of the melting-point study using the NVIDIA ALCHEMI Toolkit.
-- **[Anoushka Bhutani](https://github.com/anoushka2000)** — developer of companion challenges for the tutorials. These challenges will be integrated in a future update.
+- [Ryan Reese](https://github.com/Ryan-Reese) created the melting-point study
+  using NVIDIA ALCHEMI Toolkit.
+- [Anoushka Bhutani](https://github.com/anoushka2000) developed companion
+  tutorial challenges planned for a future release.
 
 ## License
 
-Except where otherwise noted, the original code and documentation in this
-repository are licensed under the [Apache License 2.0](LICENSE).
+This repository is licensed under Apache 2.0. See [LICENSE](LICENSE).
 
-This repository distributes tutorial source files and a Docker build recipe.
-It does not distribute a prebuilt container image or model checkpoints.
-Building or running the tutorial downloads third-party software and models
-from their official sources under their respective terms.
-
-The NVIDIA ALCHEMI Toolkit and NVIDIA ALCHEMI Toolkit-Ops are separate projects
-governed by their own licenses. Third-party software and other materials remain
-subject to the terms supplied by their official sources or distributions. See
-[Sources and licenses](SOURCES_AND_LICENSES.md) for distributed scientific data
-and visual assets, the
-[direct dependency license inventory](.licenses/direct-dependencies.md), and
-[complete package attributions](.licenses/Third_party_attr.txt) generated for
-this tutorial environment.
-
-No rights are granted to NVIDIA trademarks or branding.
+Models, checkpoints, datasets, figures, and downloaded runtime files may have
+separate terms. Review [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the
+README beside each input before redistribution.

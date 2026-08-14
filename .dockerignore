@@ -1,35 +1,18 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Build context is the dev/ root; this file controls what gets sent to
-# the Docker daemon for the unified image build.
 .git
-.claude/
-__pycache__/
-*.pyc
-*.pyo
-.pytest_cache/
-.ruff_cache/
-.ipynb_checkpoints/
+.github
+.agents
+.codex
+.claude
+.venv
+.env
+.alchemi-runtime
 .DS_Store
-matplotlib-*/
-tmp*/
-.Trash-*
-
-# Per-part transient/local artefacts (compose bind-mounts still expose them
-# at runtime; this keeps them out of the baked image only). Keep tracked
-# tutorial assets in the image for Enroot/Pyxis runs without bind mounts.
-part-1-batched-adsorption-toolkit/outputs/
-part-1-batched-adsorption-toolkit/logs/
-part-2-batched-melting-toolkit/outputs/
-part-2-batched-melting-toolkit/logs/
-part-2-batched-melting-toolkit/assets/images/.anim_cache/
-
-# Generated notebooks (regenerated on-demand)
-*-with_outputs.ipynb
-
-# Sibling worktree
-main/
-
-# SLURM allocation scripts — host-side only, not needed in the image
-start-*
+.ipynb_checkpoints
+.pytest_cache
+.ruff_cache
+**/__pycache__
+**/*.pyc
+**/logs
+**/outputs
+matplotlib-*
+tmp*

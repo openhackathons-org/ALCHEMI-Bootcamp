@@ -1,0 +1,21 @@
+{
+  "assets": {
+    "fused-stage-flow.svg": {
+      "filename": "fused-stage-flow-6ec61b45df06fd4e.svg",
+      "sha256": "6ec61b45df06fd4e9c05dbe35ae472ceccbe898175ea30a6cbdf8b9ca5595385"
+    },
+    "inflight-batching-flow.svg": {
+      "filename": "inflight-batching-flow-e79cea47c0cffe44.svg",
+      "sha256": "e79cea47c0cffe44d18cdb0fa95fb5dba27cee828419866a6fc6173a485488b7"
+    },
+    "toolkit-capability-map.svg": {
+      "filename": "toolkit-capability-map-3e553dc33f60f1ff.svg",
+      "sha256": "3e553dc33f60f1ffba735df650af3f79c2104c8bf26ed4dadf740fdcc097d198"
+    },
+    "zarr-data-flow.svg": {
+      "filename": "zarr-data-flow-c89db1c3acc369a4.svg",
+      "sha256": "c89db1c3acc369a4183b5e2f01945b4864b18b6fc5fcf06c4453cbec97e94c76"
+    }
+  },
+  "schema": "alchemi.core-assets.v1"
+}

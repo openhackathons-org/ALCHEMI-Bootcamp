@@ -1,0 +1,55 @@
+schema = "alchemi.tutorials-v3.runtime-pins.v1"
+python = "3.12"
+torch = "2.12.0"
+cuda_index = "cu130"
+
+[toolkit]
+distribution = "nvalchemi-toolkit"
+version = "0.2.0"
+repository = "https://github.com/NVIDIA/nvalchemi-toolkit.git"
+commit = "8c2c307c1c0c76baee6f7a68eb75a45da83ffd18"
+verified_remote = "refs/heads/main"
+verified_date = "2026-08-11"
+
+[toolkit_ops]
+distribution = "nvalchemi-toolkit-ops"
+version = "0.4.1"
+repository = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git"
+commit = "c1e23460859a784e1d78043bcd1c8af0d1095fa2"
+verified_remote = "refs/heads/main"
+verified_date = "2026-08-11"
+
+[model]
+package = "aimnet"
+package_version = "0.2.0"
+checkpoint_alias = "aimnet2-wb97m-d3_0"
+checkpoint_sha256 = "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28"
+checkpoint_distribution = "runtime download from the official AIMNet2 model card"
+checkpoint_license = "MIT"
+
+[mace]
+package = "mace-torch"
+package_version = "0.3.15"
+checkpoint_alias = "medium-0b2"
+checkpoint_distribution = "runtime download from the official MACE-MP registry"
+checkpoint_license = "MIT"
+
+[dispersion]
+generated_parameter_sha256 = "b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84"
+redistribution = "runtime cache only; see THIRD_PARTY_NOTICES.md"
+
+[structure_viewer]
+package = "py3Dmol"
+package_version = "2.5.5"
+package_license = "MIT"
+javascript_library = "3Dmol.js"
+javascript_version = "2.5.5"
+javascript_license = "BSD-3-Clause"
+# Provenance: the npm registry integrity for 3dmol@2.5.5, whose build/ directory
+# supplied the bundle and its two license files below.
+npm_tarball = "https://registry.npmjs.org/3dmol/-/3dmol-2.5.5.tgz"
+npm_integrity = "sha512-kqNHouGqq3YfW58174tdERvm0XYTmP0tavQKOqIw1ouc2OJ7epkXEFrtEkVXV0clBZT2Ze2xHRC/qxX0u0qCdw=="
+directory = "shared/3dmol-2.5.5"
+javascript_sha256 = "f7cc78921ae72e7623e89cdd111434f58c2efddd2ffda1cd212644b406fb8016"
+javascript_notice_sha256 = "ae3bfc688d0c9687b76e0ecc7fece0b393bcb4acf2aee09e19dda697eaa10b16"
+license_sha256 = "4c6eaaed856f3f28a3b1a98e74f4a8a71618de7d51ea4155c29f6f793bcef861"

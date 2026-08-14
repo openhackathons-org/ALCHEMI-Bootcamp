@@ -1,45 +1,23 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
 **/outputs/
 **/logs/
 **/assets/
 **/_fullrun_status.log
-# Cache CSVs shipped to students for FAST_DEMO progress-replay
-!part-2-batched-melting-toolkit/assets/
-!part-2-batched-melting-toolkit/assets/naphthalene_long_2025/
-!part-2-batched-melting-toolkit/assets/naphthalene_long_2025/logs/
-!part-2-batched-melting-toolkit/assets/naphthalene_long_2025/logs/**
-# Banner + figures + partner logos embedded in the Part 1 notebook
-!part-1-batched-adsorption-toolkit/assets/
-!part-1-batched-adsorption-toolkit/assets/images/
-!part-1-batched-adsorption-toolkit/assets/images/**
-# Banner + figures + partner logos embedded in the Part 2 notebook
-!part-2-batched-melting-toolkit/assets/images/
-!part-2-batched-melting-toolkit/assets/images/*.jpg
-!part-2-batched-melting-toolkit/assets/images/*.png
-!part-2-batched-melting-toolkit/assets/images/logos/
-!part-2-batched-melting-toolkit/assets/images/logos/**
-part-2-batched-melting-toolkit/assets/images/.anim_cache/
-# Banner + partner logos embedded in the notebooks are force-added (the
-# **/assets/ exclusion above blocks a plain re-include); once tracked they stay
-# tracked. New files under assets/images/ need `git add -f`.
-# tools/assets is a convenience symlink to ../assets (not tracked)
-part-2-batched-melting-toolkit/tools/assets
-# Reference PDFs (cited by DOI in the notebook; not redistributed)
-part-2-batched-melting-toolkit/refs/
+
+# Notebook assets are release files. Re-include them after the general rule.
+!notebooks/*/assets/
+!notebooks/*/assets/**
+notebooks/*/assets/**/__pycache__/
+
 __pycache__/
 *.pyc
-benchmarking/
 .ipynb_checkpoints/
-.env
 .pytest_cache/
 .ruff_cache/
-.venv-licenses/
+.venv/
+.env
+.alchemi-runtime/
+.DS_Store
 .claude/
 CLAUDE.md
-.DS_Store
 matplotlib-*/
 tmp*/
-docker-compose.override.yml
-**/monitoring/grafana/data/
