@@ -1,7 +1,7 @@
 [project]
-name = "alchemi-tutorials-v3"
+name = "alchemi-tutorials"
 version = "0.0.0"
-description = "Locked authoring and runtime environment for the ALCHEMI Toolkit v3 tutorials"
+description = "Locked authoring and runtime environment for the ALCHEMI Toolkit tutorials"
 requires-python = ">=3.12,<3.13"
 dependencies = [
     "aimnet==0.2.0",

@@ -1,4 +1,7 @@
-"""Verify that a command is using the locked v3 tutorial runtime."""
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+"""Verify that a command is using the locked tutorial runtime."""
 
 from __future__ import annotations
 
@@ -119,6 +122,12 @@ def main() -> None:
             f"3Dmol.js {filename}", viewer_directory / filename, expected
         )
 
+    require_file_sha256(
+        "py3Dmol license",
+        ROOT / viewer["python_license_directory"] / "LICENSE.txt",
+        viewer["python_license_sha256"],
+    )
+
     checkpoint_name = "aimnet2_wb97m_d3_0.pt"
     checkpoint_path = Path(os.environ["AIMNET_CACHE_DIR"]) / checkpoint_name
     checkpoint_sha256 = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
@@ -128,7 +137,7 @@ def main() -> None:
         PINS["model"]["checkpoint_sha256"],
     )
 
-    print("v3 runtime verified")
+    print("ALCHEMI runtime verified")
     print(f"Python: {sys.version.split()[0]}")
     print(f"Toolkit: {PINS['toolkit']['commit']}")
     print(f"Toolkit-Ops: {PINS['toolkit_ops']['commit']}")

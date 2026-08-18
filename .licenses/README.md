@@ -1,55 +1,71 @@
 # Third-party dependency license inventory
 
-These files provide a reproducible license inventory for the Python and conda
-packages declared by the ALCHEMI Bootcamp runtime:
+These files capture the Linux Python environment declared in
+[`pyproject.toml`](../pyproject.toml) and synchronized from
+[`uv.lock`](../uv.lock):
 
-- `build/conda-linux-64.lock` fixes every Conda package URL for the supported
-  Linux x86_64 environment.
-- `build/requirements-linux-64.lock.txt` fixes every installed Python package
-  version and Git commit.
-- [`direct-dependencies.md`](direct-dependencies.md) lists packages declared
-  directly in `build/requirements.txt`, `build/environment.yml`, and the
-  standalone Torch installation in `build/Dockerfile`.
-- [`summary.md`](summary.md) lists direct and transitive packages found in the
-  generated environment.
-- [`details.json`](details.json) contains the machine-readable package metadata
-  and available license text.
-- [`Third_party_attr.txt`](Third_party_attr.txt) contains a plain-text
-  attribution and license-text dump suitable for distribution with the
-  tutorial.
+- [`direct-dependencies.md`](direct-dependencies.md) lists the packages declared
+  in `[project.dependencies]` and each dependency group.
+- [`summary.md`](summary.md) lists every installed direct and transitive package.
+- [`details.json`](details.json) contains machine-readable package metadata,
+  declaration details, license evidence, and available license text.
+- [`Third_party_attr.txt`](Third_party_attr.txt) provides the same installed
+  package attributions and license texts in a distribution-friendly text file.
+- [`license-overrides.json`](license-overrides.json) records reviewed corrections
+  for incomplete or unsuitable installed-package metadata.
 
-The generated files and build locks are a snapshot of the same environment.
-They are committed so reviewers and recipients have stable copies. They are
-not regenerated during normal tutorial installation or CI.
+The generated files record the `uv.lock` SHA-256, Python version, target
+platform, package count, and direct-dependency count. They are committed for
+review and distribution and are refreshed when dependencies change.
 
 ## Regenerating
 
-From the repository root:
+Run this command from the repository root:
 
 ```bash
 .licenses/generate_licenses.sh
 ```
 
-The script creates a disposable conda environment at `.venv-licenses/`,
-resolves the human-maintained dependency inputs, exports the exact build
-locks, and uses `pip-licenses` plus Conda package metadata to rebuild the
-inventory.
+The script uses `uv sync --locked --all-groups` to create or update a dedicated
+environment at `${TMPDIR:-/tmp}/alchemi-license-inventory`. A marker beside
+the directory identifies it before a later run can update it. `uv` may read its
+package cache or download packages already fixed by `uv.lock`.
 
-The environment is intentionally separate from the tutorial runtime. To reuse
-an existing inventory environment while adjusting overrides:
+To generate from an existing environment, provide its path explicitly:
 
 ```bash
-REUSE_ENV=1 .licenses/generate_licenses.sh
+REUSE_ENV=1 ENV_DIR=/path/to/locked-environment \
+  .licenses/generate_licenses.sh
 ```
 
-Packages whose metadata is missing or unsuitable can be corrected in
-`license-overrides.json`. Every override must include evidence identifying the
-upstream license file, package metadata, or official license page used.
+Reuse mode checks the environment against `pyproject.toml` and `uv.lock` and
+stops when packages or versions differ. The renderer reads installed package
+metadata and bundled license files directly, so the synchronized environment
+contains only project dependencies.
+
+Every override can include an exact `version`. The generator stops when an
+installed version differs from a versioned override. Manual texts retained in
+`manual-license-texts/` cover packages whose distributions omit complete terms.
+
+## Terms requiring attention
+
+- ASE 3.27.0 is a direct dependency under LGPL-2.1-or-later.
+- MACE 0.3.15 is MIT. Its current locked dependency tree includes `matscipy`
+  1.2.0 under LGPL-2.1-or-later and `python-hostlist` 2.3.0 under
+  GPL-2.0-or-later.
+- PyTorch installs CUDA packages with proprietary NVIDIA components. The
+  `cuda-toolkit` 13.0.2 record points to the
+  [NVIDIA CUDA Toolkit EULA](https://docs.nvidia.com/cuda/eula/), and package
+  records include bundled terms when supplied by the wheel.
+- Toolkit builds the D3 parameter cache from the legacy Grimme reference
+  archive under GPL-1.0-or-later. The cache is a runtime asset covered by
+  [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICES.md), outside this installed
+  package inventory.
 
 ## Scope
 
-This inventory covers the Python and Conda dependency environment declared by
-the repository. It does not replace the terms governing the referenced CUDA
-base image, build-only operating-system packages, runtime-downloaded model
-checkpoints, datasets, or images. Those materials are identified in
-`SOURCES_AND_LICENSES.md` and remain subject to their own terms.
+This inventory covers installed Python packages for the locked Linux
+environment. Root notices cover the CUDA base image, operating-system packages,
+runtime-downloaded model checkpoints, the D3 cache, datasets, and copied browser
+assets. A distributed container image needs an image-level package inventory in
+addition to this Python snapshot.

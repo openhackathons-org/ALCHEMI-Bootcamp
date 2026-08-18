@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1104" height="624" viewBox="0 0 920 520" role="img" aria-labelledby="title desc">
+<title id="title">Prefetch trades device memory for less waiting</title>
+<desc id="desc">Without prefetch, loading and model work alternate and one Batch is on the target device. With prefetch factor two, Batches 2 and 3 transfer while Batch 1 runs, so the current Batch and two prefetched Batches can occupy device memory.</desc>
+<defs>
+<marker id="prefetch-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#68737E"/></marker>
+</defs>
+<rect width="920" height="520" rx="8" fill="#171D20"/>
+<g font-family="NVIDIA Sans,Arial,sans-serif">
+<text x="24" y="29" fill="#F3F4F6" font-size="17" font-weight="700">Prefetch trades device memory for less waiting</text>
+<g font-size="11" fill="#A8B0B8">
+<rect x="24" y="43" width="12" height="12" rx="2" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E"/><text x="42" y="54">load or transfer</text>
+<rect x="168" y="43" width="12" height="12" rx="2" fill="#76B900" fill-opacity="0.22" stroke="#76B900"/><text x="186" y="54">model work</text>
+</g>
+
+<rect x="24" y="72" width="872" height="176" rx="8" fill="#20262C" stroke="#4B565F" stroke-width="1"/>
+<text x="42" y="99" fill="#F3F4F6" font-size="13" font-weight="700">prefetch_factor = 0</text>
+<text x="42" y="120" fill="#A8B0B8" font-size="11">load and model work alternate</text>
+<text x="42" y="174" fill="#F3F4F6" font-size="11" font-weight="700">Lower device memory</text>
+<text x="42" y="195" fill="#A8B0B8" font-size="11">one Batch on device</text>
+<g text-anchor="middle" font-size="11" font-weight="700">
+<rect x="220" y="118" width="66" height="42" rx="6" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/><text x="253" y="144" fill="#F3F4F6">load B1</text>
+<rect x="290" y="118" width="86" height="42" rx="6" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/><text x="333" y="144" fill="#F3F4F6">run B1</text>
+<rect x="380" y="118" width="66" height="42" rx="6" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/><text x="413" y="144" fill="#F3F4F6">load B2</text>
+<rect x="450" y="118" width="86" height="42" rx="6" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/><text x="493" y="144" fill="#F3F4F6">run B2</text>
+<rect x="540" y="118" width="66" height="42" rx="6" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/><text x="573" y="144" fill="#F3F4F6">load B3</text>
+<rect x="610" y="118" width="66" height="42" rx="6" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/><text x="643" y="144" fill="#F3F4F6">run B3</text>
+</g>
+<path d="M220 196H676" stroke="#68737E" stroke-width="1.25" marker-end="url(#prefetch-arrow)"/>
+<text x="448" y="217" fill="#A8B0B8" font-size="10" text-anchor="middle">elapsed time</text>
+<rect x="700" y="96" width="178" height="128" rx="8" fill="#28312B" stroke="#4B565F" stroke-width="1"/>
+<text x="789" y="119" fill="#A8B0B8" font-size="10" font-weight="700" text-anchor="middle">TARGET DEVICE MEMORY</text>
+<rect x="719" y="138" width="140" height="38" rx="5" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/>
+<text x="789" y="162" fill="#F3F4F6" font-size="11" font-weight="700" text-anchor="middle">B1 · current</text>
+<text x="789" y="202" fill="#A8B0B8" font-size="10" text-anchor="middle">1 Batch on device</text>
+
+<rect x="24" y="264" width="872" height="232" rx="8" fill="#20262C" stroke="#2E6F9E" stroke-width="1"/>
+<text x="42" y="291" fill="#F3F4F6" font-size="13" font-weight="700">prefetch_factor = 2 · CUDA streams</text>
+<text x="42" y="312" fill="#A8B0B8" font-size="11">transfers overlap model work</text>
+<text x="42" y="386" fill="#F3F4F6" font-size="11" font-weight="700">Higher device memory</text>
+<text x="42" y="407" fill="#A8B0B8" font-size="11">current + two prefetched Batches</text>
+<text x="210" y="353" fill="#A8B0B8" font-size="10" font-weight="700" text-anchor="end">MODEL</text>
+<text x="210" y="404" fill="#A8B0B8" font-size="10" font-weight="700" text-anchor="end">PREFETCH</text>
+<g text-anchor="middle" font-size="11" font-weight="700">
+<rect x="220" y="326" width="68" height="42" rx="6" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/><text x="254" y="352" fill="#F3F4F6">load B1</text>
+<rect x="296" y="326" width="112" height="42" rx="6" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/><text x="352" y="352" fill="#F3F4F6">run B1</text>
+<rect x="416" y="326" width="112" height="42" rx="6" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/><text x="472" y="352" fill="#F3F4F6">run B2</text>
+<rect x="536" y="326" width="112" height="42" rx="6" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/><text x="592" y="352" fill="#F3F4F6">run B3</text>
+<rect x="296" y="378" width="112" height="38" rx="6" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/><text x="352" y="402" fill="#F3F4F6">prefetch B2</text>
+<rect x="416" y="378" width="112" height="38" rx="6" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/><text x="472" y="402" fill="#F3F4F6">prefetch B3</text>
+</g>
+<path d="M220 444H648" stroke="#68737E" stroke-width="1.25" marker-end="url(#prefetch-arrow)"/>
+<text x="434" y="465" fill="#A8B0B8" font-size="10" text-anchor="middle">loading can finish while the model is busy</text>
+<rect x="700" y="286" width="178" height="182" rx="8" fill="#28312B" stroke="#2E6F9E" stroke-width="1"/>
+<text x="789" y="309" fill="#A8B0B8" font-size="10" font-weight="700" text-anchor="middle">TARGET DEVICE MEMORY</text>
+<rect x="719" y="324" width="140" height="30" rx="5" fill="#76B900" fill-opacity="0.22" stroke="#76B900" stroke-width="1"/>
+<text x="789" y="344" fill="#F3F4F6" font-size="10" font-weight="700" text-anchor="middle">B1 · current</text>
+<rect x="719" y="362" width="140" height="30" rx="5" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/>
+<text x="789" y="382" fill="#F3F4F6" font-size="10" font-weight="700" text-anchor="middle">B2 · prefetched</text>
+<rect x="719" y="400" width="140" height="30" rx="5" fill="#2E6F9E" fill-opacity="0.22" stroke="#2E6F9E" stroke-width="1"/>
+<text x="789" y="420" fill="#F3F4F6" font-size="10" font-weight="700" text-anchor="middle">B3 · prefetched</text>
+<text x="789" y="451" fill="#A8B0B8" font-size="10" text-anchor="middle">3 Batches on device</text>
+<text x="24" y="512" fill="#A8B0B8" font-size="10">Illustrative timing. Batch size stays fixed; prefetch changes how much data is prepared ahead.</text>
+</g>
+</svg>

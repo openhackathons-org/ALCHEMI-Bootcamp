@@ -29,18 +29,28 @@ optimization, molecular dynamics, dispersion, and electrostatics.
 
 ## Start with the Core Playbook
 
-**[Open the ALCHEMI Core Playbook](notebooks/00-core-playbook/alchemi-core-playbook.ipynb)**
+Modules 1–3 form a 90-minute live path. Every module runs from a fresh kernel
+and can be taught on its own.
 
-The Core Playbook starts with a simple molecule and moves through the main
-Toolkit objects and workflows:
+- **[Module 1: Data and batching](notebooks/00-core-playbook/alchemi-core-01-data-and-batching.ipynb):**
+  `AtomicData`, validation, heterogeneous `Batch`, GPU batching, and Zarr
+- **[Module 2: Models and simulation](notebooks/00-core-playbook/alchemi-core-02-models-and-simulation.ipynb):**
+  AIMNet2 evaluation, hooks, FIRE2, and saved results
+- **[Module 3: Compose and scale](notebooks/00-core-playbook/alchemi-core-03-adapt-and-scale.ipynb):**
+  molecular interaction components, a 205-complex batching survey, component
+  timing, fused and inflight execution, profiling, and distributed APIs
+The live path starts with a simple molecule and follows one Toolkit workflow:
 
-`ASE structure → AtomicData → Batch → Zarr → model → hooks → FIRE2`
+`ASE structure → AtomicData → Batch → Zarr → model → hooks → FIRE2 → composition and scale`
 
-You will build and inspect atomic data, pack molecules into a batch, save and
-load records, evaluate an AIMNet2 model, inspect how the same `Batch` is used
-with MACE, attach hooks, and run a batched FIRE2 relaxation. Short previews
-introduce molecular dynamics, fused stages, inflight batching, fine-tuning, and
-domain parallelism.
+- **Data and batching:** `AtomicData`, `Batch`, GPU batching, and Zarr-backed
+  loading.
+- **Models and simulation:** a model wrapper, hooks, FIRE2, and saved workflow
+  state. Official examples continue into molecular dynamics.
+- **Compose and scale:** dispersion and electrostatics, component timing, fused
+  and inflight execution, distributed pipelines, and domain decomposition.
+The focused notebooks deepen one capability at a time while keeping the same
+public objects visible.
 
 ## Install and run
 
@@ -50,13 +60,13 @@ Install [`uv`](https://docs.astral.sh/uv/), then create the saved environment
 from the repository root:
 
 ```bash
-./scripts/v3-sync
+./scripts/setup
 ```
 
 Launch JupyterLab through the same environment:
 
 ```bash
-./scripts/v3-run jupyter lab
+./scripts/run jupyter lab
 ```
 
 The notebook uses CUDA when a compatible NVIDIA GPU is available and selects
@@ -64,6 +74,24 @@ smaller workloads for its CPU path. [`uv.lock`](uv.lock) records the Python
 environment, and
 [`environment/runtime-pins.toml`](environment/runtime-pins.toml) records the
 Toolkit, Toolkit-Ops, model, and data sources used by the course.
+
+### NVIDIA Brev workshop deployment
+
+The Brev workshop uses the repository recipe directly. A VM Mode Launchable
+clones the course, installs the frozen environment into persistent workspace
+storage, prewarms the runtime assets, verifies CUDA, and registers the
+environment as the default Python Jupyter kernel.
+
+Configure the Launchable to use this repository and run:
+
+```bash
+./scripts/brev-setup.sh
+```
+
+Attendees need a Brev account, their event credit code, and the Launchable
+link. The complete organizer configuration, validation procedure, attendee
+steps, and 100-person rehearsal plan are in
+[`deployment/brev/README.md`](deployment/brev/README.md).
 
 ### Container installation
 
@@ -79,7 +107,7 @@ owned by your account:
 docker build \
   --build-arg USER_ID="$(id -u)" \
   --build-arg GROUP_ID="$(id -g)" \
-  --tag alchemi-v3-core:local \
+  --tag alchemi-core:local \
   .
 ```
 
@@ -94,54 +122,56 @@ chmod 600 .alchemi-runtime/jupyter-token
 
 docker run --detach \
   --gpus all \
-  --name alchemi-v3-core \
+  --name alchemi-core \
   --restart unless-stopped \
   --shm-size=8g \
   --publish 127.0.0.1:8893:8888 \
   --env JUPYTER_TOKEN="$(<.alchemi-runtime/jupyter-token)" \
   --volume "$PWD:/workspace" \
-  alchemi-v3-core:local
+  alchemi-core:local
 ```
 
 Check the server and the saved runtime:
 
 ```bash
-docker logs alchemi-v3-core
-docker exec alchemi-v3-core \
-  ./scripts/v3-run python environment/check_runtime.py
-docker exec alchemi-v3-core nvidia-smi
+docker logs alchemi-core
+docker exec alchemi-core \
+  ./scripts/run python environment/check_runtime.py
+docker exec alchemi-core nvidia-smi
 ```
 
 Open `http://127.0.0.1:8893/lab` and enter the token stored in
 `.alchemi-runtime/jupyter-token`.
 
-Use `docker stop alchemi-v3-core` and `docker start alchemi-v3-core` to stop
+Use `docker stop alchemi-core` and `docker start alchemi-core` to stop
 and restart the saved server.
 
 ### Connect to a remote host
 
-When the container runs on `ws-loc`, keep its published port on the remote
-loopback address. Start this tunnel in a terminal on your computer:
+When the container runs on a remote GPU host, keep its published port on the
+remote loopback address. Start this tunnel in a terminal on your computer:
 
 ```bash
 ssh -x -N -o ExitOnForwardFailure=yes \
   -L 127.0.0.1:8891:127.0.0.1:8893 \
-  ws-loc
+  your-gpu-host
 ```
 
 Keep that terminal open, then visit `http://127.0.0.1:8891/lab` and enter the
 token from the remote `.alchemi-runtime/jupyter-token` file.
 
-## Tentative roadmap
+## Course roadmap
 
-Planned work is grouped into three tracks:
+The current release contains three linked Core modules. Planned course
+directions include:
 
-- **Deep dives:** focused notebooks on Toolkit data, model interfaces,
-  simulation workflows, storage, performance, and distributed execution.
-- **R&D examples:** research-oriented adsorption and melting workflows that
-  connect Toolkit APIs to complete computational studies.
-- **Domain challenges:** larger, open-ended exercises with a scientific goal,
-  a defined starting point, and results learners can inspect and compare.
+1. **Focused Toolkit deep dives:** Zarr and custom readers, model wrapping and
+   composition, hooks and dynamics, GPU pipelines and profiling, and domain
+   decomposition. These are planned as independent follow-up lessons.
+2. **R&D examples:** longer adsorption and melting workflows planned for a
+   future release.
+3. **Domain challenges:** guided problems that apply the same Toolkit APIs to
+   new scientific systems, also planned for a future release.
 
 ## Developers who shaped the tutorials
 
@@ -152,8 +182,14 @@ Planned work is grouped into three tracks:
 
 ## License
 
-This repository is licensed under Apache 2.0. See [LICENSE](LICENSE).
+NVIDIA-authored source and course diagrams are licensed under Apache 2.0. See
+[LICENSE](LICENSE). The included NCI Atlas data are CC BY 4.0, and the
+interactive viewer carries BSD and MIT notices. The NVIDIA course banner and
+NVIDIA marks are excluded from the Apache grant.
 
-Models, checkpoints, datasets, figures, and downloaded runtime files may have
-separate terms. Review [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and the
-README beside each input before redistribution.
+Installed packages, model checkpoints, CUDA components, and generated D3 data
+use their own terms. Review
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md),
+[SOURCES_AND_LICENSES.md](SOURCES_AND_LICENSES.md), and the README beside each
+input before redistribution. A published container needs a separate
+image-level license inventory and notice set.

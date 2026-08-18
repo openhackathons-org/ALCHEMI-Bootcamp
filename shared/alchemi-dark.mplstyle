@@ -1,22 +1,22 @@
-figure.facecolor: black
-figure.edgecolor: black
+figure.facecolor: 171D20
+figure.edgecolor: 171D20
 figure.dpi: 120
-savefig.facecolor: black
-savefig.edgecolor: black
+savefig.facecolor: 171D20
+savefig.edgecolor: 171D20
 savefig.dpi: 300
 savefig.bbox: tight
 
-axes.facecolor: black
-axes.edgecolor: 4B5563
+axes.facecolor: 20262C
+axes.edgecolor: 4B565F
 axes.labelcolor: F3F5F7
 axes.titlecolor: F3F5F7
 axes.grid: True
 axes.axisbelow: True
-axes.prop_cycle: cycler('color', ['76B900', '00A3E0', 'F5B642', 'D7E3F4', 'A8B0B8'])
+axes.prop_cycle: cycler('color', ['76B900', '2E6F9E', '2E8A73', 'C56A2D', '666666'])
 
-grid.color: 2F3A44
-grid.alpha: 0.75
-grid.linewidth: 0.9
+grid.color: 3A444D
+grid.alpha: 0.65
+grid.linewidth: 0.7
 
 text.color: F3F5F7
 xtick.color: F3F5F7
@@ -25,14 +25,20 @@ ytick.color: F3F5F7
 lines.linewidth: 2.5
 lines.markersize: 6
 
-legend.facecolor: black
-legend.edgecolor: 4B5563
+legend.facecolor: 20262C
+legend.edgecolor: 4B565F
 legend.labelcolor: F3F5F7
 legend.framealpha: 1.0
 
-font.size: 11
-axes.titlesize: 13
-axes.labelsize: 12
-legend.fontsize: 10
-xtick.labelsize: 10
-ytick.labelsize: 10
+# Figure canvases use 100 CSS px per inch in the notebook. These point sizes
+# match the SVG scale: 10 px micro, 11 px body, 13 px sections, 17 px titles.
+font.family: sans-serif
+font.sans-serif: Nimbus Sans, Arial, DejaVu Sans
+font.size: 8
+figure.titlesize: 12.25
+figure.titleweight: bold
+axes.titlesize: 9.5
+axes.labelsize: 8
+legend.fontsize: 7.25
+xtick.labelsize: 7.25
+ytick.labelsize: 7.25

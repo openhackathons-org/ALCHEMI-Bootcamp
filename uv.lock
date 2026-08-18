@@ -121,7 +121,7 @@ wheels = [
 ]
 
 [[package]]
-name = "alchemi-tutorials-v3"
+name = "alchemi-tutorials"
 version = "0.0.0"
 source = { virtual = "." }
 dependencies = [

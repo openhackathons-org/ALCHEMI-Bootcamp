@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${ALCHEMI_V3_RUNTIME_ROOT:-/tmp/alchemi-v3-runtime}"
+runtime_root="${ALCHEMI_RUNTIME_ROOT:-/tmp/alchemi-runtime}"
+uv_bin="${ALCHEMI_UV_BIN:-uv}"
 
 mkdir -p \
     "${runtime_root}/aimnet" \
@@ -31,6 +35,6 @@ export UV_PROJECT_ENVIRONMENT="${runtime_root}/venv"
 export WARP_CACHE_PATH="${runtime_root}/warp"
 export XDG_CACHE_HOME="${runtime_root}/cache"
 
-uv sync --project "${repository_root}" --frozen
-uv run --project "${repository_root}" --frozen --no-sync \
+"${uv_bin}" sync --project "${repository_root}" --frozen
+"${uv_bin}" run --project "${repository_root}" --frozen --no-sync \
     python "${repository_root}/environment/prewarm_assets.py"

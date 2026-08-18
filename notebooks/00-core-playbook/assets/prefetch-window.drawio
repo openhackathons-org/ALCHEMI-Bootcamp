@@ -1,0 +1,57 @@
+<mxGraphModel adaptiveColors="auto" page="0" pageWidth="920" pageHeight="520">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="title" value="Prefetch trades device memory for less waiting" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#171D20;strokeColor=#171D20;fontColor=#F3F4F6;fillOpacity=100;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="8" width="872" height="28" as="geometry" />
+    </mxCell>
+    <mxCell id="sync" value="prefetch_factor = 0&lt;br&gt;&lt;font style='font-size:11px'&gt;lower device memory · load and model work alternate&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#4B565F;fontColor=#F3F4F6;fillOpacity=100;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="72" width="182" height="152" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-load1" value="load B1" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#2E6F9E;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="220" y="118" width="66" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-compute1" value="run B1" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="290" y="118" width="86" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-load2" value="load B2" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#2E6F9E;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="380" y="118" width="66" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-compute2" value="run B2" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="450" y="118" width="86" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-load3" value="load B3" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#2E6F9E;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="540" y="118" width="66" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-compute3" value="run B3" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="610" y="118" width="66" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="sync-memory" value="TARGET DEVICE MEMORY&lt;br&gt;&lt;font style='font-size:10px'&gt;B1 · current&lt;br&gt;1 Batch on device&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#4B565F;fontColor=#F3F4F6;fillOpacity=100;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="700" y="96" width="178" height="128" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch" value="prefetch_factor = 2 · CUDA streams&lt;br&gt;&lt;font style='font-size:11px'&gt;higher device memory · transfers overlap model work&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=100;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="264" width="182" height="204" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-load1" value="load B1" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#2E6F9E;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="220" y="326" width="68" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-compute1" value="run B1" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="296" y="326" width="112" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-compute2" value="run B2" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="416" y="326" width="112" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-compute3" value="run B3" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="536" y="326" width="112" height="42" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-load2" value="prefetch B2" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#2E6F9E;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="296" y="378" width="112" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-load3" value="prefetch B3" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#2E6F9E;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=22;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="416" y="378" width="112" height="38" as="geometry" />
+    </mxCell>
+    <mxCell id="prefetch-memory" value="TARGET DEVICE MEMORY&lt;br&gt;&lt;font style='font-size:10px'&gt;B1 · current&lt;br&gt;B2 · prefetched&lt;br&gt;B3 · prefetched&lt;br&gt;3 Batches on device&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;fontColor=#F3F4F6;fillOpacity=100;strokeWidth=1;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="700" y="286" width="178" height="182" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>

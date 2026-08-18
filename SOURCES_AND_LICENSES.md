@@ -1,104 +1,118 @@
 # Sources and licenses
 
-This file records third-party data and visual assets distributed in this
-repository. It does not duplicate the changing software dependency inventory.
-For the software environment, see
-[`.licenses/direct-dependencies.md`](.licenses/direct-dependencies.md) and
-[`.licenses/Third_party_attr.txt`](.licenses/Third_party_attr.txt).
-
-Unless stated below, the Apache License 2.0 in this repository does not change
-the license or terms that apply to third-party material.
+This file records third-party data, viewer code, model assets, and course
+artwork used by the tutorials. Each third-party item keeps the terms listed
+here.
 
 ## Distribution scope
 
-This repository distributes tutorial source files, the scientific data and
-visual assets identified below, and a Docker build recipe. It does not
-distribute a prebuilt container image, installed third-party software
-packages, or model checkpoints.
+The source repository contains tutorial code and notebooks, two NCI Atlas data
+files, the 3Dmol.js browser bundle, a py3Dmol license copy, and course artwork.
+Installed Python packages, model checkpoints, the original DFT-D3 archive, and
+the generated D3 parameter table live in runtime caches or built images.
 
-Distributing a prebuilt image would require a separate review and a complete
-image-level software bill of materials and notice set covering the installed
-operating-system packages, Conda packages, Python packages, bundled binaries,
-and CUDA components. In particular, `imageio-ffmpeg` installs an FFmpeg binary
-whose GPL terms must be addressed if that binary is redistributed. The
-repository-level inventory does not clear a prebuilt image for distribution.
+A built container has a different distribution scope. The current build
+installs Python and CUDA packages, generates the D3 table, and downloads model
+assets. Review a container with an image-level software bill of materials and
+notice set before publishing it.
 
-The build recipe references the NVIDIA CUDA base image and downloads
-Miniforge, Conda packages, Python packages, and Git dependencies from their
-official distribution services. The tutorial downloads MACE-MPA-0 and Orb-v3
-model checkpoints when their workflows first run. Those components remain
-subject to their own terms:
+## Files included in the source repository
 
-- NVIDIA CUDA base image and CUDA components:
-  [NVIDIA CUDA Toolkit EULA](https://docs.nvidia.com/cuda/eula/)
-- Miniforge installer:
-  [BSD-3-Clause](https://github.com/conda-forge/miniforge/blob/main/LICENSE)
-- OVITO Python module:
-  [MIT](https://www.ovito.org/manual/licenses/index.html). The optional
-  `ovitos` rendering workflow can call a separately installed OVITO Pro
-  executable. OVITO Pro is not distributed by this repository and requires
-  its own valid license or entitlement.
-- MACE code and MACE-MPA-0 model:
-  [MIT](https://github.com/ACEsuit/mace)
-- Orb code and Orb-v3 models:
-  [Apache-2.0](https://github.com/orbital-materials/orb-models)
+| Material | Location | Terms |
+|---|---|---|
+| NCI Atlas curve subset | `notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz` | CC BY 4.0 |
+| NCI Atlas NCIA250 archive | `notebooks/00-core-playbook/data/nci_atlas/NCIA250.zip` | CC BY 4.0 |
+| 3Dmol.js 2.5.5 browser bundle and notices | `shared/3dmol-2.5.5/` | BSD-3-Clause and the incorporated notices in `LICENSE` |
+| py3Dmol 2.5.5 license copy | `shared/py3dmol-2.5.5/LICENSE.txt` | MIT |
+| NVIDIA course banner | `shared/alchemi-banner-left.png` | NVIDIA course artwork; excluded from Apache-2.0 |
+| Course diagrams, styles, and helper source | `shared/` and `notebooks/00-core-playbook/` | Apache-2.0 unless a nearby notice says otherwise |
 
-The exact reviewed Linux x86_64 software environment is fixed in
-`build/conda-linux-64.lock` and
-`build/requirements-linux-64.lock.txt`. Its dependency licenses and notices
-are recorded under `.licenses/`.
+## NCI Atlas scientific data
 
-## Scientific data
+Creator and attribution: Jan Řezáč and NCI Atlas contributors. The files
+come from [NCI Atlas](https://github.com/Honza-R/NCIAtlas) at revision
+`1816bfc72609d7deb1d4f93ab9e27eb13bb44bec` and are licensed under
+[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Redistribution must
+retain the attribution, license link, and the change descriptions below.
 
-### Naphthalene crystal structure
+### Three interaction curves
 
-- File: `part-2-batched-melting-toolkit/data/naphthalene.cif`
-- Source: Crystallography Open Database
-  [entry 2311088](https://www.crystallography.net/2311088.cif)
-- License: [CC0 1.0](https://creativecommons.org/publicdomain/zero/1.0/)
+- File: `notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz`
 - SHA-256:
-  `90d674e00952984954ab0382b240dc5733e9bb536e682460a5e394fd7bca509e`
-- Original publication: Anna A. Hoser and Anders O. Madsen,
-  “Dynamic quantum crystallography: lattice-dynamical models refined against
-  diffraction data. II. Applications to L-alanine, naphthalene and xylitol,”
-  *Acta Crystallographica Section A* 73 (2017), 102–114,
-  [doi:10.1107/S2053273316018994](https://doi.org/10.1107/S2053273316018994).
+  `7ffbc071e2998cee8e487a2697517187110a05f436920f8611d28d2af5d4d7b7`
+- Dataset papers:
+  [hydrogen-bonded sets](https://doi.org/10.1021/acs.jctc.9b01265) and
+  [D442x10](https://doi.org/10.1039/D2CP01602H)
 
-The source publication identifies this naphthalene dataset as the 100 K
-measurement. The COD CIF retains a `_diffrn_ambient_temperature` value of
-293(2) K. This metadata discrepancy is documented here and should be resolved
-or explained before making temperature-specific claims about the input
-structure.
+The tutorial selects three complexes at ten separations, extracts the `AB`,
+`A`, and `B` records, and reformats them as compressed CSV. Coordinates,
+stored energies, gradients, and source identifiers are unchanged.
 
-### OC20Dense tutorial subset
+### NCIA250 equilibrium survey
 
-- Files:
-  `part-1-batched-adsorption-toolkit/data/reference/oc20dense/` and
-  `part-1-batched-adsorption-toolkit/data/reference/oc20dense-validation-pack.tgz`
-- Source: [Open Catalyst Dataset](https://github.com/Open-Catalyst-Project/Open-Catalyst-Dataset)
-- License: [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)
-- Archive SHA-256:
-  `c3bd01ca26e68d56f52af7d19a5fb735d2be990e9ecbb050b12115bdb3ade8f4`
-- Attribution: Open Catalyst Project contributors, including the OC20 dataset
-  described by Chanussot et al., “Open Catalyst 2020 (OC20) Dataset and
-  Community Challenges,” *ACS Catalysis* 11 (2021), 6059–6072,
-  [doi:10.1021/acscatal.0c04525](https://doi.org/10.1021/acscatal.0c04525).
+- File: `notebooks/00-core-playbook/data/nci_atlas/NCIA250.zip`
+- [Pinned upstream directory](https://github.com/Honza-R/NCIAtlas/tree/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec/NCIA250)
+- SHA-256:
+  `34e3c2cec763344dd9be41aa008672c7d052e50db57abe1abc59873d3935c433`
+- Source-set papers:
+  [D1200](https://doi.org/10.1039/D2CP01602H),
+  [HB300SPX](https://doi.org/10.1021/acs.jctc.0c00715),
+  [HB375](https://doi.org/10.1021/acs.jctc.9b01265),
+  [R739](https://doi.org/10.1021/acs.jctc.0c01341), and
+  [SH250](https://doi.org/10.1039/D2CP01600A)
 
-Only the records used by the tutorial are included. The license requires
-attribution when the subset is shared or adapted.
+The archive matches the pinned upstream bytes. The tutorial reports statistics
+for all 250 complexes and evaluates the 205 complexes whose elements appear in
+the pinned AIMNet2 checkpoint metadata.
 
-## Logos and brand assets
+The adjacent
+[`data/nci_atlas/README.md`](notebooks/00-core-playbook/data/nci_atlas/README.md)
+records the same attribution and checksums so that the data can travel with its
+notice.
 
-The ENEOS, Matlantis, and OVITO logos included in the tutorial are used with
-permission granted directly for this NVIDIA ALCHEMI tutorial. The UDC logo is
-used with permission granted by the project partner. The logos and associated
-trademarks remain the property of their respective owners. They are not
-licensed under Apache 2.0, and their inclusion does not grant downstream
-permission to reuse the marks.
+## Molecular viewer
 
-The NVIDIA logo is an NVIDIA trademark and is not licensed under Apache 2.0.
-No rights are granted to NVIDIA trademarks or branding.
+The notebooks use py3Dmol 2.5.5 to create interactive HTML backed by 3Dmol.js
+2.5.5.
 
-The tutorial banners, banner artwork, ALCHEMI Toolkit architecture diagram,
-adsorption comparison image, and other original tutorial illustrations were
-created for this project and are covered by the repository license.
+- [py3Dmol](https://pypi.org/project/py3Dmol/): MIT
+- [3Dmol.js](https://github.com/3dmol/3Dmol.js): BSD-3-Clause
+- [3Dmol.js paper](https://doi.org/10.1093/bioinformatics/btu829)
+
+The checked browser bundle and its complete incorporated notices are stored in
+`shared/3dmol-2.5.5/`. The py3Dmol MIT license is stored in
+`shared/py3dmol-2.5.5/LICENSE.txt`. Saved interactive outputs in Core Modules 1
+and 3 inline the same checked 3Dmol.js code. These notices apply to the
+standalone bundle and those embedded copies.
+
+## Runtime software and model assets
+
+The exact versions, commits, aliases, and file hashes are recorded in
+[`environment/runtime-pins.toml`](environment/runtime-pins.toml). The installed
+Python package inventory and license texts are under [`.licenses/`](.licenses/).
+
+- NVIDIA ALCHEMI Toolkit 0.2.0 and Toolkit-Ops 0.4.1: Apache-2.0.
+- AIMNet software and `aimnet2-wb97m-d3_0` weights: MIT. Runtime setup verifies
+  checkpoint SHA-256
+  `f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28`.
+- MACE software and the optional MACE-MP-0b2 `medium-0b2` checkpoint: MIT. The
+  Module 2 wrapper exercise loads MACE after the main AIMNet evaluation.
+- ASE 3.27.0: LGPL-2.1-or-later.
+- PyTorch: BSD-3-Clause. CUDA packages and the CUDA base image use the
+  [NVIDIA CUDA Toolkit EULA](https://docs.nvidia.com/cuda/eula/).
+- Toolkit's D3 setup parses the legacy Grimme DFT-D3 reference archive, which
+  is GPL-1.0-or-later, and creates a checked parameter table in the runtime
+  cache. A built container carries that table and needs separate distribution
+  review.
+
+See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for direct links to the
+upstream licenses and model cards.
+
+## Course artwork and NVIDIA marks
+
+`shared/alchemi-banner-left.png` has SHA-256
+`016f3840bb97e61a3950bd70e587305fe9477831db9763c3d081db0b8a5bbf19`.
+Its metadata names Nikita Fedik as author and Canva as the authoring tool.
+Asset-level origin for any Canva library elements remains unverified. Treat the
+banner and NVIDIA marks as NVIDIA course artwork excluded from Apache-2.0.
+NVIDIA retains all rights to its names, logos, and trademarks.

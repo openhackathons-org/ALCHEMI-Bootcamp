@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="440" viewBox="0 0 920 440" role="img" aria-labelledby="title desc">
+<title id="title">A Batch packs unequal atomic systems without padding</title>
+<desc id="desc">Ammonia, propyne, and phenol AtomicData objects become one Batch. Atom fields are concatenated by atom, system fields by system, and optional neighbor data is added in the format requested by a model.</desc>
+<defs>
+<marker id="batch-fields-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="5" markerHeight="5" orient="auto"><path d="M0 0L10 5L0 10Z" fill="#68737E"/></marker>
+<filter id="molecule-shadow" x="-25%" y="-25%" width="150%" height="160%"><feDropShadow dx="0" dy="1.4" stdDeviation="1.5" flood-color="#0B1013" flood-opacity="0.58"/></filter>
+</defs>
+<rect width="920" height="440" rx="8" fill="#171D20"/>
+<g font-family="NVIDIA Sans,Arial,sans-serif">
+<text x="24" y="29" fill="#F3F4F6" font-size="17" font-weight="700">A Batch packs unequal atomic systems without padding</text>
+<g>
+<rect x="24" y="48" width="280" height="112" rx="8" fill="#28312B" stroke="#4B565F"/>
+<svg id="molecule-ammonia" x="34" y="59" width="96" height="90" viewBox="0 0 180 167" preserveAspectRatio="xMidYMid meet" overflow="visible"><g filter="url(#molecule-shadow)">
+  <defs>
+    <g id="ammonia-x0a7"><radialGradient id="ammonia-x0g7" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#6e84fa"/><stop offset="100%" stop-color="#2945d7"/></radialGradient><circle cx="0" cy="0" r="25.0" fill="url(#ammonia-x0g7)" stroke="#59636C" stroke-width="3.5"/></g>
+    <g id="ammonia-x0a1"><radialGradient id="ammonia-x0g1" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#dddddd"/></radialGradient><circle cx="0" cy="0" r="14.0" fill="url(#ammonia-x0g1)" stroke="#59636C" stroke-width="3.5"/></g>
+  </defs>
+  <use x="135.0" y="44.6" href="#ammonia-x0a1"/>
+  <line x1="124.9" y1="50.4" x2="108.0" y2="60.1" stroke="#aab2b8" stroke-width="12.2" stroke-linecap="round"/>
+  <use x="45.0" y="44.6" href="#ammonia-x0a1"/>
+  <line x1="55.1" y1="50.4" x2="72.0" y2="60.1" stroke="#aab2b8" stroke-width="12.2" stroke-linecap="round"/>
+  <use x="90.0" y="122.4" href="#ammonia-x0a1"/>
+  <line x1="90.0" y1="110.8" x2="90.0" y2="91.3" stroke="#aab2b8" stroke-width="12.2" stroke-linecap="round"/>
+  <use x="90.0" y="70.5" href="#ammonia-x0a7"/>
+</g></svg>
+<text x="146" y="76" fill="#A8B0B8" font-size="10" font-weight="700">ATOMICDATA</text>
+<text x="146" y="101" fill="#F3F4F6" font-size="13" font-weight="700">Ammonia</text>
+<text x="146" y="124" fill="#A8B0B8" font-size="11">4 atoms</text>
+<rect x="320" y="48" width="280" height="112" rx="8" fill="#28312B" stroke="#4B565F"/>
+<svg id="molecule-propyne" x="330" y="59" width="96" height="90" viewBox="0 0 180 108" preserveAspectRatio="xMidYMid meet" overflow="visible"><g filter="url(#molecule-shadow)">
+  <defs>
+    <g id="propyne-x0a6"><radialGradient id="propyne-x0g6" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#c3c3c3"/><stop offset="100%" stop-color="#939393"/></radialGradient><circle cx="0" cy="0" r="13.2" fill="url(#propyne-x0g6)" stroke="#59636C" stroke-width="1.7"/></g>
+    <g id="propyne-x0a1"><radialGradient id="propyne-x0g1" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#dddddd"/></radialGradient><circle cx="0" cy="0" r="7.0" fill="url(#propyne-x0g1)" stroke="#59636C" stroke-width="1.7"/></g>
+  </defs>
+  <use x="33.2" y="33.0" href="#propyne-x0a1"/>
+  <line x1="35.5" y1="35.9" x2="39.7" y2="41.4" stroke="#aab2b8" stroke-width="6.1" stroke-linecap="round"/>
+  <use x="84.1" y="47.0" href="#propyne-x0a6"/>
+  <line x1="72.2" y1="47.0" x2="55.8" y2="47.0" stroke="#aab2b8" stroke-width="6.1" stroke-linecap="round"/>
+  <line x1="96.0" y1="39.7" x2="105.6" y2="39.7" stroke="#aab2b8" stroke-width="4.2" stroke-linecap="round"/>
+  <line x1="96.0" y1="47.0" x2="105.6" y2="47.0" stroke="#aab2b8" stroke-width="4.2" stroke-linecap="round"/>
+  <line x1="96.0" y1="54.3" x2="105.6" y2="54.3" stroke="#aab2b8" stroke-width="4.2" stroke-linecap="round"/>
+  <use x="43.9" y="47.0" href="#propyne-x0a6"/>
+  <line x1="39.7" y1="58.1" x2="35.5" y2="69.2" stroke="#aab2b8" stroke-width="6.1" stroke-linecap="round"/>
+  <line x1="39.7" y1="41.4" x2="35.5" y2="35.9" stroke="#aab2b8" stroke-width="6.1" stroke-linecap="round"/>
+  <use x="117.5" y="47.0" href="#propyne-x0a6"/>
+  <line x1="129.4" y1="47.0" x2="140.5" y2="47.0" stroke="#aab2b8" stroke-width="6.1" stroke-linecap="round"/>
+  <use x="146.8" y="47.0" href="#propyne-x0a1"/>
+  <use x="33.2" y="75.0" href="#propyne-x0a1"/>
+  <use x="33.2" y="33.0" href="#propyne-x0a1"/>
+</g></svg>
+<text x="442" y="76" fill="#A8B0B8" font-size="10" font-weight="700">ATOMICDATA</text>
+<text x="442" y="101" fill="#F3F4F6" font-size="13" font-weight="700">Propyne</text>
+<text x="442" y="124" fill="#A8B0B8" font-size="11">7 atoms</text>
+<rect x="616" y="48" width="280" height="112" rx="8" fill="#28312B" stroke="#4B565F"/>
+<svg id="molecule-phenol" x="626" y="59" width="96" height="90" viewBox="0 0 180 159" preserveAspectRatio="xMidYMid meet" overflow="visible"><g filter="url(#molecule-shadow)">
+  <defs>
+    <g id="phenol-x0a6"><radialGradient id="phenol-x0g6" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#c3c3c3"/><stop offset="100%" stop-color="#939393"/></radialGradient><circle cx="0" cy="0" r="10.2" fill="url(#phenol-x0g6)" stroke="#59636C" stroke-width="1.3"/></g>
+    <g id="phenol-x0a8"><radialGradient id="phenol-x0g8" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#ff5555"/><stop offset="100%" stop-color="#dd0b0b"/></radialGradient><circle cx="0" cy="0" r="9.1" fill="url(#phenol-x0g8)" stroke="#59636C" stroke-width="1.3"/></g>
+    <g id="phenol-x0a1"><radialGradient id="phenol-x0g1" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#dddddd"/></radialGradient><circle cx="0" cy="0" r="5.4" fill="url(#phenol-x0g1)" stroke="#59636C" stroke-width="1.3"/></g>
+  </defs>
+  <use x="63.3" y="118.4" href="#phenol-x0a1"/>
+  <line x1="66.6" y1="114.8" x2="72.5" y2="108.2" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <use x="41.6" y="65.9" href="#phenol-x0a8"/>
+  <line x1="49.6" y1="68.0" x2="60.6" y2="70.9" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <line x1="37.0" y1="72.7" x2="32.9" y2="78.9" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <use x="69.5" y="73.3" href="#phenol-x0a6"/>
+  <line x1="75.0" y1="81.1" x2="78.5" y2="91.8" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round" stroke-dasharray="3.3,6.6"/>
+  <line x1="69.7" y1="82.9" x2="73.2" y2="93.5" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round"/>
+  <line x1="73.6" y1="64.6" x2="81.1" y2="56.3" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round"/>
+  <line x1="77.7" y1="68.4" x2="85.2" y2="60.1" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round" stroke-dasharray="3.3,6.6"/>
+  <use x="78.7" y="101.4" href="#phenol-x0a6"/>
+  <line x1="88.2" y1="100.5" x2="99.2" y2="102.8" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round" stroke-dasharray="3.3,6.6"/>
+  <line x1="87.1" y1="106.0" x2="98.0" y2="108.3" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round"/>
+  <use x="81.8" y="29.8" href="#phenol-x0a1"/>
+  <line x1="83.4" y1="34.3" x2="86.3" y2="42.7" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <use x="89.3" y="51.4" href="#phenol-x0a6"/>
+  <line x1="98.9" y1="50.6" x2="109.7" y2="52.9" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round"/>
+  <line x1="97.7" y1="56.1" x2="108.6" y2="58.4" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round" stroke-dasharray="3.3,6.6"/>
+  <use x="107.6" y="107.4" href="#phenol-x0a6"/>
+  <line x1="110.3" y1="116.2" x2="113.0" y2="124.6" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <line x1="111.7" y1="98.7" x2="119.2" y2="90.5" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round" stroke-dasharray="3.3,6.6"/>
+  <line x1="115.8" y1="102.5" x2="123.3" y2="94.3" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round"/>
+  <use x="118.1" y="57.6" href="#phenol-x0a6"/>
+  <line x1="124.2" y1="50.7" x2="130.1" y2="44.1" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <line x1="123.7" y1="65.4" x2="127.2" y2="76.0" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round"/>
+  <line x1="118.3" y1="67.2" x2="121.9" y2="77.8" stroke="#aab2b8" stroke-width="3.3" stroke-linecap="round" stroke-dasharray="3.3,6.6"/>
+  <use x="114.4" y="129.2" href="#phenol-x0a1"/>
+  <use x="133.3" y="40.4" href="#phenol-x0a1"/>
+  <use x="127.4" y="85.6" href="#phenol-x0a6"/>
+  <line x1="136.4" y1="87.5" x2="145.1" y2="89.4" stroke="#aab2b8" stroke-width="4.7" stroke-linecap="round"/>
+  <use x="149.8" y="90.4" href="#phenol-x0a1"/>
+  <use x="30.2" y="82.9" href="#phenol-x0a1"/>
+</g></svg>
+<text x="738" y="76" fill="#A8B0B8" font-size="10" font-weight="700">ATOMICDATA</text>
+<text x="738" y="101" fill="#F3F4F6" font-size="13" font-weight="700">Phenol</text>
+<text x="738" y="124" fill="#A8B0B8" font-size="11">13 atoms</text>
+</g>
+<path d="M460 163V193" stroke="#68737E" stroke-width="1.25" marker-end="url(#batch-fields-arrow)"/>
+<rect x="475" y="168" width="154" height="20" rx="5" fill="#171D20"/>
+<text x="482" y="182" fill="#A8B0B8" font-size="10">Batch.from_data_list(...)</text>
+<rect x="24" y="202" width="872" height="222" rx="8" fill="#20262C" stroke="#76B900" stroke-width="1.5"/>
+<text x="42" y="229" fill="#F3F4F6" font-size="13" font-weight="700">Batch</text>
+<text x="102" y="229" fill="#A8B0B8" font-size="11">3 systems · 24 atoms · no padding</text>
+<text x="42" y="249" fill="#A8B0B8" font-size="11">Field levels keep every tensor aligned when the systems are packed, moved, or sliced.</text>
+<rect x="42" y="263" width="836" height="38" rx="6" fill="#28312B" stroke="#4B565F"/>
+<text x="58" y="287" fill="#F3F4F6" font-size="10" font-weight="700">Node fields</text>
+<text x="190" y="287" fill="#F3F4F6" font-size="11">atomic_numbers [24] · positions [24, 3]</text>
+<text x="862" y="287" fill="#A8B0B8" font-size="11" text-anchor="end">one row per atom</text>
+<rect x="42" y="309" width="836" height="38" rx="6" fill="#28312B" stroke="#4B565F"/>
+<text x="58" y="333" fill="#F3F4F6" font-size="10" font-weight="700">System fields</text>
+<text x="190" y="333" fill="#F3F4F6" font-size="11">charge [3, 1]</text>
+<text x="862" y="333" fill="#A8B0B8" font-size="11" text-anchor="end">one row per system</text>
+<rect x="42" y="355" width="836" height="42" rx="6" fill="#28312B" stroke="#4B565F"/>
+<text x="58" y="380" fill="#F3F4F6" font-size="10" font-weight="700">Neighbor data</text>
+<text x="190" y="373" fill="#F3F4F6" font-size="11">created by compute_neighbors(...)</text>
+<text x="190" y="389" fill="#A8B0B8" font-size="10">default MATRIX per atom · optional COO edge list [E, 2]</text>
+<text x="862" y="380" fill="#A8B0B8" font-size="11" text-anchor="end">absent in this fresh Batch</text>
+<text x="42" y="413" fill="#A8B0B8" font-size="10">batch_ptr [0, 4, 11, 24] preserves the three system boundaries.</text>
+</g>
+</svg>

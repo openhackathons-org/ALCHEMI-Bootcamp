@@ -1,20 +1,32 @@
 {
   "assets": {
+    "atomicdata-batch-fields.svg": {
+      "filename": "atomicdata-batch-fields-6ad9f6537440df2f.svg",
+      "sha256": "6ad9f6537440df2f2651b7ae28745a4e9a4f1881263102a47ed3dc53190be9c2"
+    },
+    "batch-row-ownership.svg": {
+      "filename": "batch-row-ownership-5623ef2c43ebfbe0.svg",
+      "sha256": "5623ef2c43ebfbe0d463996d91811c11c79d92d7189b6cad2580d61831c49638"
+    },
     "fused-stage-flow.svg": {
-      "filename": "fused-stage-flow-6ec61b45df06fd4e.svg",
-      "sha256": "6ec61b45df06fd4e9c05dbe35ae472ceccbe898175ea30a6cbdf8b9ca5595385"
+      "filename": "fused-stage-flow-6be7a7c697638fd9.svg",
+      "sha256": "6be7a7c697638fd9222f2d0e37e5a2548c49070ba686fe38cb3f417a95e11535"
     },
     "inflight-batching-flow.svg": {
-      "filename": "inflight-batching-flow-e79cea47c0cffe44.svg",
-      "sha256": "e79cea47c0cffe44d18cdb0fa95fb5dba27cee828419866a6fc6173a485488b7"
+      "filename": "inflight-batching-flow-ab128daf945b0847.svg",
+      "sha256": "ab128daf945b08478558b94a735718c7e415543c8622e8da2133102604702414"
+    },
+    "prefetch-window.svg": {
+      "filename": "prefetch-window-2c3fdad8872c3df2.svg",
+      "sha256": "2c3fdad8872c3df299d5efba80fa862884dae8c7e42a57a8e58958a7079bbd49"
     },
     "toolkit-capability-map.svg": {
-      "filename": "toolkit-capability-map-3e553dc33f60f1ff.svg",
-      "sha256": "3e553dc33f60f1ffba735df650af3f79c2104c8bf26ed4dadf740fdcc097d198"
+      "filename": "toolkit-capability-map-924854cdc4bf1d30.svg",
+      "sha256": "924854cdc4bf1d3076c32206c74e01e5e124f847404f50c7193d4f241d6c8613"
     },
     "zarr-data-flow.svg": {
-      "filename": "zarr-data-flow-1dd43fe6aaf828cf.svg",
-      "sha256": "1dd43fe6aaf828cf496137cf14255a86411898a65c12334c6e6480a2774fe702"
+      "filename": "zarr-data-flow-45edcaba8b6d220f.svg",
+      "sha256": "45edcaba8b6d220fbb552f32a27b821e1d3a7b76782feddea39daadb33e51251"
     }
   },
   "schema": "alchemi.core-assets.v1"
