@@ -95,14 +95,15 @@ maintainer to verify. If you tested only the saved-result path, say so.
 For changes to the container or dependencies, rebuild the image:
 
 ```bash
-cd build
-docker compose build
+docker build --tag alchemi-core:local .
 ```
 
-Dependency changes must also refresh the exact Linux x86_64 lock files and
-third-party license inventory:
+Dependency changes must refresh `uv.lock`, synchronize the course runtime, and
+regenerate the third-party license inventory:
 
 ```bash
+uv lock
+./scripts/setup
 .licenses/generate_licenses.sh
 ```
 
@@ -130,7 +131,7 @@ the contribution under the repository's license.
 - Documentation and examples match the current repository behavior.
 - Relevant checks are listed with their results and environment.
 - New third-party material includes source, license, and attribution details.
-- Dependency changes include refreshed build locks and `.licenses/` files.
+- Dependency changes include a refreshed `uv.lock` and `.licenses/` inventory.
 - New NVIDIA-authored source and build files include the required SPDX notice.
 - No secrets, credentials, restricted data, or unapproved model files are
   included.

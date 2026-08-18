@@ -1,0 +1,16 @@
+{
+  "background": "#171D20",
+  "surface": "#20262C",
+  "surface_raised": "#28312B",
+  "border": "#4B565F",
+  "grid": "#3A444D",
+  "text": "#F3F4F6",
+  "muted": "#A8B0B8",
+  "quiet": "#68737E",
+  "ink_on_accent": "#11170D",
+  "nvidia_green": "#76B900",
+  "nvidia_blue": "#2E6F9E",
+  "nvidia_teal": "#2E8A73",
+  "nvidia_orange": "#C56A2D",
+  "neutral_gray": "#666666"
+}

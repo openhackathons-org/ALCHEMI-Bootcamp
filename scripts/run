@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-runtime_root="${ALCHEMI_V3_RUNTIME_ROOT:-/tmp/alchemi-v3-runtime}"
+runtime_root="${ALCHEMI_RUNTIME_ROOT:-/tmp/alchemi-runtime}"
+uv_bin="${ALCHEMI_UV_BIN:-uv}"
 
 mkdir -p \
     "${runtime_root}/aimnet" \
@@ -32,8 +36,8 @@ export WARP_CACHE_PATH="${runtime_root}/warp"
 export XDG_CACHE_HOME="${runtime_root}/cache"
 
 if [[ ! -x "${UV_PROJECT_ENVIRONMENT}/bin/python" ]]; then
-    echo "Shared v3 environment is missing. Run ./scripts/v3-sync first." >&2
+    echo "Shared environment is missing. Run ./scripts/setup first." >&2
     exit 1
 fi
 
-exec uv run --project "${repository_root}" --frozen --no-sync "$@"
+exec "${uv_bin}" run --project "${repository_root}" --frozen --no-sync "$@"

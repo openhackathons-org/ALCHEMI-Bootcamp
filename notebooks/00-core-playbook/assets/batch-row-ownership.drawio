@@ -1,0 +1,48 @@
+<mxGraphModel adaptiveColors="auto" page="0" pageWidth="920" pageHeight="260">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="title" value="One column per atom row" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=17;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="8" width="872" height="28" as="geometry" />
+    </mxCell>
+    <mxCell id="table-panel" value="" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=#4B565F;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="56" width="872" height="166" as="geometry" />
+    </mxCell>
+    <mxCell id="ammonia" value="0 · Ammonia&lt;br&gt;&lt;font style='font-size:10px'&gt;rows 0:4&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="146" y="60" width="116" height="40" as="geometry" />
+    </mxCell>
+    <mxCell id="propyne" value="1 · Propyne&lt;br&gt;&lt;font style='font-size:10px'&gt;rows 4:11&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="262" y="60" width="203" height="40" as="geometry" />
+    </mxCell>
+    <mxCell id="phenol" value="2 · Phenol&lt;br&gt;&lt;font style='font-size:10px'&gt;rows 11:24&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E8A73;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="465" y="60" width="377" height="40" as="geometry" />
+    </mxCell>
+    <mxCell id="atomic-label" value="atomic_numbers" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="116" width="108" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="atomic-ammonia" value="N H H H" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="146" y="111" width="111" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="atomic-propyne" value="C C C H H H H" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="262" y="111" width="203" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="atomic-phenol" value="C O H C C C C C H H H H H" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E8A73;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="465" y="111" width="377" height="30" as="geometry" />
+    </mxCell>
+    <mxCell id="owner-label" value="batch_idx" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=11;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="153" width="108" height="28" as="geometry" />
+    </mxCell>
+    <mxCell id="owner-ammonia" value="0  0  0  0" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="146" y="153" width="116" height="28" as="geometry" />
+    </mxCell>
+    <mxCell id="owner-propyne" value="1  1  1  1  1  1  1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="262" y="153" width="203" height="28" as="geometry" />
+    </mxCell>
+    <mxCell id="owner-phenol" value="2  2  2  2  2  2  2  2  2  2  2  2  2" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E8A73;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="465" y="153" width="377" height="28" as="geometry" />
+    </mxCell>
+    <mxCell id="pointer" value="batch_ptr  [0, 4, 11, 24]" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="224" width="818" height="26" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>

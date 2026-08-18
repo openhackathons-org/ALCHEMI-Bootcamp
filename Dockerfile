@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1.7
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
 
 FROM ghcr.io/astral-sh/uv:0.11.1 AS uv
 
@@ -27,10 +29,10 @@ RUN sed -i -E 's/^UID_MAX[[:space:]]+.*/UID_MAX 4294967294/' /etc/login.defs \
         --shell /bin/bash \
         --uid "${USER_ID}" \
         alchemi \
-    && mkdir -p /opt/alchemi-v3-runtime /workspace \
-    && chown -R alchemi:alchemi /opt/alchemi-v3-runtime /workspace
+    && mkdir -p /opt/alchemi-runtime /workspace \
+    && chown -R alchemi:alchemi /opt/alchemi-runtime /workspace
 
-ENV ALCHEMI_V3_RUNTIME_ROOT=/opt/alchemi-v3-runtime \
+ENV ALCHEMI_RUNTIME_ROOT=/opt/alchemi-runtime \
     HOME=/home/alchemi
 
 WORKDIR /workspace
@@ -38,20 +40,20 @@ WORKDIR /workspace
 USER alchemi
 
 COPY --chown=alchemi:alchemi pyproject.toml uv.lock .python-version ./
-COPY --chown=alchemi:alchemi scripts/v3-run scripts/v3-sync ./scripts/
+COPY --chown=alchemi:alchemi scripts/run scripts/setup ./scripts/
 COPY --chown=alchemi:alchemi \
     environment/prewarm_assets.py \
     environment/runtime-pins.toml \
     ./environment/
 
-RUN ./scripts/v3-sync
+RUN ./scripts/setup
 
 COPY --chown=alchemi:alchemi . .
 
-RUN ./scripts/v3-run python environment/check_runtime.py \
-    && ./scripts/v3-run python -c \
+RUN ./scripts/run python environment/check_runtime.py \
+    && ./scripts/run python -c \
         'import torch; from nvalchemi.models import MACEWrapper; MACEWrapper.from_checkpoint("medium-0b2", device=torch.device("cpu"))'
 
 EXPOSE 8888
 
-CMD ["./scripts/v3-jupyter-container"]
+CMD ["./scripts/jupyter-container"]

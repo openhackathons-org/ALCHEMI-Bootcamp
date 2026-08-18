@@ -1,1 +1,33 @@
-<mxGraphModel adaptiveColors="auto" page="0"><root><mxCell id="0" /><mxCell id="1" parent="0" /><mxCell id="zarr" value="Zarr store&lt;br&gt;&lt;font color='#A8B0B8'&gt;disk or CPU storage&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=none;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="20" y="18" width="160" height="60" as="geometry" /></mxCell><mxCell id="reader" value="Reader&lt;br&gt;&lt;font color='#A8B0B8'&gt;CPU tensors&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=none;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="200" y="18" width="160" height="60" as="geometry" /></mxCell><mxCell id="dataset" value="Dataset&lt;br&gt;&lt;font color='#A8B0B8'&gt;validate + move&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=none;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="380" y="18" width="160" height="60" as="geometry" /></mxCell><mxCell id="loader" value="DataLoader&lt;br&gt;&lt;font color='#A8B0B8'&gt;batch + prefetch&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#20262C;strokeColor=none;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="560" y="18" width="160" height="60" as="geometry" /></mxCell><mxCell id="batch" value="Batch&lt;br&gt;&lt;font color='#15200D'&gt;selected device&lt;/font&gt;" style="rounded=1;arcSize=8;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=none;fontColor=#081005;fontFamily=NVIDIA Sans;fontSize=14;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1"><mxGeometry x="740" y="18" width="160" height="60" as="geometry" /></mxCell><mxCell id="edge-1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="zarr" target="reader"><mxGeometry relative="1" as="geometry" /></mxCell><mxCell id="edge-2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="reader" target="dataset"><mxGeometry relative="1" as="geometry" /></mxCell><mxCell id="edge-3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="dataset" target="loader"><mxGeometry relative="1" as="geometry" /></mxCell><mxCell id="edge-4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="loader" target="batch"><mxGeometry relative="1" as="geometry" /></mxCell></root></mxGraphModel>
+<mxGraphModel adaptiveColors="auto" page="0" pageWidth="920" pageHeight="96">
+  <root>
+    <mxCell id="0" />
+    <mxCell id="1" parent="0" />
+    <mxCell id="zarr" value="Zarr store&lt;br&gt;&lt;font color='#A8B0B8'&gt;disk or CPU storage&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#4B565F;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="18" width="160" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="reader" value="Reader&lt;br&gt;&lt;font color='#A8B0B8'&gt;CPU tensors&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#4B565F;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="202" y="18" width="160" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="dataset" value="Dataset&lt;br&gt;&lt;font color='#A8B0B8'&gt;validate + move&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#4B565F;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="380" y="18" width="160" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="loader" value="DataLoader&lt;br&gt;&lt;font color='#A8B0B8'&gt;batch + prefetch&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#4B565F;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="558" y="18" width="160" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="batch" value="Batch&lt;br&gt;&lt;font color='#11170D'&gt;selected device&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#76B900;strokeColor=#76B900;strokeWidth=1;fontColor=#11170D;fontFamily=NVIDIA Sans;fontSize=13;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="736" y="18" width="160" height="60" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-1" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="zarr" target="reader">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-2" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="reader" target="dataset">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-3" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="dataset" target="loader">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+    <mxCell id="edge-4" style="edgeStyle=orthogonalEdgeStyle;rounded=1;orthogonalLoop=1;strokeColor=#68737E;strokeWidth=1.25;endArrow=block;endFill=1;" edge="1" parent="1" source="loader" target="batch">
+      <mxGeometry relative="1" as="geometry" />
+    </mxCell>
+  </root>
+</mxGraphModel>

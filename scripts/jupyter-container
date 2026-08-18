@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 set -euo pipefail
 
 if (( $# > 0 )); then
@@ -10,7 +13,7 @@ if [[ -z "${JUPYTER_TOKEN:-}" ]]; then
     exit 2
 fi
 
-exec ./scripts/v3-run jupyter lab \
+exec ./scripts/run jupyter lab \
     --IdentityProvider.token="${JUPYTER_TOKEN}" \
     --ServerApp.root_dir=/workspace \
     --ip=0.0.0.0 \

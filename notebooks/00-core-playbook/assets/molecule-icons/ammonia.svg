@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" viewBox="0 0 180 167" width="180" height="167" style="background:transparent" role="img" aria-label="Ammonia molecule" data-renderer="xyzrender-0.2.0">
+  <defs>
+    <g id="x0a7"><radialGradient id="x0g7" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#6e84fa"/><stop offset="100%" stop-color="#2945d7"/></radialGradient><circle cx="0" cy="0" r="25.0" fill="url(#x0g7)" stroke="#59636C" stroke-width="3.5"/></g>
+    <g id="x0a1"><radialGradient id="x0g1" cx=".5" cy=".5" fx=".33" fy=".33" r=".66"><stop offset="0%" stop-color="#ffffff"/><stop offset="100%" stop-color="#dddddd"/></radialGradient><circle cx="0" cy="0" r="14.0" fill="url(#x0g1)" stroke="#59636C" stroke-width="3.5"/></g>
+  </defs>
+  <use x="135.0" y="44.6" xlink:href="#x0a1"/>
+  <line x1="124.9" y1="50.4" x2="108.0" y2="60.1" stroke="#aab2b8" stroke-width="12.2" stroke-linecap="round"/>
+  <use x="45.0" y="44.6" xlink:href="#x0a1"/>
+  <line x1="55.1" y1="50.4" x2="72.0" y2="60.1" stroke="#aab2b8" stroke-width="12.2" stroke-linecap="round"/>
+  <use x="90.0" y="122.4" xlink:href="#x0a1"/>
+  <line x1="90.0" y1="110.8" x2="90.0" y2="91.3" stroke="#aab2b8" stroke-width="12.2" stroke-linecap="round"/>
+  <use x="90.0" y="70.5" xlink:href="#x0a7"/>
+</svg>
