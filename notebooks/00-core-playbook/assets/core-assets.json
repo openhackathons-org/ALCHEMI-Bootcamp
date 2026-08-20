@@ -8,21 +8,9 @@
       "filename": "batch-row-ownership-5623ef2c43ebfbe0.svg",
       "sha256": "5623ef2c43ebfbe0d463996d91811c11c79d92d7189b6cad2580d61831c49638"
     },
-    "fused-stage-flow.svg": {
-      "filename": "fused-stage-flow-6be7a7c697638fd9.svg",
-      "sha256": "6be7a7c697638fd9222f2d0e37e5a2548c49070ba686fe38cb3f417a95e11535"
-    },
-    "inflight-batching-flow.svg": {
-      "filename": "inflight-batching-flow-ab128daf945b0847.svg",
-      "sha256": "ab128daf945b08478558b94a735718c7e415543c8622e8da2133102604702414"
-    },
     "prefetch-window.svg": {
       "filename": "prefetch-window-2c3fdad8872c3df2.svg",
       "sha256": "2c3fdad8872c3df299d5efba80fa862884dae8c7e42a57a8e58958a7079bbd49"
-    },
-    "toolkit-capability-map.svg": {
-      "filename": "toolkit-capability-map-924854cdc4bf1d30.svg",
-      "sha256": "924854cdc4bf1d3076c32206c74e01e5e124f847404f50c7193d4f241d6c8613"
     },
     "zarr-data-flow.svg": {
       "filename": "zarr-data-flow-45edcaba8b6d220f.svg",

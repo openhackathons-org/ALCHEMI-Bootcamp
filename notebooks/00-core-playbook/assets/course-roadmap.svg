@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="200" viewBox="0 0 920 200" role="img" aria-labelledby="title desc">
+  <title id="title">ALCHEMI Core roadmap</title>
+  <desc id="desc">A compact Toolkit tour followed by action chips for learning fundamentals, then simulating and composing. The URL fragment highlights the current action.</desc>
+  <style>
+    .heading{font:700 17px 'NVIDIA Sans',Arial,sans-serif}.module-title{font:700 11.5px 'NVIDIA Sans',Arial,sans-serif;fill:#F3F4F6}.module-sub,.chip-label{font:600 10.2px 'NVIDIA Sans',Arial,sans-serif;fill:#A8B0B8}.leaf{font:700 11px 'NVIDIA Sans',Arial,sans-serif;fill:#68737E}.card{fill:#20262C;stroke:#4B565F;stroke-width:1.5}.chip{fill:none;stroke:none}.topic:target .chip{fill:#76B900;stroke:#76B900;stroke-width:1}.topic:target .chip-label{fill:#11170D;font-weight:700}.topic:target .leaf{fill:#76B900}.arrow{fill:none;stroke:#68737E;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.step{fill:#A8B0B8}.step-number{font:600 10px 'NVIDIA Sans',Arial,sans-serif;fill:#171D20}
+  </style>
+  <rect width="920" height="200" rx="10" fill="#171D20"/>
+  <text x="24" y="32" class="heading" fill="#F3F4F6">See the full Toolkit workflow, then learn each part</text>
+  <path class="arrow" d="M293 120h28m-5-5 5 5-5 5M597 120h28m-5-5 5 5-5 5"/>
+  <g id="module-00">
+    <rect class="card" x="24" y="52" width="264" height="132" rx="8"/>
+    <circle class="step" cx="42" cy="72" r="10"/><text x="42" y="76" text-anchor="middle" class="step-number">00</text>
+    <text x="60" y="76" class="module-title">Toolkit Tour</text>
+    <text x="38" y="105" class="leaf">›</text><text x="50" y="105" class="module-sub">Check ALCHEMI ecosystem</text>
+    <text x="38" y="125" class="leaf">›</text><text x="50" y="125" class="module-sub">Choose your chemistry</text>
+    <text x="38" y="145" class="leaf">›</text><text x="50" y="145" class="module-sub">See the complete workflow</text>
+  </g>
+  <g id="module-01">
+    <rect class="card" x="328" y="52" width="264" height="132" rx="8"/>
+    <circle class="step" cx="346" cy="72" r="10"/><text x="346" y="76" text-anchor="middle" class="step-number">01</text>
+    <text x="364" y="76" class="module-title">Learn Fundamentals</text>
+    <g id="create-atomicdata" class="topic"><text x="342" y="105" class="leaf">›</text><rect class="chip" x="352" y="92" width="105" height="17" rx="4"/><text x="357" y="105" class="chip-label">Create AtomicData</text></g>
+    <g id="build-batch" class="topic"><text x="342" y="125" class="leaf">›</text><rect class="chip" x="352" y="112" width="83" height="17" rx="4"/><text x="357" y="125" class="chip-label">Build a Batch</text></g>
+    <g id="save-load-zarr" class="topic"><text x="342" y="145" class="leaf">›</text><rect class="chip" x="352" y="132" width="150" height="17" rx="4"/><text x="357" y="145" class="chip-label">Save and load with Zarr</text></g>
+  </g>
+  <g id="module-02">
+    <rect class="card" x="632" y="52" width="264" height="132" rx="8"/>
+    <circle class="step" cx="650" cy="72" r="10"/><text x="650" y="76" text-anchor="middle" class="step-number">02</text>
+    <text x="668" y="76" class="module-title">Simulate and Compose</text>
+    <g id="call-models" class="topic"><text x="646" y="105" class="leaf">›</text><rect class="chip" x="656" y="92" width="74" height="17" rx="4"/><text x="661" y="105" class="chip-label">Call models</text></g>
+    <g id="compose-models" class="topic"><text x="646" y="125" class="leaf">›</text><rect class="chip" x="656" y="112" width="62" height="17" rx="4"/><text x="661" y="125" class="chip-label">Compose</text></g>
+    <g id="add-hooks" class="topic"><text x="646" y="145" class="leaf">›</text><rect class="chip" x="656" y="132" width="48" height="17" rx="4"/><text x="661" y="145" class="chip-label">Hooks</text></g>
+    <g id="run-simulations" class="topic"><text x="646" y="165" class="leaf">›</text><rect class="chip" x="656" y="152" width="34" height="17" rx="4"/><text x="661" y="165" class="chip-label">Run</text></g>
+  </g>
+</svg>

@@ -30,10 +30,18 @@ checkpoint_license = "MIT"
 [mace]
 package = "mace-torch"
 package_version = "0.3.15"
-checkpoint_alias = "medium-0b2"
-checkpoint_distribution = "runtime download from the official MACE-MP registry"
+checkpoint_alias = "medium-mpa-0"
+checkpoint_sha256 = "75428afe3a1d7d8062e19bcaabd5c433623cabf308242ec9fb493e38604fb638"
+checkpoint_source_url = "https://github.com/ACEsuit/mace-mp/releases/download/mace_mpa_0/mace-mpa-0-medium.model"
+checkpoint_distribution = "runtime download through the official MACE resolver"
 checkpoint_license = "MIT"
-core_notebook_usage = "not required by current Core notebook cells"
+core_notebook_usage = "Core Module 1 mixed finite and periodic preview"
+
+[rdkit]
+package = "rdkit"
+package_version = "2026.3.4"
+package_license = "BSD-3-Clause"
+usage = "offline deterministic SMILES preparation with explicit hydrogens and ETKDGv3"
 
 [dispersion]
 generated_parameter_sha256 = "b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84"

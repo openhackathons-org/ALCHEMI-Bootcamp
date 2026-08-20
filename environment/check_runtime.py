@@ -71,6 +71,7 @@ def main() -> None:
         ("torch", PINS["torch"]),
         (PINS["model"]["package"], PINS["model"]["package_version"]),
         (PINS["mace"]["package"], PINS["mace"]["package_version"]),
+        (PINS["rdkit"]["package"], PINS["rdkit"]["package_version"]),
         (
             PINS["structure_viewer"]["package"],
             PINS["structure_viewer"]["package_version"],
@@ -135,6 +136,16 @@ def main() -> None:
         f"{checkpoint_name} SHA-256",
         checkpoint_sha256,
         PINS["model"]["checkpoint_sha256"],
+    )
+
+    from mace.calculators.foundations_models import download_mace_mp_checkpoint
+
+    mace = PINS["mace"]
+    mace_path = Path(download_mace_mp_checkpoint(mace["checkpoint_alias"])).resolve()
+    require_file_sha256(
+        "MACE checkpoint",
+        mace_path,
+        mace["checkpoint_sha256"],
     )
 
     print("ALCHEMI runtime verified")

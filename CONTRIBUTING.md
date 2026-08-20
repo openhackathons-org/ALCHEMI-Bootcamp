@@ -50,6 +50,9 @@ local caches, or unrelated formatting changes.
 - State prerequisites, expected inputs, hardware needs, and the result learners
   should expect.
 - Keep saved-result and live-compute paths consistent when both are supported.
+- Treat existing Markdown cells, graphics, outputs, and notebook order as part
+  of the lesson. Keep them in place unless the proposed change explicitly
+  includes a reviewed structural edit.
 - Use portable relative paths rather than paths from a local workstation.
 - Put a level-one heading at the top of each notebook and use clear,
   task-oriented section headings.
@@ -59,6 +62,15 @@ local caches, or unrelated formatting changes.
   reusable logic into a helper module.
 - Preserve scientific units, assumptions, data sources, and limitations.
 - Do not present saved output as a newly reproduced result.
+
+When several contributors work at once, assign one writer to each notebook and
+give other contributors separate helpers, assets, tests, runtime files, or
+read-only reviews. State the owned files before editing. Stop and coordinate if
+another change overlaps that ownership; preserve the other contributor's work.
+
+For a change whose wording, grouping, visual placement, or interaction remains
+uncertain, submit one small representative update for review before applying the
+same pattern throughout a notebook.
 
 ## Python guidelines
 

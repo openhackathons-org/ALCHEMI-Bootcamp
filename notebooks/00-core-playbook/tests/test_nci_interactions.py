@@ -174,6 +174,26 @@ def test_nci_equilibrium_references_returns_plain_rows(
     assert rows[2]["ccsd_t_cbs_kcal_mol"] == pytest.approx(-10.237)
 
 
+def test_checked_nci_curves_align_saved_models_with_current_references(
+    nci_data: tuple[list[Atoms], pd.DataFrame, pd.DataFrame],
+) -> None:
+    _, _, references = nci_data
+
+    curves = helpers.checked_nci_interaction_curves(references)
+
+    assert len(curves) == 30
+    assert tuple(curves["system_name"].drop_duplicates()) == (
+        "phenol - N-methylacetamide",
+        "propyne - methyl azide",
+        "ammonia - benzoate",
+    )
+    equilibrium = curves[np.isclose(curves["scale"], 1.0)]
+    assert equilibrium.iloc[0]["d3_increment"] == pytest.approx(-3.2267218)
+    assert equilibrium.iloc[1]["electrostatic_increment"] == pytest.approx(
+        -2.2557594
+    )
+
+
 def test_recurring_nci_complexes_preserve_size_formula_and_charge() -> None:
     complexes = helpers.load_recurring_nci_complexes()
 
@@ -286,6 +306,45 @@ def test_nci_curve_summary_reports_sequential_additions(
     assert all(row["d3_shift"] == pytest.approx(-0.5) for row in summary)
     assert all(row["electrostatic_shift"] == pytest.approx(-0.5) for row in summary)
     assert all(row["dft_mae"] == pytest.approx(0.0) for row in summary)
+
+
+def test_nci_analysis_table_formats_equilibrium_summary(
+    nci_data: tuple[list[Atoms], pd.DataFrame, pd.DataFrame],
+) -> None:
+    _, _, references = nci_data
+    curves = helpers.checked_nci_interaction_curves(references)
+    summary = pd.DataFrame(
+        helpers.summarize_nci_interaction_curves(curves, references)
+    )
+
+    equilibrium = helpers.nci_analysis_tables(summary)
+
+    assert equilibrium.columns.tolist() == [
+        "system",
+        "D3 shift [kcal/mol]",
+        "electrostatic shift [kcal/mol]",
+        "MAE vs DFT-D3 [kcal/mol]",
+        "MAE vs CCSD(T) [kcal/mol]",
+    ]
+    assert len(equilibrium) == 3
+    assert equilibrium.iloc[0]["D3 shift [kcal/mol]"] == pytest.approx(-3.227)
+
+
+def test_nci_curve_deltas_compare_matching_routes(
+    nci_data: tuple[list[Atoms], pd.DataFrame, pd.DataFrame],
+) -> None:
+    _, _, references = nci_data
+    checked = helpers.checked_nci_interaction_curves(references)
+    live = checked.copy()
+    live["complete"] += 0.125
+
+    deltas = helpers.nci_curve_deltas(live, checked)
+
+    assert deltas == {
+        "aimnet_base": pytest.approx(0.0),
+        "base_d3": pytest.approx(0.0),
+        "complete": pytest.approx(0.125),
+    }
 
 
 def test_direct_coulomb_adapter_returns_energy_and_fixed_charge_forces() -> None:

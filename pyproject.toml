@@ -12,6 +12,7 @@ dependencies = [
     "nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2",
     "numpy>=2,<2.4",
     "py3dmol==2.5.5",
+    "rdkit==2026.3.4",
     "rich==14.1.0",
     "torch==2.12.0",
     "zarr>=3,<4",
@@ -20,6 +21,7 @@ dependencies = [
 [dependency-groups]
 notebook = [
     "ipykernel>=7,<8",
+    "ipywidgets>=8.1,<9",
     "jupyterlab>=4,<5",
 ]
 test = [

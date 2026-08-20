@@ -9,18 +9,19 @@ are recorded in `SOURCES_AND_LICENSES.md`.
 
 | Material | Terms | Local notice |
 |---|---|---|
-| NCI Atlas curve subset and NCIA250 archive | CC BY 4.0 | `notebooks/00-core-playbook/data/nci_atlas/README.md` |
+| NCI Atlas curve subset | CC-BY stated upstream; version confirmation pending | `notebooks/00-core-playbook/data/nci_atlas/README.md` |
+| Mg-MOF-74 primitive structure | MIT | `notebooks/00-core-playbook/data/mof74/README.md` |
 | 3Dmol.js 2.5.5 bundle | BSD-3-Clause with incorporated notices | `shared/3dmol-2.5.5/LICENSE` |
 | py3Dmol 2.5.5 license copy | MIT | `shared/py3dmol-2.5.5/LICENSE.txt` |
 
 ### NCI Atlas data
 
 The two included data files are attributed to Jan Řezáč and NCI Atlas
-contributors and licensed under
-[CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). The pinned source,
-citations, checksums, and change descriptions are in
-[`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md) and the adjacent data
-README.
+contributors. The pinned upstream README states `Creative Commons CC-BY` and
+the pinned revision contains no license file. Confirm the exact CC-BY version
+with the data owner before redistribution. The source, citations, checksums,
+and change descriptions are in [`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md)
+and the adjacent data README.
 
 ### py3Dmol and 3Dmol.js
 
@@ -31,11 +32,20 @@ BSD-3-Clause browser renderer. The repository stores the checked JavaScript
 bundle, its minifier notice, the complete 3Dmol.js incorporated-code notices,
 and a copy of the py3Dmol MIT license.
 
-Saved interactive outputs in Core Modules 1 and 3 inline the same checked
+Saved interactive outputs in the Core modules inline the same checked
 3Dmol.js bundle. The notices under `shared/3dmol-2.5.5/` apply to the standalone
 file and the copies embedded in notebook HTML.
 
 3Dmol.js publication: <https://doi.org/10.1093/bioinformatics/btu829>
+
+### RASPA2 Mg-MOF-74 data
+
+The included 54-atom Mg-MOF-74 primitive CIF is derived from the Mg-MOF-74
+structure distributed with iRASPA/RASPA2 under the MIT License. The pinned
+source revision, source and derivative hashes, primitive-cell transformation,
+attribution, and citations are recorded in
+[`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md) and the adjacent data
+README.
 
 ## Installed software
 
@@ -88,20 +98,29 @@ GPL review and an image-level notice set.
 
 ### MACE and MACE-MP
 
-The environment installs `mace-torch 0.3.15`. The Docker build preloads the
-MIT-licensed MACE-MP-0b2 `medium-0b2` checkpoint from the official release.
-The current Core cells use AIMNet; MACE remains installed for future model
-work.
+The environment installs `mace-torch 0.3.15`. Runtime setup resolves the
+MIT-licensed MACE-MPA-0 `medium-mpa-0` checkpoint through MACE's official
+resolver and verifies SHA-256
+`75428afe3a1d7d8062e19bcaabd5c433623cabf308242ec9fb493e38604fb638`.
+Core Module 1 uses this checkpoint for the mixed finite and periodic preview.
 
 - [MACE source and MIT license](https://github.com/ACEsuit/mace)
 - [MACE foundation models and MIT license](https://github.com/ACEsuit/mace-foundations)
-- [MACE-MP-0b2 release](https://github.com/ACEsuit/mace-foundations/releases/tag/mace_mp_0b2)
+- [MACE-MPA-0 model file](https://github.com/ACEsuit/mace-mp/releases/download/mace_mpa_0/mace-mpa-0-medium.model)
 
 Checkpoint bytes stay outside the source repository. The current MACE
 dependency set includes `matscipy` under LGPL-2.1-or-later and
 `python-hostlist` under
 GPL-2.0-or-later. The `.licenses/` inventory records their installed versions
 and license texts.
+
+### RDKit
+
+The environment pins [RDKit 2026.3.4](https://pypi.org/project/rdkit/),
+distributed under BSD-3-Clause. Core Module 1 uses RDKit locally to parse
+SMILES, add explicit hydrogens, generate a fixed-seed ETKDGv3 conformer, and
+optimize it with MMFF or UFF. The source repository contains no RDKit binary or
+copied RDKit data.
 
 ## Container distribution
 

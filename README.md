@@ -7,13 +7,8 @@
 Hands-on notebooks for building GPU-accelerated atomistic simulations with
 NVIDIA ALCHEMI.
 
-[ALCHEMI overview](https://developer.nvidia.com/cuda/cuda-x-libraries/alchemi) ·
 [Toolkit documentation](https://nvidia.github.io/nvalchemi-toolkit/) ·
-[Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/) ·
-[Toolkit source](https://github.com/NVIDIA/nvalchemi-toolkit) ·
-[Toolkit-Ops documentation](https://nvidia.github.io/nvalchemi-toolkit-ops/) ·
-[Toolkit-Ops examples](https://nvidia.github.io/nvalchemi-toolkit-ops/examples/index.html) ·
-[Toolkit-Ops source](https://github.com/NVIDIA/nvalchemi-toolkit-ops)
+[Toolkit-Ops documentation](https://nvidia.github.io/nvalchemi-toolkit-ops/)
 
 ## About ALCHEMI Toolkit
 
@@ -27,30 +22,45 @@ dynamics, hooks, data loading, model composition, and distributed workflows.
 Toolkit-Ops supplies GPU-accelerated primitives for neighbor lists, geometry
 optimization, molecular dynamics, dispersion, and electrostatics.
 
-## Start with the Core Playbook
+## Start with the course tour
 
-Modules 1–3 form a 90-minute live path. Every module runs from a fresh kernel
-and can be taught on its own.
+The course gives researchers direct evidence that ALCHEMI Toolkit can support
+their own atomistic work, plus enough understanding to begin creating,
+modifying, and scaling workflows themselves.
 
-- **[Module 1: Data and batching](notebooks/00-core-playbook/alchemi-core-01-data-and-batching.ipynb):**
-  `AtomicData`, validation, heterogeneous `Batch`, GPU batching, and Zarr
-- **[Module 2: Models and simulation](notebooks/00-core-playbook/alchemi-core-02-models-and-simulation.ipynb):**
-  AIMNet2 evaluation, hooks, FIRE2, and saved results
-- **[Module 3: Compose and scale](notebooks/00-core-playbook/alchemi-core-03-adapt-and-scale.ipynb):**
-  molecular interaction components, a 205-complex batching survey, component
-  timing, fused and inflight execution, profiling, and distributed APIs
-The live path starts with a simple molecule and follows one Toolkit workflow:
+> Toolkit gives me composable building blocks to create my own chemistry or
+> materials workflows, keep them GPU-resident, and run many systems efficiently
+> in batches.
 
-`ASE structure → AtomicData → Batch → Zarr → model → hooks → FIRE2 → composition and scale`
+Begin with [Module 00: Toolkit in your research](notebooks/00-core-playbook/alchemi-core-00-quick-tour.ipynb).
+In 5–10 minutes, choose research examples and watch them share one prepared
+batched relaxation. The tour then opens into the two-part Core path.
 
-- **Data and batching:** `AtomicData`, `Batch`, GPU batching, and Zarr-backed
-  loading.
-- **Models and simulation:** a model wrapper, hooks, FIRE2, and saved workflow
-  state. Official examples continue into molecular dynamics.
-- **Compose and scale:** dispersion and electrostatics, component timing, fused
-  and inflight execution, distributed pipelines, and domain decomposition.
-The focused notebooks deepen one capability at a time while keeping the same
-public objects visible.
+The Core path is a scientific playground built around one reusable cycle:
+create, run, inspect, change, and extend. Learners choose systems, run useful
+calculations early, change meaningful parts, and extend the same objects into
+larger workflows. Every module runs from a fresh kernel and can also be taught
+on its own.
+
+| Module | Time | Memorable idea | Learner outcome |
+|---|---:|---|---|
+| [1 · Toolkit fundamentals and data structures](notebooks/00-core-playbook/alchemi-core-01-data-and-batching.ipynb) | 30 min | Different chemical systems can share one GPU-resident `Batch` and one workflow. | Learn Toolkit data structures through batching, loading and saving data, and Zarr. |
+| [2 · Simulate and compose](notebooks/00-core-playbook/alchemi-core-02-models-and-simulation.ipynb) | 40 min | Models, physical terms, hooks, and dynamics are building blocks learners can combine. | Use built-in and custom simulation parts: models, physical terms, watchers, dynamics, and optimization. |
+
+The required path keeps the public Toolkit objects visible:
+
+`ASE structures → AtomicData → Batch → model → hooks → FIRE2 → model composition`
+
+Short optional units are labeled `⚡ Power User` and sit beside the section they
+extend. Each one can be skipped without changing later required cells.
+
+### Prerequisites
+
+- Python and basic NumPy or PyTorch array experience
+- familiarity with molecular structures and energies
+- a CUDA-capable NVIDIA GPU for the full workshop results; CPU uses a shorter
+  walkthrough
+- the frozen environment created by `./scripts/setup`
 
 ## Install and run
 
@@ -97,7 +107,7 @@ steps, and 100-person rehearsal plan are in
 
 The container uses the same `uv.lock` and runtime checks as the local
 installation. Its build downloads and verifies AIMNet and D3, then downloads
-and loads the `medium-0b2` MACE checkpoint. Docker and the NVIDIA Container
+and loads the `medium-mpa-0` MACE checkpoint. Docker and the NVIDIA Container
 Toolkit are required on the host.
 
 Build the image with your user and group IDs so files saved from Jupyter remain
@@ -162,7 +172,7 @@ token from the remote `.alchemi-runtime/jupyter-token` file.
 
 ## Course roadmap
 
-The current release contains three linked Core modules. Planned course
+The current release contains the Toolkit tour and two linked Core modules. Planned course
 directions include:
 
 1. **Focused Toolkit deep dives:** Zarr and custom readers, model wrapping and
@@ -183,9 +193,10 @@ directions include:
 ## License
 
 NVIDIA-authored source and course diagrams are licensed under Apache 2.0. See
-[LICENSE](LICENSE). The included NCI Atlas data are CC BY 4.0, and the
-interactive viewer carries BSD and MIT notices. The NVIDIA course banner and
-NVIDIA marks are excluded from the Apache grant.
+[LICENSE](LICENSE). The pinned NCI Atlas source states CC-BY; its exact license
+version needs confirmation before redistribution. The interactive viewer
+carries BSD and MIT notices. The NVIDIA course banner and NVIDIA marks are
+excluded from the Apache grant.
 
 Installed packages, model checkpoints, CUDA components, and generated D3 data
 use their own terms. Review

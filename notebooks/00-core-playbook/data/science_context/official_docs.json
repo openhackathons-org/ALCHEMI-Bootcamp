@@ -1,0 +1,43 @@
+{
+  "schema": "alchemi.science-context.official-docs.v1",
+  "checked_date": "2026-08-18",
+  "documentation_version_observed": "0.2.0",
+  "links": [
+    {
+      "topic": "AtomicData and Batch",
+      "url": "https://nvidia.github.io/nvalchemi-toolkit/examples/basic/01_data_structures.html",
+      "title": "AtomicData and Batch: Graph-structured molecular data",
+      "status": "resolved"
+    },
+    {
+      "topic": "ASE integration",
+      "url": "https://nvidia.github.io/nvalchemi-toolkit/examples/basic/03_ase_integration.html",
+      "title": "ASE Integration: Real Molecular Structures in nvalchemi-toolkit",
+      "status": "resolved"
+    },
+    {
+      "topic": "Geometry optimization",
+      "url": "https://nvidia.github.io/nvalchemi-toolkit/examples/basic/02_geometry_optimization.html",
+      "title": "FIRE Geometry Optimization with Lennard-Jones Argon",
+      "status": "resolved"
+    },
+    {
+      "topic": "Biased potentials",
+      "url": "https://nvidia.github.io/nvalchemi-toolkit/examples/advanced/01_biased_potential.html",
+      "title": "Biased Sampling with BiasedPotentialHook",
+      "status": "resolved"
+    },
+    {
+      "topic": "Composable models",
+      "url": "https://nvidia.github.io/nvalchemi-toolkit/examples/advanced/07_composable_model_composition.html",
+      "title": "Additive Model Composition (LJ + Ewald)",
+      "status": "resolved"
+    },
+    {
+      "topic": "AIMNet2 and electrostatics",
+      "url": "https://nvidia.github.io/nvalchemi-toolkit/examples/advanced/08_aimnet2_ewald_pipeline.html",
+      "title": "AIMNet2 + Ewald Pipeline Geometry Optimization",
+      "status": "resolved"
+    }
+  ]
+}

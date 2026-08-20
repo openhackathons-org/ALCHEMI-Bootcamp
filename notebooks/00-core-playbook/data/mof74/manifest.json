@@ -1,0 +1,31 @@
+{
+  "schema": "alchemi.core-playbook.mof74.v1",
+  "display_name": "Mg-MOF-74",
+  "formula": "C24H6Mg6O18",
+  "source": {
+    "repository": "iRASPA/RASPA2",
+    "url": "https://github.com/iRASPA/RASPA2",
+    "commit": "fd2398c807e0e0ec4d73c6dd9333539ffb11e98e",
+    "path": "structures/mofs/cif/MgMOF-74.cif",
+    "sha256": "84923453752f66781295f70de4d8eaba8ecc8510d676ebcfd547ee8d68e23e43",
+    "atoms": 162,
+    "license": "MIT",
+    "attribution": "David Dubbeldam, Sofia Calero, Thijs Vlugt, Donald E. Ellis, Randall Q. Snurr, and RASPA contributors"
+  },
+  "local_file": {
+    "path": "mg-mof-74-primitive.cif",
+    "sha256": "e3b5d66082fe703363677c2f8fb4260cba137b34e17649df0c92ec68a86a1117",
+    "changes": "Reduced the R-centered conventional cell to a primitive cell with ASE 3.27.0; chemical coordinates are unchanged."
+  },
+  "primitive_check": {
+    "tool": "ase.build.cut",
+    "source_atoms": 162,
+    "primitive_atoms": 54,
+    "formula": "C24H6Mg6O18",
+    "vectors_in_source_fractional_coordinates": {
+      "a": [0.6666666666666666, 0.3333333333333333, 0.3333333333333333],
+      "b": [-0.3333333333333333, 0.3333333333333333, 0.3333333333333333],
+      "c": [-0.3333333333333333, -0.6666666666666666, 0.3333333333333333]
+    }
+  }
+}

@@ -9,12 +9,14 @@ import json
 import os
 import platform
 import re
+import sys
 import tomllib
 import warnings
 from base64 import b64encode
 from collections import OrderedDict
-from collections.abc import Iterator, Mapping, Sequence
-from contextlib import contextmanager
+from collections.abc import Callable, Iterator, Mapping, Sequence
+from contextlib import contextmanager, redirect_stdout
+from dataclasses import dataclass
 from hashlib import sha256
 from html import escape
 from io import BytesIO, StringIO
@@ -55,6 +57,57 @@ from rich.progress import (
 from rich.table import Column
 from rich.text import Text
 
+from .catalog import (
+    MoleculeSpec,
+    mace_checkpoint_path,
+    opening_performance_catalog,
+    structure_from_smiles,
+)
+from .viewers import (
+    copy_with_bond_distance,
+    show_bond_slider,
+    show_phenol_hook_experiment,
+    show_relaxation_player,
+    show_structure_explorer,
+    show_trajectory_comparison,
+    snapshot_batches,
+)
+
+__all__ = [
+    "MoleculeSpec",
+    "PhenolHookLesson",
+    "build_phenol_hook_lesson",
+    "checked_nci_interaction_curves",
+    "compare_opening_model_times",
+    "copy_with_bond_distance",
+    "dynamics_memory_hooks",
+    "graph_temperatures",
+    "hydrogen_bond_table",
+    "hydrogen_retention_history",
+    "mace_checkpoint_path",
+    "measure_torch_call",
+    "nci_analysis_tables",
+    "nci_curve_deltas",
+    "opening_performance_catalog",
+    "plot_fire2_history",
+    "plot_hydrogen_retention",
+    "plot_opening_time_comparison",
+    "plot_relaxation_time_perspective",
+    "prepare_model_batch",
+    "relax_selected_structures",
+    "run_relaxation_preview",
+    "show_bond_slider",
+    "show_phenol_hook_experiment",
+    "show_relaxation_player",
+    "show_structure_explorer",
+    "show_trajectory_comparison",
+    "snapshot_batches",
+    "structure_from_smiles",
+    "suppress_known_mace_load_noise",
+    "velocity_rescaling_post_update",
+    "velocity_verlet_pre_update",
+]
+
 _PROJECT_ROOT = Path(__file__).resolve().parents[3]
 _COLORS = json.loads(
     (_PROJECT_ROOT / "shared" / "alchemi-palette.json").read_text(encoding="utf-8")
@@ -86,6 +139,7 @@ _TUTORIAL_SMALL_FIGURE_WIDTH = (
 _TUTORIAL_BODY_FONT_SIZE = 8.0
 _TUTORIAL_MICRO_FONT_SIZE = 7.2
 _TUTORIAL_VIEWER_HEIGHT = 320
+_DFT_TIME_MULTIPLIER = 1_000
 _MODEL_ALIAS = "aimnet2-wb97m-d3_0"
 _MODEL_SHA256 = "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28"
 _RUNTIME_PINS = _PROJECT_ROOT / "environment" / "runtime-pins.toml"
@@ -352,13 +406,32 @@ def suppress_known_aimnet_load_warning():
         yield
 
 
+@contextmanager
+def suppress_known_mace_load_noise():
+    """Hide pinned dependency notices that do not describe the learner's run."""
+
+    with warnings.catch_warnings(), redirect_stdout(StringIO()):
+        warnings.filterwarnings(
+            "ignore",
+            message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
+            category=UserWarning,
+        )
+        yield
+
+
 def d3_parameter_file() -> Path:
     """Resolve and verify the D3 element-reference tables prepared by ``scripts/setup``."""
 
     configured = os.environ.get("ALCHEMI_D3_PARAM_FILE")
-    if not configured:
-        raise RuntimeError("ALCHEMI_D3_PARAM_FILE is not configured")
-    path = Path(configured).expanduser().resolve()
+    if configured:
+        path = Path(configured).expanduser().resolve()
+    else:
+        path = Path(sys.prefix).resolve().parent / "dftd3" / "dftd3_parameters.pt"
+        if not path.is_file():
+            raise RuntimeError(
+                "ALCHEMI_D3_PARAM_FILE is not configured and the current Python "
+                "runtime has no prepared D3 parameter file"
+            )
     pins = tomllib.loads(_RUNTIME_PINS.read_text(encoding="utf-8"))
     expected = str(pins["dispersion"]["generated_parameter_sha256"])
     if not path.is_file():
@@ -490,11 +563,19 @@ def prepare_dynamics_batch(batch: Batch) -> Batch:
     device = prepared.device
     counts = prepared.num_nodes_per_graph.tolist()
     if "energy" not in prepared:
-        prepared.add_key(
-            "energy",
-            [torch.zeros((1, 1), dtype=dtype, device=device) for _ in counts],
-            level="system",
-        )
+        if "system" in prepared._storage.groups:
+            prepared.add_key(
+                "energy",
+                [torch.zeros((1, 1), dtype=dtype, device=device) for _ in counts],
+                level="system",
+            )
+        else:
+            records = prepared.to_data_list()
+            for record in records:
+                record.add_system_property(
+                    "energy", torch.zeros((1, 1), dtype=dtype, device=device)
+                )
+            prepared = Batch.from_data_list(records, device=device)
     if "forces" not in prepared:
         prepared.add_key(
             "forces",
@@ -508,6 +589,456 @@ def prepare_dynamics_batch(batch: Batch) -> Batch:
             level="node",
         )
     return prepared
+
+
+def first_bond_indices(
+    atoms: Atoms,
+    first_symbol: str,
+    second_symbol: str,
+    *,
+    max_distance: float | None = None,
+) -> tuple[int, int]:
+    """Return the shortest matching bonded pair in one ASE structure."""
+
+    symbols = atoms.get_chemical_symbols()
+    candidates: list[tuple[float, int, int]] = []
+    for first, symbol in enumerate(symbols):
+        if symbol != first_symbol:
+            continue
+        for second, other_symbol in enumerate(symbols):
+            if other_symbol != second_symbol:
+                continue
+            distance = float(atoms.get_distance(first, second, mic=bool(atoms.pbc.any())))
+            if max_distance is None or distance <= max_distance:
+                candidates.append((distance, first, second))
+    if not candidates:
+        detail = f" within {max_distance:.3f} Å" if max_distance is not None else ""
+        raise ValueError(
+            f"No {first_symbol}-{second_symbol} pair found{detail}"
+        )
+    _, first, second = min(candidates)
+    return first, second
+
+
+def hydrogen_bond_table(
+    atoms: Atoms,
+    *,
+    heavy_symbols: Sequence[str] = ("C", "O"),
+    max_distance: float = 1.25,
+) -> pd.DataFrame:
+    """Return each hydrogen's nearest selected heavy atom within a cutoff."""
+
+    if not np.isfinite(max_distance) or max_distance <= 0.0:
+        raise ValueError("max_distance must be finite and positive")
+    selected = tuple(str(symbol) for symbol in heavy_symbols)
+    if not selected:
+        raise ValueError("heavy_symbols must contain at least one element")
+
+    symbols = atoms.get_chemical_symbols()
+    rows: list[dict[str, str | int | float]] = []
+    for hydrogen, symbol in enumerate(symbols):
+        if symbol != "H":
+            continue
+        candidates = []
+        for heavy, heavy_symbol in enumerate(symbols):
+            if heavy_symbol not in selected:
+                continue
+            distance = float(
+                atoms.get_distance(heavy, hydrogen, mic=bool(atoms.pbc.any()))
+            )
+            if distance <= max_distance:
+                candidates.append((distance, heavy, heavy_symbol))
+        if not candidates:
+            continue
+        distance, heavy, heavy_symbol = min(candidates)
+        rows.append(
+            {
+                "bond": f"{heavy_symbol}-H",
+                "heavy_index": int(heavy),
+                "hydrogen_index": int(hydrogen),
+                "initial_distance_a": float(distance),
+            }
+        )
+    if not rows:
+        labels = ", ".join(selected)
+        raise ValueError(f"No {labels}-H bonds found within {max_distance:.3f} Å")
+    return pd.DataFrame(rows)
+
+
+def dynamics_memory_hooks(
+    sink: Any,
+    *,
+    logging_frequency: int = 1,
+    snapshot_frequency: int = 1,
+) -> tuple[list[dict[str, float]], Any, Any]:
+    """Build in-memory scalar logging and snapshot hooks for a dynamics run."""
+
+    from nvalchemi.dynamics.hooks import LoggingHook, SnapshotHook
+
+    if logging_frequency < 1 or snapshot_frequency < 1:
+        raise ValueError("hook frequencies must be positive")
+
+    rows: list[dict[str, float]] = []
+
+    def collect_rows(_step: int, new_rows: list[dict[str, float]]) -> None:
+        rows.extend(new_rows)
+
+    logger = LoggingHook(
+        backend="custom",
+        writer_fn=collect_rows,
+        frequency=logging_frequency,
+    )
+    snapshots = SnapshotHook(sink, frequency=snapshot_frequency)
+    return rows, logger, snapshots
+
+
+def prepare_model_batch(batch: Batch, model: Any) -> Batch:
+    """Apply a model's neighbor hooks before one standalone forward call."""
+
+    from nvalchemi.hooks import DynamicsContext
+
+    context = DynamicsContext(batch=batch, model=model)
+    for hook in model.make_neighbor_hooks():
+        hook(context, DynamicsStage.BEFORE_COMPUTE)
+    return batch
+
+
+def graph_temperatures(batch: Batch) -> torch.Tensor:
+    """Return the instantaneous kinetic temperature of each graph in kelvin."""
+
+    masses = batch.atomic_masses.reshape(-1)
+    atom_kinetic_energy = 0.5 * masses * batch.velocities.square().sum(dim=1)
+    graph_kinetic_energy = torch.zeros(
+        batch.num_graphs,
+        device=batch.device,
+        dtype=batch.positions.dtype,
+    ).index_add_(0, batch.batch_idx.long(), atom_kinetic_energy)
+    degrees_of_freedom = 3.0 * batch.num_nodes_per_graph.to(graph_kinetic_energy)
+    return 2.0 * graph_kinetic_energy / (degrees_of_freedom * ase_units.kB)
+
+
+def velocity_verlet_pre_update(batch: Batch, time_step: float) -> None:
+    """Apply the first velocity-Verlet half kick and position update in place."""
+
+    masses = batch.atomic_masses.reshape(-1, 1)
+    with torch.no_grad():
+        batch.velocities.add_(0.5 * time_step * batch.forces / masses)
+        batch.positions.add_(time_step * batch.velocities)
+
+
+def velocity_rescaling_post_update(
+    batch: Batch,
+    time_step: float,
+    target_temperature: float,
+) -> None:
+    """Apply the second velocity-Verlet half kick and rescale velocities."""
+
+    masses = batch.atomic_masses.reshape(-1, 1)
+    with torch.no_grad():
+        batch.velocities.add_(0.5 * time_step * batch.forces / masses)
+        current = graph_temperatures(batch).clamp_min(1.0e-6)
+        scale = (target_temperature / current).sqrt()
+        batch.velocities.mul_(scale[batch.batch_idx.long(), None])
+
+
+def graph_local_pairs(
+    batch: Batch,
+    local_pair: tuple[int, int],
+) -> tuple[tuple[int, int], ...]:
+    """Map one graph-local atom pair into every graph of a repeated batch."""
+
+    first, second = (int(value) for value in local_pair)
+    pairs = []
+    for graph, (start, stop) in enumerate(
+        zip(batch.batch_ptr[:-1], batch.batch_ptr[1:], strict=True)
+    ):
+        start_index = int(start.item())
+        graph_size = int((stop - start).item())
+        if first >= graph_size or second >= graph_size:
+            raise ValueError(
+                f"Local pair {local_pair} is outside graph {graph} with {graph_size} atoms"
+            )
+        pairs.append((start_index + first, start_index + second))
+    return tuple(pairs)
+
+
+def packed_layout(batch: Batch) -> dict[str, Any]:
+    """Return checked packed and padded row counts for a Toolkit ``Batch``."""
+
+    counts = [int(value) for value in batch.num_nodes_per_graph.tolist()]
+    batch_ptr = [int(value) for value in batch.batch_ptr.tolist()]
+    batch_idx = [int(value) for value in batch.batch_idx.tolist()]
+    expected_ptr = [0]
+    for count in counts:
+        expected_ptr.append(expected_ptr[-1] + count)
+    if batch_ptr != expected_ptr:
+        raise ValueError(f"batch_ptr {batch_ptr} does not match node counts {counts}")
+    expected_idx = [graph for graph, count in enumerate(counts) for _ in range(count)]
+    if batch_idx != expected_idx:
+        raise ValueError("batch_idx does not match the graph ownership spans")
+    padded_width = max(counts, default=0)
+    return {
+        "counts": counts,
+        "batch_ptr": batch_ptr,
+        "batch_idx": batch_idx,
+        "packed_rows": sum(counts),
+        "padded_rows": padded_width * len(counts),
+        "padding_rows": sum(padded_width - count for count in counts),
+        "padded_width": padded_width,
+    }
+
+
+def maximum_force_history(
+    frames: Sequence[Batch],
+    labels: Sequence[str],
+) -> dict[str, list[float]]:
+    """Return one maximum force in eV/Å per graph and synchronized frame."""
+
+    history = {str(label): [] for label in labels}
+    for frame in frames:
+        if frame.num_graphs != len(labels):
+            raise ValueError("each frame must contain one graph per label")
+        for graph, label in enumerate(labels):
+            data = frame.get_data(graph)
+            forces = getattr(data, "forces", None)
+            if forces is None:
+                raise ValueError("snapshot frames must include forces")
+            maximum = forces.norm(dim=1).max().detach().cpu().item()
+            history[str(label)].append(float(maximum))
+    return history
+
+
+def hydrogen_retention_history(
+    frames: Sequence[Batch],
+    bonds: pd.DataFrame,
+    labels: Sequence[str],
+    *,
+    intact_factor: float = 1.5,
+) -> pd.DataFrame:
+    """Measure the longest initial X-H bond and retained-bond count per frame."""
+
+    required = {"heavy_index", "hydrogen_index", "initial_distance_a"}
+    missing = required - set(bonds.columns)
+    if missing:
+        raise ValueError(f"bonds are missing {sorted(missing)!r}")
+    if not np.isfinite(intact_factor) or intact_factor <= 1.0:
+        raise ValueError("intact_factor must be finite and greater than one")
+    if not frames:
+        raise ValueError("frames must contain at least one Batch")
+
+    rows: list[dict[str, str | int | float]] = []
+    for frame_index, frame in enumerate(frames):
+        if frame.num_graphs != len(labels):
+            raise ValueError("each frame must contain one graph per label")
+        for graph, label in enumerate(labels):
+            data = frame.get_data(graph)
+            positions = data.positions.detach().cpu()
+            distances = []
+            intact = 0
+            for row in bonds.itertuples(index=False):
+                heavy = int(row.heavy_index)
+                hydrogen = int(row.hydrogen_index)
+                if max(heavy, hydrogen) >= len(positions):
+                    raise ValueError("a bond index is outside a trajectory graph")
+                distance = float(torch.linalg.vector_norm(
+                    positions[hydrogen] - positions[heavy]
+                ).item())
+                distances.append(distance)
+                intact += distance <= float(row.initial_distance_a) * intact_factor
+            rows.append(
+                {
+                    "frame": frame_index,
+                    "branch": str(label),
+                    "max_xh_distance_a": max(distances),
+                    "intact_bonds": int(intact),
+                }
+            )
+    return pd.DataFrame(rows)
+
+
+def run_relaxation_preview(
+    batch: Batch,
+    model: Any,
+    labels: Sequence[str],
+    *,
+    steps: int,
+    frozen_layers: int = 0,
+) -> dict[str, Any]:
+    """Run a bounded batched relaxation and return inputs for the player."""
+
+    from nvalchemi._typing import AtomCategory
+    from nvalchemi.dynamics import FIRE2, HostMemory
+    from nvalchemi.dynamics.hooks import FreezeAtomsHook, SnapshotHook
+    from nvalchemi.neighbors import compute_neighbors
+
+    if steps < 1:
+        raise ValueError("steps must be positive")
+    if batch.num_graphs != len(labels):
+        raise ValueError("labels must contain one name per graph")
+    if frozen_layers < 0:
+        raise ValueError("frozen_layers cannot be negative")
+
+    sink = HostMemory(capacity=(steps + 1) * batch.num_graphs)
+    snapshots = SnapshotHook(sink, frequency=1)
+    dynamics_batch = prepare_dynamics_batch(batch)
+    hooks = [*model.make_neighbor_hooks()]
+    if frozen_layers:
+        for start, stop in zip(
+            dynamics_batch.batch_ptr[:-1],
+            dynamics_batch.batch_ptr[1:],
+            strict=True,
+        ):
+            start_index, stop_index = int(start.item()), int(stop.item())
+            z = dynamics_batch.positions[start_index:stop_index, 2]
+            levels = torch.unique(torch.round(z * 1_000) / 1_000).sort().values
+            if len(levels) <= frozen_layers:
+                raise ValueError("surface needs more z layers than frozen_layers")
+            frozen = z <= levels[frozen_layers - 1] + 1.0e-3
+            dynamics_batch.atom_categories[start_index:stop_index][frozen] = (
+                AtomCategory.SPECIAL.value
+            )
+        hooks.insert(0, FreezeAtomsHook())
+    hooks.append(snapshots)
+    optimizer = FIRE2(
+        model=model,
+        dt=0.005,
+        maxstep=0.03,
+        n_steps=steps,
+        hooks=hooks,
+    )
+    compute_neighbors(
+        dynamics_batch,
+        config=model.model_config.neighbor_config,
+    )
+    optimizer.compute(dynamics_batch)
+    sink.write(dynamics_batch)
+    with measure_torch_execution(batch.device) as measurement:
+        optimizer.run(dynamics_batch)
+
+    frames = snapshot_batches(sink, batch.num_graphs)
+    run_device = torch.device(batch.device)
+    if run_device.type == "cuda":
+        device_index = run_device.index
+        if device_index is None:
+            device_index = torch.cuda.current_device()
+        device_label = f"cuda:{device_index} · {torch.cuda.get_device_name(run_device)}"
+    else:
+        device_label = "CPU"
+
+    return {
+        "trajectories": frames,
+        "labels": [str(label) for label in labels],
+        "force_history": maximum_force_history(frames, labels),
+        "device": device_label,
+        "elapsed_s": measurement["seconds"],
+        "convergence": f"{steps}-step preview",
+    }
+
+
+def relax_selected_structures(
+    selection: Any,
+    *,
+    device: torch.device | str,
+    steps: int = 16,
+    distortion_std_angstrom: float = 0.10,
+    distortion_seed: int = 7,
+) -> dict[str, Any]:
+    """Relax one picker selection as a single Batch for the Module 00 tour."""
+
+    from nvalchemi.models import MACEWrapper
+
+    specs = selection.selected_specs()
+    if len(specs) > 5:
+        raise ValueError("Choose at most five systems for the synchronized player")
+    if not np.isfinite(distortion_std_angstrom) or distortion_std_angstrom < 0:
+        raise ValueError("distortion_std_angstrom must be finite and non-negative")
+
+    run_device = torch.device(device)
+    random = np.random.default_rng(distortion_seed)
+    structures = []
+    for spec in specs:
+        structure = spec.build()
+        if distortion_std_angstrom > 0 and len(structure) > 1:
+            displacement = random.normal(
+                scale=distortion_std_angstrom,
+                size=structure.positions.shape,
+            )
+            displacement -= displacement.mean(axis=0, keepdims=True)
+            structure.positions += displacement
+        structures.append(structure)
+
+    graphs = [
+        AtomicData.from_atoms(structure, device=run_device)
+        for structure in structures
+    ]
+    batch = Batch.from_data_list(graphs, device=run_device)
+    labels = [spec.display_name for spec in specs]
+
+    with suppress_known_mace_load_noise():
+        model = MACEWrapper.from_checkpoint(
+            mace_checkpoint_path("medium-mpa-0"),
+            device=run_device,
+            dtype=torch.float32,
+        ).eval()
+    model.set_config("active_outputs", {"energy", "forces"})
+
+    preview = run_relaxation_preview(batch, model, labels, steps=steps)
+    preview["reference_structures"] = dict(zip(labels, structures, strict=True))
+    return {
+        "batch": batch,
+        "labels": labels,
+        "preview": preview,
+        "player": show_relaxation_player(**preview),
+    }
+
+
+def neighbor_edges_are_local(batch: Batch) -> bool:
+    """Return whether every stored neighbor edge stays inside one graph."""
+
+    edge_value = None
+    for name in ("neighbor_list", "neighbor_matrix", "neighbor_pairs"):
+        value = getattr(batch, name, None)
+        if value is not None:
+            edge_value = value
+            break
+    if edge_value is None:
+        raise ValueError("batch does not contain a recognized neighbor edge field")
+    edges = edge_value
+    if edges.ndim != 2:
+        raise ValueError(f"neighbor edge field must be two-dimensional, found {edges.shape}")
+    if edges.shape[0] == 2:
+        source, target = edges[0], edges[1]
+    elif edges.shape[1] == 2:
+        source, target = edges[:, 0], edges[:, 1]
+    else:
+        raise ValueError(f"neighbor edge field must contain pairs, found {edges.shape}")
+    valid = (source >= 0) & (target >= 0)
+    if not bool(valid.any()):
+        return True
+    owner = batch.batch_idx
+    return bool(torch.equal(owner[source[valid].long()], owner[target[valid].long()]))
+
+
+def load_science_context_record(name: str) -> dict[str, Any]:
+    """Load one checked scientific context record from the Core data directory."""
+
+    if not re.fullmatch(r"[a-z0-9][a-z0-9_-]*", name):
+        raise ValueError("science context record names use lowercase letters, numbers, - and _")
+    path = (
+        _PROJECT_ROOT
+        / "notebooks"
+        / "00-core-playbook"
+        / "data"
+        / "science_context"
+        / f"{name}.json"
+    )
+    try:
+        record = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise RuntimeError(f"Could not load science context record: {path}") from error
+    if not isinstance(record, dict):
+        raise TypeError(f"Science context record must be a JSON object: {path}")
+    return record
 
 
 class FusedStatusTrace:
@@ -617,6 +1148,210 @@ def measure_torch_execution(
             measurement["peak_memory_mib"] = (
                 torch.cuda.max_memory_allocated(run_device) / 1024**2
             )
+
+
+def measure_torch_call[T](
+    call: Callable[[], T],
+    device: torch.device | str,
+) -> tuple[T, dict[str, float | None]]:
+    """Run one callable inside the synchronized Torch measurement boundary."""
+
+    with measure_torch_execution(device) as measurement:
+        result = call()
+    return result, measurement
+
+
+def compare_opening_model_times(
+    model: Any,
+    graphs: Sequence[AtomicData],
+    batch: Batch,
+    device: torch.device | str,
+    *,
+    warmups: int = 1,
+    repeats: int = 3,
+) -> dict[str, float | int | list[float]]:
+    """Compare warm median times for separate and batched MLIP calls."""
+
+    from nvalchemi.neighbors import compute_neighbors
+
+    if not graphs:
+        raise ValueError("graphs must contain at least one system")
+    if warmups < 1 or repeats < 1:
+        raise ValueError("warmups and repeats must be positive")
+
+    run_device = torch.device(device)
+    single_batches = [
+        Batch.from_data_list([graph], device=run_device) for graph in graphs
+    ]
+    for single_batch in single_batches:
+        compute_neighbors(single_batch, config=model.model_config.neighbor_config)
+    compute_neighbors(batch, config=model.model_config.neighbor_config)
+
+    routes = {
+        "separate": {
+            "label": f"MLIP · {len(single_batches):,} separate calls",
+            "calls": len(single_batches),
+            "run": lambda: [_run_model_once(model, item) for item in single_batches],
+        },
+        "batch": {
+            "label": f"MLIP · one Batch[{len(single_batches):,}] call",
+            "calls": 1,
+            "run": lambda: _run_model_once(model, batch),
+        },
+    }
+    progress = Progress(
+        _ActiveSpinnerColumn(),
+        TextColumn("{task.description}"),
+        BarColumn(
+            bar_width=24,
+            style=_SURFACE_RAISED,
+            complete_style=_NVIDIA_GREEN,
+            finished_style=_NVIDIA_GREEN,
+        ),
+        _AlignedCountColumn(),
+        TimeElapsedColumn(),
+        refresh_per_second=10,
+    )
+    task_ids = {
+        name: progress.add_task(
+            route["label"],
+            total=(warmups + repeats) * int(route["calls"]),
+            active=False,
+            start=False,
+        )
+        for name, route in routes.items()
+    }
+    timings: dict[str, list[float]] = {name: [] for name in routes}
+    with Live(progress, console=progress.console, refresh_per_second=10, transient=True):
+        for name, route in routes.items():
+            task_id = task_ids[name]
+            progress.start_task(task_id)
+            progress.update(task_id, active=True, refresh=True)
+            for _ in range(warmups):
+                route["run"]()
+                _sync_torch_device(run_device)
+                progress.update(task_id, advance=int(route["calls"]), refresh=True)
+            for _ in range(repeats):
+                _sync_torch_device(run_device)
+                start = perf_counter()
+                route["run"]()
+                _sync_torch_device(run_device)
+                timings[name].append(perf_counter() - start)
+                progress.update(task_id, advance=int(route["calls"]), refresh=True)
+            progress.update(task_id, active=False, refresh=True)
+
+    sequential_seconds = float(np.median(timings["separate"]))
+    batched_seconds = float(np.median(timings["batch"]))
+    return {
+        "systems": len(single_batches),
+        "sequential_seconds": sequential_seconds,
+        "batched_seconds": batched_seconds,
+        "sequential_repeat_seconds": timings["separate"],
+        "batch_repeat_seconds": timings["batch"],
+        "warmups": warmups,
+        "repeats": repeats,
+    }
+
+
+def _run_model_once(model: Any, batch: Batch) -> None:
+    """Run one inference call without retaining its output."""
+
+    _ = model(batch)
+
+
+def _short_duration(seconds: float) -> str:
+    """Format seconds for compact labels on the opening comparison plot."""
+
+    if seconds >= 3600:
+        return f"{seconds / 3600:.1f} h"
+    if seconds >= 60:
+        return f"{seconds / 60:.1f} min"
+    return f"{seconds:.2f} s"
+
+
+def plot_opening_time_comparison(results: Mapping[str, Any]) -> None:
+    """Compare measured MLIP calls with a simple DFT time projection."""
+
+    systems = int(results["systems"])
+    batched_seconds = float(results["batched_seconds"])
+    values = [
+        float(results["sequential_seconds"]),
+        batched_seconds,
+        batched_seconds * _DFT_TIME_MULTIPLIER,
+    ]
+    labels = [
+        f"MLIP\n{systems} separate calls",
+        "MLIP\none Batch call",
+        "Projected DFT\n(~O(N³))",
+    ]
+    colors = [_NVIDIA_BLUE, _NVIDIA_GREEN, _NVIDIA_ORANGE]
+
+    figure, axis = plt.subplots(
+        figsize=(_TUTORIAL_SMALL_FIGURE_WIDTH, 3.7)
+    )
+    bars = axis.bar(labels, values, color=colors, width=0.64)
+    axis.set_yscale("log")
+    axis.set(
+        title=f"Energy + forces for {systems} varied systems",
+        ylabel="Elapsed time [s, log scale]",
+    )
+    axis.bar_label(
+        bars,
+        labels=[_short_duration(value) for value in values],
+        padding=4,
+        fontsize=_TUTORIAL_BODY_FONT_SIZE,
+    )
+    _polish_axis(axis, grid="y")
+    axis.margins(y=0.22)
+    _display_figure(
+        figure,
+        f"Median of {int(results['repeats'])} synchronized MLIP measurements after "
+        f"{int(results['warmups'])} warm-up. The DFT bar projects the Batch time "
+        f"by {_DFT_TIME_MULTIPLIER:,.0f}× for an order-of-magnitude comparison.",
+        max_width=_TUTORIAL_SMALL_VISUAL_MAX_WIDTH,
+    )
+
+
+def plot_relaxation_time_perspective(relaxation: Mapping[str, Any]) -> None:
+    """Compare one measured Toolkit relaxation with a simple DFT projection."""
+
+    labels = list(relaxation["labels"])
+    preview = relaxation["preview"]
+    systems = len(labels)
+    measured_seconds = float(preview["elapsed_s"])
+    projected_seconds = measured_seconds * _DFT_TIME_MULTIPLIER
+    node_label = "node" if systems == 1 else "nodes"
+
+    figure, axis = plt.subplots(figsize=(_TUTORIAL_SMALL_FIGURE_WIDTH, 3.2))
+    bars = axis.bar(
+        ["Toolkit + MLIP\n1 GPU", f"Projected DFT\n{systems} {node_label}"],
+        [measured_seconds, projected_seconds],
+        color=[_NVIDIA_GREEN, _NVIDIA_ORANGE],
+        width=0.58,
+    )
+    axis.set_yscale("log")
+    axis.set(
+        title=f"{systems} selected systems · {preview['convergence']}",
+        ylabel="Elapsed time [s, log scale]",
+    )
+    axis.bar_label(
+        bars,
+        labels=[
+            _short_duration(measured_seconds),
+            _short_duration(projected_seconds),
+        ],
+        padding=4,
+        fontsize=_TUTORIAL_BODY_FONT_SIZE,
+    )
+    _polish_axis(axis, grid="y")
+    axis.margins(y=0.22)
+    _display_figure(
+        figure,
+        f"Toolkit + MLIP is the measured trajectory time on {preview['device']}. "
+        f"DFT is projected at {_DFT_TIME_MULTIPLIER:,.0f}× that time, with one "
+        "node per selected system.",
+        max_width=_TUTORIAL_SMALL_VISUAL_MAX_WIDTH,
+    )
 
 
 def benchmark_progress(total: int, *, description: str) -> Iterator[int]:
@@ -978,10 +1713,217 @@ def plot_batching_benchmark(
 
 
 def configure_tutorial() -> None:
-    """Apply the shared tutorial style and silence a one-time library notice."""
+    """Apply the shared tutorial style and silence known library notices."""
 
+    warnings.filterwarnings(
+        "ignore",
+        message="Converting a tensor with requires_grad=True to a scalar.*",
+        category=UserWarning,
+        module=r"nvalchemi\.models\.aimnet2",
+    )
+    warnings.filterwarnings(
+        "ignore",
+        message=r'install "ipywidgets".*',
+        category=UserWarning,
+        module=r"rich\.live",
+    )
     plt.style.use(_PROJECT_ROOT / "shared" / "alchemi-dark.mplstyle")
     _prime_tree_set_notice()
+
+
+@dataclass
+class PhenolHookLesson:
+    """Objects created for the Module 2 opening phenol experiment."""
+
+    device: torch.device
+    device_label: str
+    labels: tuple[str, ...]
+    atoms: list[Atoms]
+    example_batch: Batch
+    phenol: Atoms
+    bond_symbols: tuple[str, str]
+    bond_indices: tuple[int, int]
+    bond_label: str
+    model: Any
+    spring_constant: float
+    activation_distance: float
+    fire2_steps: int
+    run_state: dict[str, Any]
+    run_release: Callable[[Atoms, Sequence[Any]], Mapping[str, Any]]
+    initial_distance: float
+    initial_result: Mapping[str, Any]
+    widget: Any
+
+
+def build_phenol_hook_lesson(
+    *,
+    bond_symbols: tuple[str, str] = ("O", "H"),
+    initial_distance: float = 1.35,
+    spring_constant: float = 10.0,
+    activation_distance: float = 1.10,
+    distance_range: tuple[float, float] = (0.90, 1.50),
+) -> PhenolHookLesson:
+    """Build the complete widget-first phenol experiment for Module 2."""
+
+    from nvalchemi.dynamics import FIRE2, HostMemory
+    from nvalchemi.dynamics.hooks import SnapshotHook
+    from nvalchemi.hooks import BiasedPotentialHook
+    from nvalchemi.models import AIMNet2Wrapper
+    from nvalchemi.neighbors import compute_neighbors
+
+    configure_tutorial()
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if device.type == "cuda":
+        device_label = (
+            f"cuda:{torch.cuda.current_device()} · {torch.cuda.get_device_name(device)}"
+        )
+    else:
+        device_label = "cpu"
+
+    labels = ("Ammonia", "Propyne", "Phenol")
+    atoms = [load_example_molecule(label) for label in labels]
+    for structure in atoms:
+        structure.info["charge"] = 0
+    example_batch = Batch.from_data_list(
+        [AtomicData.from_atoms(structure, device=device) for structure in atoms],
+        device=device,
+    )
+
+    phenol = atoms[2]
+    first_symbol, second_symbol = bond_symbols
+    bond_indices = first_bond_indices(
+        phenol,
+        first_symbol,
+        second_symbol,
+        max_distance=1.25,
+    )
+    bond_label = "–".join(bond_symbols)
+
+    with suppress_known_aimnet_load_warning():
+        model = AIMNet2Wrapper.from_checkpoint(
+            "aimnet2-wb97m-d3_0",
+            device=device,
+            compile_model=False,
+        )
+    model.eval()
+    model.requires_grad_(False)
+    model.set_config("active_outputs", {"energy", "forces"})
+
+    fire2_steps = 12 if device.type == "cuda" else 4
+    run_state: dict[str, Any] = {}
+
+    def run_release(
+        edited_phenol: Atoms,
+        extra_hooks: Sequence[Any] = (),
+    ) -> Mapping[str, Any]:
+        start_data = AtomicData.from_atoms(edited_phenol, device=device)
+        choice_batch = Batch.from_data_list([start_data, start_data], device=device)
+        bond_pairs = graph_local_pairs(choice_batch, bond_indices)
+
+        def hookean_term(batch: Batch) -> tuple[torch.Tensor, torch.Tensor]:
+            energy = torch.zeros_like(batch.energy)
+            forces = torch.zeros_like(batch.forces)
+            anchor, hydrogen = bond_pairs[1]
+            delta = batch.positions[hydrogen] - batch.positions[anchor]
+            distance = delta.norm()
+            extension = torch.clamp(distance - activation_distance, min=0.0)
+            energy[1, 0] = 0.5 * spring_constant * extension.square()
+            restoring = -spring_constant * extension * delta / distance
+            forces[hydrogen] += restoring
+            forces[anchor] -= restoring
+            return energy, forces
+
+        hook = BiasedPotentialHook(
+            hookean_term,
+            stage=DynamicsStage.AFTER_COMPUTE,
+        )
+        sink = HostMemory(capacity=(fire2_steps + 1) * choice_batch.num_graphs)
+        snapshots = SnapshotHook(sink, frequency=1)
+        simulation_batch = prepare_dynamics_batch(choice_batch)
+        optimizer = FIRE2(
+            model=model,
+            dt=0.005,
+            maxstep=0.03,
+            n_steps=fire2_steps,
+            hooks=[*model.make_neighbor_hooks(), hook, *extra_hooks, snapshots],
+        )
+        compute_neighbors(
+            simulation_batch,
+            config=model.model_config.neighbor_config,
+        )
+        optimizer.compute(simulation_batch)
+        hook._apply_bias(simulation_batch)
+        sink.write(simulation_batch)
+
+        with measure_torch_execution(device) as measurement:
+            optimized_batch = optimizer.run(simulation_batch)
+
+        frames = snapshot_batches(sink, choice_batch.num_graphs)
+        trajectories: dict[str, list[Atoms]] = {}
+        for graph, label in enumerate(("baseline", "hookean")):
+            trajectories[label] = []
+            for frame in frames:
+                frame_atoms = edited_phenol.copy()
+                frame_atoms.positions = (
+                    frame.get_data(graph).positions.detach().cpu().numpy()
+                )
+                trajectories[label].append(frame_atoms)
+
+        response = {
+            "trajectories": trajectories,
+            "device": device_label,
+            "elapsed_s": measurement["seconds"],
+            "convergence": f"{fire2_steps}-step preview",
+        }
+        run_state.clear()
+        run_state.update(
+            batch=simulation_batch,
+            bond_pairs=bond_pairs,
+            hookean_term=hookean_term,
+            hook=hook,
+            sink=sink,
+            optimizer=optimizer,
+            result=optimized_batch,
+            frames=frames,
+            response=response,
+        )
+        return response
+
+    initial_structure = copy_with_bond_distance(
+        phenol,
+        bond_indices,
+        initial_distance,
+    )
+    initial_result = run_release(initial_structure)
+    widget = show_phenol_hook_experiment(
+        initial_structure,
+        bond_indices,
+        run_release,
+        initial_result,
+        spring_constant=spring_constant,
+        activation_distance=activation_distance,
+        distance_range=distance_range,
+    )
+    return PhenolHookLesson(
+        device=device,
+        device_label=device_label,
+        labels=labels,
+        atoms=atoms,
+        example_batch=example_batch,
+        phenol=phenol,
+        bond_symbols=bond_symbols,
+        bond_indices=bond_indices,
+        bond_label=bond_label,
+        model=model,
+        spring_constant=spring_constant,
+        activation_distance=activation_distance,
+        fire2_steps=fire2_steps,
+        run_state=run_state,
+        run_release=run_release,
+        initial_distance=initial_distance,
+        initial_result=initial_result,
+        widget=widget,
+    )
 
 
 def _prime_tree_set_notice() -> None:
@@ -1503,6 +2445,101 @@ def _display_figure(
     plt.close(figure)
 
 
+def plot_packed_vs_padded(batch: Batch, labels: Sequence[str]) -> None:
+    """Compare exact Toolkit row packing with rectangular padding."""
+
+    layout = packed_layout(batch)
+    counts = layout["counts"]
+    if len(labels) != len(counts):
+        raise ValueError("labels must contain one name per graph")
+
+    figure, axes = plt.subplots(
+        2,
+        1,
+        figsize=(_TUTORIAL_FIGURE_WIDTH, 4.8),
+        gridspec_kw={"height_ratios": [1.0, 1.55]},
+    )
+    packed_axis, padded_axis = axes
+    colors = [_NVIDIA_GREEN, _NVIDIA_BLUE, _NVIDIA_TEAL, _NVIDIA_ORANGE, "#A78BFA"]
+
+    for graph, (label, start, stop) in enumerate(
+        zip(labels, layout["batch_ptr"][:-1], layout["batch_ptr"][1:], strict=True)
+    ):
+        packed_axis.barh(
+            0,
+            stop - start,
+            left=start,
+            color=colors[graph % len(colors)],
+            edgecolor=_BACKGROUND,
+            linewidth=1.0,
+        )
+        packed_axis.text(
+            (start + stop) / 2,
+            0,
+            f"{label}\n{stop - start}",
+            ha="center",
+            va="center",
+            fontsize=_TUTORIAL_MICRO_FONT_SIZE,
+            color=_INK_ON_ACCENT if graph == 0 else _TEXT,
+        )
+
+    padded_width = layout["padded_width"]
+    for graph, (label, count) in enumerate(zip(labels, counts, strict=True)):
+        padded_axis.barh(
+            graph,
+            count,
+            color=colors[graph % len(colors)],
+            edgecolor=_BACKGROUND,
+            linewidth=1.0,
+        )
+        if count < padded_width:
+            padded_axis.barh(
+                graph,
+                padded_width - count,
+                left=count,
+                color=_SURFACE_RAISED,
+                edgecolor=_BORDER,
+                linewidth=0.8,
+                hatch="//",
+            )
+        padded_axis.text(
+            0.3,
+            graph,
+            f"{label}: {count} atoms",
+            ha="left",
+            va="center",
+            fontsize=_TUTORIAL_MICRO_FONT_SIZE,
+            color=_TEXT,
+        )
+
+    packed_axis.set_title(
+        f"Toolkit packed rows: {layout['packed_rows']} atom nodes, 0 padding slots",
+        loc="left",
+    )
+    packed_axis.set_xlim(0, max(layout["packed_rows"], 1))
+    packed_axis.set_yticks([])
+    packed_axis.set_xlabel(
+        f"batch_ptr = {layout['batch_ptr']} · batch_idx owns each span"
+    )
+
+    padded_axis.set_title(
+        f"Rectangular padding: {layout['padded_rows']} slots, "
+        f"{layout['padding_rows']} padding slots",
+        loc="left",
+    )
+    padded_axis.set_xlim(0, max(padded_width, 1))
+    padded_axis.set_yticks([])
+    padded_axis.set_xlabel("atoms are nodes · model neighbors become edges")
+    padded_axis.invert_yaxis()
+    for axis in axes:
+        _polish_axis(axis, grid=None)
+    figure.tight_layout(h_pad=1.4)
+    _display_figure(
+        figure,
+        "Packed Toolkit node rows compared with rectangular padding for the five-system Batch.",
+    )
+
+
 def build_argon_batch(
     device: torch.device,
     dtype: torch.dtype,
@@ -1736,6 +2773,53 @@ def load_nci_atlas(
     graph_rows = table[list(_NCI_GRAPH_COLUMNS)].copy().reset_index(drop=True)
     graph_rows.insert(0, "graph_index", np.arange(len(graph_rows), dtype=np.int64))
     return atoms, graph_rows, _nci_reference_curves(table)
+
+
+def checked_nci_interaction_curves(references: pd.DataFrame) -> pd.DataFrame:
+    """Return the checked full NCI curves aligned with current reference rows."""
+
+    record = load_science_context_record("nci_baseline")
+    curve_records = record.get("curves")
+    if not isinstance(curve_records, list) or not curve_records:
+        raise ValueError("nci_baseline curves must be a non-empty list")
+    saved = pd.DataFrame(curve_records).rename(
+        columns={
+            "aimnet_local_kcal_mol": "aimnet_base",
+            "local_plus_d3_kcal_mol": "base_d3",
+            "complete_kcal_mol": "complete",
+        }
+    )
+    join_keys = ["system_id", "system_name", "scale"]
+    required_saved = {*join_keys, "aimnet_base", "base_d3", "complete"}
+    missing = required_saved - set(saved.columns)
+    if missing:
+        raise ValueError(f"nci_baseline curves are missing {sorted(missing)!r}")
+    required_references = {*_NCI_CURVE_KEYS}
+    missing = required_references - set(references.columns)
+    if missing:
+        raise ValueError(f"references are missing {sorted(missing)!r}")
+
+    curve_keys = references[list(_NCI_CURVE_KEYS)].copy()
+    saved_columns = [
+        *join_keys,
+        "aimnet_base",
+        "base_d3",
+        "complete",
+    ]
+    curves = curve_keys.merge(
+        saved[saved_columns],
+        on=join_keys,
+        how="inner",
+        validate="one_to_one",
+    )
+    if len(curves) != len(references) or len(curves) != len(saved):
+        raise ValueError("checked curves and references describe different scan points")
+    values = curves[["aimnet_base", "base_d3", "complete"]].to_numpy(dtype=float)
+    if not np.isfinite(values).all():
+        raise ValueError("checked curves contain a non-finite energy")
+    curves["d3_increment"] = curves["base_d3"] - curves["aimnet_base"]
+    curves["electrostatic_increment"] = curves["complete"] - curves["base_d3"]
+    return curves
 
 
 def nci_equilibrium_references(
@@ -2263,6 +3347,65 @@ def summarize_nci_interaction_curves(
     return summary
 
 
+def nci_analysis_tables(
+    summary: pd.DataFrame,
+) -> pd.DataFrame:
+    """Format the equilibrium NCI analysis table."""
+
+    summary_columns = {
+        "system",
+        "d3_shift",
+        "electrostatic_shift",
+        "dft_mae",
+        "cc_mae",
+    }
+    missing = summary_columns - set(summary.columns)
+    if missing:
+        raise ValueError(f"summary is missing {sorted(missing)!r}")
+    equilibrium = summary[
+        ["system", "d3_shift", "electrostatic_shift", "dft_mae", "cc_mae"]
+    ].rename(
+        columns={
+            "d3_shift": "D3 shift [kcal/mol]",
+            "electrostatic_shift": "electrostatic shift [kcal/mol]",
+            "dft_mae": "MAE vs DFT-D3 [kcal/mol]",
+            "cc_mae": "MAE vs CCSD(T) [kcal/mol]",
+        }
+    )
+    return equilibrium.round(3)
+
+
+def nci_curve_deltas(
+    live_curves: pd.DataFrame,
+    checked_curves: pd.DataFrame,
+) -> dict[str, float]:
+    """Return the largest absolute live-to-checked difference for each route."""
+
+    keys = ["subset", "system_id", "system_name", "interaction_class", "scale"]
+    routes = ("aimnet_base", "base_d3", "complete")
+    required = {*keys, *routes}
+    for name, table in (("live_curves", live_curves), ("checked_curves", checked_curves)):
+        missing = required - set(table.columns)
+        if missing:
+            raise ValueError(f"{name} is missing {sorted(missing)!r}")
+    comparison = live_curves.merge(
+        checked_curves,
+        on=keys,
+        suffixes=("_live", "_checked"),
+        validate="one_to_one",
+    )
+    if len(comparison) != len(live_curves) or len(comparison) != len(checked_curves):
+        raise ValueError("live and checked curves describe different scan points")
+    return {
+        route: float(
+            (comparison[f"{route}_live"] - comparison[f"{route}_checked"])
+            .abs()
+            .max()
+        )
+        for route in routes
+    }
+
+
 def interaction_accuracy_summary(
     curves: pd.DataFrame,
     references: pd.DataFrame,
@@ -2282,7 +3425,7 @@ def interaction_accuracy_summary(
     component_names = tuple(
         components
         if components is not None
-        else [name for name in curves.columns if name not in _NCI_CURVE_KEYS]
+        else ("aimnet_base", "base_d3", "complete")
     )
     if not component_names:
         raise ValueError("at least one component is required")
@@ -2474,6 +3617,119 @@ def plot_ncia250_survey(
     )
 
 
+def plot_fire2_history(rows: pd.DataFrame, labels: Sequence[str]) -> None:
+    """Plot per-graph energy and maximum force recorded by ``LoggingHook``."""
+
+    required = {"step", "graph_idx", "energy", "fmax"}
+    missing = required - set(rows.columns)
+    if missing:
+        raise ValueError(f"FIRE2 log rows are missing {sorted(missing)!r}")
+    if rows.empty:
+        raise ValueError("FIRE2 log rows are empty")
+    graph_indices = pd.to_numeric(rows["graph_idx"], errors="raise").astype(int)
+    if graph_indices.min() < 0 or graph_indices.max() >= len(labels):
+        raise ValueError("FIRE2 graph_idx is outside labels")
+
+    figure, axes = plt.subplots(
+        1,
+        2,
+        figsize=(_TUTORIAL_FIGURE_WIDTH, 3.4),
+        sharex=True,
+    )
+    colors = (_NVIDIA_GREEN, _NVIDIA_BLUE, _NVIDIA_ORANGE, _MUTED)
+    for graph, label in enumerate(labels):
+        group = rows[graph_indices == graph].sort_values("step")
+        axes[0].plot(
+            group["step"],
+            group["energy"],
+            color=colors[graph % len(colors)],
+            linewidth=2.0,
+            label=str(label),
+        )
+        axes[1].plot(
+            group["step"],
+            group["fmax"],
+            color=colors[graph % len(colors)],
+            linewidth=2.0,
+            label=str(label),
+        )
+    axes[0].set(title="Potential energy", xlabel="FIRE2 step", ylabel="Energy [eV]")
+    axes[1].set(title="Maximum force", xlabel="FIRE2 step", ylabel="fmax [eV/Å]")
+    for axis in axes:
+        axis.ticklabel_format(axis="both", style="plain", useOffset=False)
+        _polish_axis(axis)
+    axes[1].legend(frameon=False, fontsize=_TUTORIAL_MICRO_FONT_SIZE)
+    figure.tight_layout(w_pad=1.6)
+    _display_figure(
+        figure,
+        "Energy and maximum force recorded while the composed model relaxes three NCI complexes with FIRE2.",
+    )
+
+
+def plot_hydrogen_retention(
+    history: pd.DataFrame,
+    *,
+    total_bonds: int,
+) -> None:
+    """Plot maximum X-H distance and retained initial bonds for two MD branches."""
+
+    required = {"frame", "branch", "max_xh_distance_a", "intact_bonds"}
+    missing = required - set(history.columns)
+    if missing:
+        raise ValueError(f"hydrogen history is missing {sorted(missing)!r}")
+    if history.empty:
+        raise ValueError("hydrogen history is empty")
+    if total_bonds < 1:
+        raise ValueError("total_bonds must be positive")
+
+    figure, axes = plt.subplots(
+        1,
+        2,
+        figsize=(_TUTORIAL_FIGURE_WIDTH, 3.4),
+        sharex=True,
+    )
+    branches = tuple(dict.fromkeys(history["branch"].astype(str)))
+    colors = (_NVIDIA_ORANGE, _NVIDIA_GREEN, _NVIDIA_BLUE, _MUTED)
+    for branch, color in zip(branches, colors, strict=False):
+        group = history[history["branch"].astype(str) == branch].sort_values("frame")
+        axes[0].plot(
+            group["frame"],
+            group["max_xh_distance_a"],
+            color=color,
+            linewidth=2.2,
+            label=branch,
+        )
+        axes[1].step(
+            group["frame"],
+            group["intact_bonds"],
+            where="post",
+            color=color,
+            linewidth=2.2,
+            label=branch,
+        )
+    axes[0].set(
+        title="Longest initial X-H bond",
+        xlabel="Saved MD frame",
+        ylabel="Distance [Å]",
+    )
+    axes[1].set(
+        title="Initial X-H bonds retained",
+        xlabel="Saved MD frame",
+        ylabel="Intact bonds",
+        ylim=(-0.15, total_bonds + 0.35),
+    )
+    axes[1].set_yticks(range(total_bonds + 1))
+    for axis in axes:
+        axis.ticklabel_format(axis="x", style="plain", useOffset=False)
+        _polish_axis(axis)
+    axes[1].legend(frameon=False, fontsize=_TUTORIAL_BODY_FONT_SIZE)
+    figure.tight_layout(w_pad=1.6)
+    _display_figure(
+        figure,
+        "Maximum X-H distance and number of retained initial X-H bonds during the high-temperature phenol comparison.",
+    )
+
+
 def plot_nci_interaction_curves(
     curves: pd.DataFrame,
     references: pd.DataFrame,
@@ -2509,9 +3765,9 @@ def plot_nci_interaction_curves(
         raise ValueError("interaction curves contain a non-finite value")
 
     labels = {
-        "aimnet_base": "AIMNet base",
-        "base_d3": "base + D3",
-        "complete": "complete model",
+        "aimnet_base": "AIMNet2",
+        "base_d3": "AIMNet2 + D3",
+        "complete": "AIMNet2 + D3 + electrostatics",
     }
     styles = {
         "aimnet_base": (_NVIDIA_ORANGE, ":", 1.8),
@@ -2585,7 +3841,7 @@ def plot_nci_interaction_curves(
     figure.subplots_adjust(top=0.76, wspace=0.24)
     _display_figure(
         figure,
-        "AIMNet base, base plus D3, and complete interaction curves for three NCI Atlas dissociation scans, compared with DFT-D3 and CCSD(T)/CBS references.",
+        "AIMNet2, AIMNet2 plus D3, and AIMNet2 plus D3 plus electrostatics interaction curves for three NCI Atlas dissociation scans, compared with DFT-D3 and CCSD(T)/CBS references.",
     )
 
 

@@ -35,17 +35,19 @@ def test_exercise_checks_accept_completed_answers() -> None:
         ("Ammonia", "Propyne", "Phenol"),
     )
 
+
 def test_exercise_checks_handle_pending_answers() -> None:
     assert not helpers.check_amide_anion(None)
     assert not helpers.check_model_wrapper_exercise(None, None, None)
     assert not helpers.check_force_drop_exercise(None, None, ("Ammonia",))
-def test_notebook_checks_delegate_to_helpers() -> None:
+
+
+def test_core_notebooks_use_current_helper_backed_exercises() -> None:
     notebooks = [
         CORE_DIR / f"alchemi-core-0{index}-{slug}.ipynb"
         for index, slug in (
             (1, "data-and-batching"),
             (2, "models-and-simulation"),
-            (3, "adapt-and-scale"),
         )
     ]
     sources = []
@@ -55,6 +57,6 @@ def test_notebook_checks_delegate_to_helpers() -> None:
 
     combined = "\n".join(sources)
     assert "globals()" not in combined
-    assert "helpers.check_amide_anion" in combined
-    assert "helpers.check_model_wrapper_exercise" in combined
-    assert "helpers.check_force_drop_exercise" in combined
+    assert "helpers.structure_from_smiles" in combined
+    assert "helpers.graph_local_pairs" in combined
+    assert "helpers.summarize_nci_interaction_curves" in combined
