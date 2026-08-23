@@ -7,9 +7,10 @@ scripts.
 The Launchable uses Brev VM Mode with Jupyter. The setup script stores the
 course and runtime under the attendee's persistent `workspace` directory,
 prewarms required assets, verifies the locked runtime, checks the assigned CUDA
-GPU, and registers `Python 3 (ALCHEMI Core)` with the kernel name used by the
-notebooks. The Brev profile installs the course runtime and kernel packages. It
-leaves local JupyterLab and test tools out of the attendee environment.
+GPU, publishes the ipywidgets frontend for Brev's host Jupyter server, and
+registers `Python 3 (ALCHEMI Core)` with the kernel name used by the notebooks.
+The Brev profile installs the course runtime and kernel packages. It leaves
+local JupyterLab and test tools out of the attendee environment.
 
 ## Organizer prerequisites
 
@@ -117,6 +118,15 @@ Expected results:
 - Python 3.12
 - `torch.cuda.is_available()` returns `True`
 - The GPU name matches the Launchable instance
+
+Run Cell 6 in Module 00 and confirm that the selectable structure cards appear.
+If the cell shows its static runtime notice, inspect the host frontend:
+
+```bash
+jupyter labextension list
+```
+
+`@jupyter-widgets/jupyterlab-manager` must be enabled and report `OK`.
 
 Run Modules 00 through 02 from fresh kernels. Record total setup wall time,
 fresh-kernel runtime for each module, peak GPU memory, disk use after setup,
