@@ -93,6 +93,12 @@ echo "Checking package pins and prewarmed assets."
 "${course_root}/scripts/run" \
     python "${course_root}/environment/check_runtime.py"
 
+host_jupyter_data_dir="${ALCHEMI_BREV_HOST_JUPYTER_DATA_DIR:-${HOME}/.local/share/jupyter}"
+echo "Publishing the widget frontend for Brev's host Jupyter server."
+"${course_root}/scripts/run" \
+    python "${course_root}/environment/install_widget_frontend.py" \
+    --jupyter-data-dir "${host_jupyter_data_dir}"
+
 echo "Checking CUDA access."
 cuda_device="$("${course_root}/scripts/run" python - <<'PY'
 import torch
@@ -105,7 +111,7 @@ PY
 )"
 echo "CUDA device: ${cuda_device}"
 
-kernel_root="${ALCHEMI_BREV_KERNEL_ROOT:-${HOME}/.local/share/jupyter/kernels}"
+kernel_root="${ALCHEMI_BREV_KERNEL_ROOT:-${host_jupyter_data_dir}/kernels}"
 kernel_directory="${kernel_root}/alchemi-core"
 kernel_json="${kernel_directory}/kernel.json"
 mkdir -p "${kernel_directory}"
@@ -158,6 +164,8 @@ ready_file="${runtime_root}/brev-ready.txt"
     printf 'course_root=%s\n' "${course_root}"
     printf 'runtime_root=%s\n' "${runtime_root}"
     printf 'kernel=%s\n' "${kernel_json}"
+    printf 'widget_frontend=%s\n' \
+        "${host_jupyter_data_dir}/labextensions/@jupyter-widgets/jupyterlab-manager"
     printf 'gpu=%s\n' "${cuda_device}"
     printf 'setup_seconds=%s\n' "${setup_seconds}"
     printf 'runtime_kib=%s\n' "${runtime_kib}"
@@ -167,6 +175,7 @@ echo "ALCHEMI is ready."
 echo "Course: ${course_root}"
 echo "Runtime: ${runtime_root}"
 echo "Jupyter kernel: Python 3 (ALCHEMI Core)"
+echo "Widget frontend: ${host_jupyter_data_dir}/labextensions/@jupyter-widgets/jupyterlab-manager"
 echo "Setup time: ${setup_seconds} seconds"
 echo "Runtime disk use: ${runtime_kib} KiB"
 echo "Ready record: ${ready_file}"
