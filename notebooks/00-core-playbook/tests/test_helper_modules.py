@@ -99,7 +99,7 @@ def test_module_three_exposes_only_its_notebook_interface() -> None:
     from helpers import module03
 
     assert set(module03.__all__) == _helper_references(
-        "alchemi-core-03-scale-a-campaign.ipynb"
+        "alchemi-core-03-scale-a-study.ipynb"
     )
 
 

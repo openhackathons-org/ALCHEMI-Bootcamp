@@ -26,7 +26,7 @@ workflows inspired by real research and development use cases.
 | [00 · Toolkit quick tour](notebooks/00-core-playbook/alchemi-core-00-quick-tour.ipynb) | Choose research systems and run a complete batched relaxation. | 5–10 min |
 | [01 · Toolkit fundamentals and data structures](notebooks/00-core-playbook/alchemi-core-01-data-and-batching.ipynb) | Create `AtomicData`, pack several structures into a `Batch`, and work with Zarr data. | 30 min |
 | [02 · Simulate and compose](notebooks/00-core-playbook/alchemi-core-02-models-and-simulation.ipynb) | Compose a model and control molecular dynamics with a bias hook; optionally debug a failed update. | 40 min |
-| [03 · Scale a study](notebooks/00-core-playbook/alchemi-core-03-scale-a-campaign.ipynb) | Build fixed-stage, `FusedStage`, and inflight routes for one molecular study. | 15–20 min |
+| [03 · Scale a study](notebooks/00-core-playbook/alchemi-core-03-scale-a-study.ipynb) | Build fixed-stage, `FusedStage`, and inflight routes for one molecular study. | 15–20 min |
 
 ## Prerequisites
 
