@@ -1,0 +1,84 @@
+<?xml version="1.0"?>
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<mxGraphModel adaptiveColors="auto" page="0" pageWidth="920" pageHeight="280">
+  <root>
+    <mxCell id="0"/>
+    <mxCell id="1" parent="0"/>
+    <mxCell id="canvas" value="" style="rounded=1;arcSize=8;fillColor=#171D20;strokeColor=none;" vertex="1" parent="1">
+      <mxGeometry x="0" y="0" width="920" height="280" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-label" value="No prefetch" style="whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontFamily=NVIDIA Sans;verticalAlign=middle;fontColor=#A8B0B8;fontSize=13;fontStyle=1;align=left;" vertex="1" parent="1">
+      <mxGeometry x="24" y="8" width="120" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-device-label" value="DEVICE" style="whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontFamily=NVIDIA Sans;verticalAlign=middle;fontColor=#A8B0B8;fontSize=10;fontStyle=1;align=left;" vertex="1" parent="1">
+      <mxGeometry x="700" y="8" width="116" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-load-b1" value="load B1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="150" y="42" width="68" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-run-b1" value="run B1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="222" y="42" width="68" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-load-b2" value="load B2" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="294" y="42" width="68" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-run-b2" value="run B2" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="366" y="42" width="68" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-load-b3" value="load B3" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="438" y="42" width="68" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-run-b3" value="run B3" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="510" y="42" width="68" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="no-device-b1" value="B1 &#xB7; current" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="700" y="42" width="116" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="divider" value="" style="shape=line;strokeColor=#3A444D;strokeWidth=1;" vertex="1" parent="1">
+      <mxGeometry x="24" y="96" width="872" height="1" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-label" value="prefetch_factor = 2" style="whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontFamily=NVIDIA Sans;verticalAlign=middle;fontColor=#76B900;fontSize=13;fontStyle=1;align=left;" vertex="1" parent="1">
+      <mxGeometry x="24" y="106" width="160" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-device-label" value="DEVICE" style="whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontFamily=NVIDIA Sans;verticalAlign=middle;fontColor=#A8B0B8;fontSize=10;fontStyle=1;align=left;" vertex="1" parent="1">
+      <mxGeometry x="676" y="106" width="100" height="28" as="geometry"/>
+    </mxCell>
+    <mxCell id="model-label" value="MODEL" style="whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontFamily=NVIDIA Sans;verticalAlign=middle;fontColor=#A8B0B8;fontSize=9;fontStyle=1;align=right;" vertex="1" parent="1">
+      <mxGeometry x="54" y="144" width="80" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="prefetch-label" value="PREFETCH" style="whiteSpace=wrap;html=1;fillColor=none;strokeColor=none;fontFamily=NVIDIA Sans;verticalAlign=middle;fontColor=#A8B0B8;fontSize=9;fontStyle=1;align=right;" vertex="1" parent="1">
+      <mxGeometry x="54" y="182" width="80" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-load-b1" value="load B1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="150" y="144" width="72" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-run-b1" value="run B1" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="226" y="144" width="100" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-run-b2" value="run B2" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="330" y="144" width="100" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-run-b3" value="run B3" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="434" y="144" width="100" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-load-b2" value="prefetch B2" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="226" y="182" width="100" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-load-b3" value="prefetch B3" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=10;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="330" y="182" width="100" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-device-b1" value="B1 current" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#76B900;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=8.5;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="676" y="144" width="64" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-device-b2" value="B2 ready" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=8.5;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="744" y="144" width="64" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="pf-device-b3" value="B3 ready" style="rounded=1;arcSize=5;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=#2E6F9E;strokeWidth=1;fontColor=#F3F4F6;fontFamily=NVIDIA Sans;fontSize=8.5;fontStyle=1;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="812" y="144" width="64" height="30" as="geometry"/>
+    </mxCell>
+    <mxCell id="footer" value="&lt;font color='#A8B0B8'&gt;&lt;b&gt;No prefetch: 1 Batch on device&lt;/b&gt;&lt;/font&gt;&amp;nbsp;&amp;nbsp;&lt;font color='#68737E'&gt;&lt;b&gt;vs&lt;/b&gt;&lt;/font&gt;&amp;nbsp;&amp;nbsp;&lt;font color='#76B900'&gt;&lt;b&gt;factor 2: 3 Batches on device&lt;/b&gt;&lt;/font&gt;" style="rounded=1;arcSize=6;whiteSpace=wrap;html=1;fillColor=#28312B;strokeColor=none;fontFamily=NVIDIA Sans;fontSize=11;align=center;verticalAlign=middle;" vertex="1" parent="1">
+      <mxGeometry x="24" y="234" width="872" height="24" as="geometry"/>
+    </mxCell>
+  </root>
+</mxGraphModel>

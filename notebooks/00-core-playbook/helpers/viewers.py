@@ -11,15 +11,18 @@ previews that remain useful when a notebook host does not run JavaScript.
 from __future__ import annotations
 
 import json
-from collections.abc import Callable, Mapping, Sequence
+import re
+from collections.abc import Mapping, Sequence
 from html import escape
 from io import StringIO
+from itertools import pairwise
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 from uuid import uuid4
 
 import numpy as np
 from ase import Atoms
+from ase.data import chemical_symbols
 from ase.io import write
 
 if TYPE_CHECKING:
@@ -41,6 +44,8 @@ _GREEN = _PALETTE["nvidia_green"]
 _BLUE = _PALETTE["nvidia_blue"]
 _MAX_WIDTH = 920
 _VIEWER_HEIGHT = 320
+_TUTORIAL_FORMULA_PREFIX = ("C", "N", "O")
+MAX_RELAXATION_SYSTEMS = 5
 
 _ELEMENT_COLORS = {
     "H": "#E8ECEF",
@@ -63,6 +68,36 @@ def _html(markup: str) -> Any:
     return HTML(markup)
 
 
+def runtime_required_notice(
+    *,
+    element_id: str | None = None,
+    fill: bool = False,
+    margin: str = "0 0 12px",
+) -> str:
+    """Return the shared static-preview notice for interactive outputs."""
+
+    identity = f' id="{escape(element_id, quote=True)}"' if element_id else ""
+    layout = (
+        "height:100%;margin:0;padding:28px;display:flex;flex-direction:column;"
+        "justify-content:center;align-items:center;text-align:center"
+        if fill
+        else f"margin:{margin};padding:14px 16px"
+    )
+    return f"""
+<aside{identity} data-runtime-note role="note"
+       style="box-sizing:border-box;{layout};gap:7px;border:1px solid {_BORDER};
+              border-left:3px solid {_GREEN};border-radius:8px;
+              background:{_BACKGROUND};color:{_TEXT};
+              font-family:'NVIDIA Sans',Arial,sans-serif;">
+  <strong style="font-size:.92rem;font-weight:700;">Runtime required</strong>
+  <span style="max-width:620px;color:{_MUTED};font-size:.84rem;line-height:1.45;">
+    This interactive output may not display properly on GitHub. Open the notebook
+    in Jupyter or VS Code, connect to a runtime, and run this cell.
+  </span>
+</aside>
+""".strip()
+
+
 def _json_for_script(value: Any) -> str:
     """Serialize browser data without allowing a value to close its script tag."""
 
@@ -79,6 +114,436 @@ def _atoms_to_xyz(atoms: Atoms) -> str:
 
 def _formula(atoms: Atoms) -> str:
     return atoms.get_chemical_formula(mode="hill")
+
+
+def _viewing_rotation(positions: np.ndarray) -> np.ndarray:
+    """Return a rigid rotation that turns a structure to face the default camera.
+
+    3Dmol.js looks down z, so anything built along z is drawn end-on: ASE's
+    linear `molecule("C2H2")` collapses to a single visible atom. Aligning the
+    two broadest principal axes with the screen fixes that for any structure,
+    and picks the same framing `plot_molecule` projects onto, so the interactive
+    view and the flat projection agree.
+    """
+
+    centered = positions - positions.mean(axis=0, keepdims=True)
+    _, _, axes = np.linalg.svd(centered, full_matrices=True)
+    if np.linalg.det(axes) < 0:
+        axes[2] *= -1.0  # keep the viewing frame right-handed
+    return axes
+
+
+def _to_view_frame(
+    points: np.ndarray, origin: np.ndarray, rotation: np.ndarray
+) -> np.ndarray:
+    """Apply one viewing transform to atom positions and lattice corners alike."""
+
+    return (np.atleast_2d(points) - origin) @ rotation.T
+
+
+def _cell_edge_points(cell: Any) -> list[tuple[np.ndarray, np.ndarray]]:
+    """Return the twelve edges of a lattice parallelepiped anchored at the origin."""
+
+    vectors = np.asarray(cell, dtype=float)
+    edges: list[tuple[np.ndarray, np.ndarray]] = []
+    for axis in range(3):
+        first, second = (vectors[index] for index in range(3) if index != axis)
+        for along_first, along_second in ((0, 0), (1, 0), (0, 1), (1, 1)):
+            corner = along_first * first + along_second * second
+            edges.append((corner, corner + vectors[axis]))
+    return edges
+
+
+def _viewer_point(position: np.ndarray) -> dict[str, float]:
+    return {"x": float(position[0]), "y": float(position[1]), "z": float(position[2])}
+
+
+def _tutorial_formula(atoms: Atoms) -> str:
+    """Format viewer labels with C, N, and O first and hydrogen last."""
+
+    counts: dict[str, int] = {}
+    for symbol in atoms.get_chemical_symbols():
+        counts[symbol] = counts.get(symbol, 0) + 1
+
+    ordered = [symbol for symbol in _TUTORIAL_FORMULA_PREFIX if symbol in counts]
+    ordered.extend(sorted(symbol for symbol in counts if symbol not in {*ordered, "H"}))
+    if "H" in counts:
+        ordered.append("H")
+
+    return "".join(
+        symbol + (str(counts[symbol]) if counts[symbol] > 1 else "")
+        for symbol in ordered
+    )
+
+
+def _zoom_factor(framed: np.ndarray, *, fill: float = 0.82) -> float:
+    """Return the extra zoom that undoes 3Dmol's minimum framing distance.
+
+    `zoomTo` never frames anything closer than its `minimumZoomToDistance`, a
+    10 Å field of view that py3Dmol gives no way to reconfigure, so a four-atom
+    molecule lands as a speck in the middle of the frame. `zoomTo` sizes that
+    field to twice the distance from the bounding-box centre to the outermost
+    point, so scaling by that ratio makes the structure span `fill` of the
+    viewport's short side instead.
+    """
+
+    lower, upper = framed.min(axis=0), framed.max(axis=0)
+    radius = float(np.linalg.norm(framed - (lower + upper) / 2, axis=1).max())
+    if radius < 1.0e-9:
+        return 1.0  # a lone atom has no extent to frame
+    return max(radius, 5.0) * fill / radius
+
+
+def _viewer_html(
+    view: Any,
+    height: int,
+    *,
+    formula: str,
+    atom_count: int,
+) -> str:
+    """Wrap py3Dmol's snippet in a compact, self-contained structure widget.
+
+    py3Dmol always emits a `<script src=...>` pointing at jsDelivr, guarded by
+    `if (typeof $3Dmolpromise === 'undefined')`. Defining that promise ahead of
+    the snippet satisfies the guard, so the vendored bundle inlined here is the
+    only copy of 3Dmol.js the page ever sees. Inlining rather than linking is
+    what keeps the view alive inside a self-contained `nbconvert` export.
+    """
+
+    bundle = _VIEWER_BUNDLE.read_text(encoding="utf-8")
+    # `var define, exports, module` shadows the CommonJS and AMD hooks the UMD
+    # bundle probes. nbconvert's HTML template loads RequireJS, and a defined
+    # `define.amd` would park the bundle in a module registry that nothing here
+    # requires, leaving `window.$3Dmol` undefined and the viewer blank.
+    preamble = (
+        "<script>(function(){var define,exports,module;\n"
+        f"{bundle}\n"
+        "$3Dmolpromise=Promise.resolve();}).call(window);</script>"
+    )
+    viewer_markup = view.write_html()
+    warning = re.search(
+        r'<p id="(3dmolwarning_[^"]+)"[^>]*>.*?</p>',
+        viewer_markup,
+        flags=re.DOTALL,
+    )
+    if warning:
+        warning_id = escape(warning.group(1), quote=True)
+        runtime_notice = runtime_required_notice(
+            element_id=warning_id,
+            fill=True,
+        )
+        viewer_markup = (
+            viewer_markup[: warning.start()]
+            + runtime_notice
+            + viewer_markup[warning.end() :]
+        )
+    formula_text = escape(formula)
+    return f"""
+<div class="alchemi-structure-widget"
+     aria-label="Interactive structure viewer for {formula_text}"
+     style="box-sizing:border-box; width:100%; max-width:{_MAX_WIDTH}px;
+            margin:0; overflow:hidden; border-radius:10px;
+            background:{_BACKGROUND}; color:{_TEXT};
+            font-family:'NVIDIA Sans',Arial,sans-serif;">
+  <div style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between;
+              gap:16px; padding:12px 16px 10px; background:{_SURFACE};">
+    <div style="display:flex; align-items:baseline; gap:10px; min-width:0;">
+      <strong style="font-size:1.05rem; font-weight:650;">{formula_text}</strong>
+      <span style="color:{_MUTED}; font-size:0.84rem;">{atom_count} atoms</span>
+    </div>
+    <span style="color:{_MUTED}; font-size:0.78rem; text-align:right;">
+      Drag to rotate · scroll to zoom · select up to 3 atoms
+    </span>
+  </div>
+  <div class="alchemi-structure-view"
+       style="width:100%; height:{height}px; overflow:hidden;
+              background:{_BACKGROUND};">
+    {preamble}{viewer_markup}
+  </div>
+  <div style="display:flex; align-items:center; justify-content:space-between;
+              gap:14px; padding:10px 16px 12px; background:{_SURFACE};">
+    <div data-atom-detail role="status" aria-live="polite"
+         style="min-height:22px; color:{_TEXT}; font-size:0.84rem;
+                font-variant-numeric:tabular-nums;">
+      Select 1 atom to inspect, 2 for a distance, or 3 for an angle.
+    </div>
+    <button type="button" data-clear-measurement disabled
+            style="flex:none; border:1px solid {_BORDER}; border-radius:6px;
+                   padding:5px 9px; background:{_SURFACE_RAISED}; color:{_TEXT};
+                   font:inherit; font-size:0.76rem; cursor:pointer;">
+      Clear
+    </button>
+  </div>
+</div>
+"""
+
+
+def _atom_click_callback(atoms: Atoms) -> str:
+    """Return the 3Dmol.js callback for atom selection and measurements."""
+
+    atomic_numbers = {
+        chemical_symbols[number]: int(number)
+        for number in sorted({int(number) for number in atoms.get_atomic_numbers()})
+    }
+    number_map = json.dumps(atomic_numbers, sort_keys=True)
+    return f"""function(atom, viewer, event, container) {{
+      const numbers = {number_map};
+      const host = container && container.jquery ? container[0] : container;
+      const root = host && host.closest
+        ? host.closest('.alchemi-structure-widget')
+        : null;
+      const atomIndex = Number(atom.serial);
+      const atomicNumber = numbers[atom.elem];
+      const detail = root ? root.querySelector('[data-atom-detail]') : null;
+      const clearButton = root
+        ? root.querySelector('[data-clear-measurement]')
+        : null;
+      const state = viewer.__alchemiMeasurement || {{
+        atoms: [],
+        shapes: [],
+        labels: []
+      }};
+      viewer.__alchemiMeasurement = state;
+
+      const labelPixelRatio = Math.min(
+        3,
+        Math.max(2, window.devicePixelRatio||1)
+      );
+      const highResolutionLabel = function(text, spec) {{
+        const fontSize = Number(spec.fontSize || 12);
+        const padding = Number(spec.padding || 4);
+        const borderThickness = Number(spec.borderThickness || 0);
+        const label = viewer.addLabel(text, {{
+          ...spec,
+          fontSize:Math.round(fontSize*labelPixelRatio),
+          padding:padding*labelPixelRatio,
+          borderThickness:borderThickness*labelPixelRatio
+        }});
+        label.sprite.scale.set(1/labelPixelRatio,1/labelPixelRatio,1);
+        return label;
+      }};
+
+      const reset = function(message) {{
+        state.shapes.forEach(function(shape) {{ viewer.removeShape(shape); }});
+        state.labels.forEach(function(label) {{ viewer.removeLabel(label); }});
+        state.atoms = [];
+        state.shapes = [];
+        state.labels = [];
+        if (detail) {{
+          detail.textContent = message
+            || 'Select 1 atom to inspect, 2 for a distance, or 3 for an angle.';
+        }}
+        if (clearButton) {{ clearButton.disabled = true; }}
+        viewer.render();
+      }};
+
+      if (clearButton && !clearButton.__alchemiBound) {{
+        clearButton.__alchemiBound = true;
+        clearButton.addEventListener('click', function() {{ reset(); }});
+      }}
+      if (state.atoms.length === 3) {{ reset(''); }}
+      if (state.atoms.some(function(selected) {{
+        return Number(selected.serial) === atomIndex;
+      }})) {{
+        if (detail) {{
+          detail.textContent = 'Row ' + atomIndex
+            + ' is already selected. Choose a different atom.';
+        }}
+        return;
+      }}
+
+      state.atoms.push(atom);
+      state.shapes.push(viewer.addSphere({{
+        center: atom,
+        radius: 0.34,
+        color: '{_GREEN}',
+        opacity: 0.30
+      }}));
+      state.labels.push(highResolutionLabel(
+        atom.elem + ' · row ' + atomIndex,
+        {{
+          position: atom,
+          backgroundColor: '{_SURFACE}',
+          backgroundOpacity: 0.92,
+          fontColor: '{_TEXT}',
+          fontSize: 11,
+          borderColor: '{_GREEN}',
+          borderThickness: 1,
+          inFront: true
+        }}
+      ));
+      if (clearButton) {{ clearButton.disabled = false; }}
+
+      const distance = function(first, second) {{
+        return Math.hypot(
+          first.x - second.x,
+          first.y - second.y,
+          first.z - second.z
+        );
+      }};
+      const midpoint = function(first, second) {{
+        return {{
+          x: (first.x + second.x) / 2,
+          y: (first.y + second.y) / 2,
+          z: (first.z + second.z) / 2
+        }};
+      }};
+
+      if (state.atoms.length === 1) {{
+        if (detail) {{
+          detail.textContent = 'Selected row ' + atomIndex + ' · ' + atom.elem
+            + ' · atomic number ' + atomicNumber
+            + '. Select a second atom for a distance.';
+        }}
+      }} else if (state.atoms.length === 2) {{
+        const first = state.atoms[0];
+        const second = state.atoms[1];
+        const value = distance(first, second);
+        state.shapes.push(viewer.addLine({{
+          start: first,
+          end: second,
+          color: '{_BLUE}',
+          dashed: true,
+          dashLength: 0.10,
+          gapLength: 0.06
+        }}));
+        state.labels.push(highResolutionLabel(value.toFixed(3) + ' Å', {{
+          position: midpoint(first, second),
+          backgroundColor: '{_SURFACE}',
+          backgroundOpacity: 0.94,
+          fontColor: '{_TEXT}',
+          fontSize: 12,
+          borderColor: '{_BLUE}',
+          borderThickness: 1,
+          inFront: true
+        }}));
+        if (detail) {{
+          detail.textContent = 'Distance rows ' + Number(first.serial) + '–'
+            + Number(second.serial) + ': ' + value.toFixed(3)
+            + ' Å. Select a third atom; row ' + Number(second.serial)
+            + ' will be the angle vertex.';
+        }}
+      }} else {{
+        const first = state.atoms[0];
+        const vertex = state.atoms[1];
+        const third = state.atoms[2];
+        const ux = first.x - vertex.x;
+        const uy = first.y - vertex.y;
+        const uz = first.z - vertex.z;
+        const vx = third.x - vertex.x;
+        const vy = third.y - vertex.y;
+        const vz = third.z - vertex.z;
+        const denominator = Math.hypot(ux, uy, uz) * Math.hypot(vx, vy, vz);
+        const cosine = Math.max(
+          -1,
+          Math.min(1, (ux * vx + uy * vy + uz * vz) / denominator)
+        );
+        const angle = Math.acos(cosine) * 180 / Math.PI;
+        state.shapes.push(viewer.addLine({{
+          start: vertex,
+          end: third,
+          color: '{_BLUE}',
+          dashed: true,
+          dashLength: 0.10,
+          gapLength: 0.06
+        }}));
+        state.labels.push(highResolutionLabel(angle.toFixed(1) + '°', {{
+          position: vertex,
+          screenOffset: {{x: 16, y: -22}},
+          backgroundColor: '{_SURFACE}',
+          backgroundOpacity: 0.94,
+          fontColor: '{_TEXT}',
+          fontSize: 12,
+          borderColor: '{_BLUE}',
+          borderThickness: 1,
+          inFront: true
+        }}));
+        if (detail) {{
+          detail.textContent = 'Angle rows ' + Number(first.serial) + '–'
+            + Number(vertex.serial) + '–' + Number(third.serial) + ': '
+            + angle.toFixed(1) + '° · row ' + Number(vertex.serial)
+            + ' is the vertex. Click another atom to start again.';
+        }}
+      }}
+      viewer.render();
+    }}"""
+
+
+def show_molecule(
+    atoms: Atoms,
+    *,
+    height: int = _VIEWER_HEIGHT,
+    sphere_scale: float = 0.23,
+) -> Any:
+    """Return a compact 3Dmol.js ball-and-stick view of one ASE structure.
+
+    3Dmol.js perceives connectivity from the coordinates alone, so no explicit
+    bond list is passed in. A periodic structure also gets its lattice drawn as
+    twelve edges: 3Dmol's `addUnitCell` reads crystal metadata that XYZ input
+    cannot carry, so it draws nothing here.
+
+    The structure is turned to face the camera before it is handed over. The
+    rigid rotation preserves the distances and angles measured in the viewer.
+    """
+
+    import py3Dmol
+    from IPython.display import HTML
+
+    positions = atoms.get_positions()
+    origin = positions.mean(axis=0)
+    rotation = _viewing_rotation(positions)
+    oriented = atoms.copy()
+    oriented.set_positions(_to_view_frame(positions, origin, rotation))
+
+    view = py3Dmol.view(
+        width="100%",
+        height=height,
+        # Never fetched: `_viewer_html` pre-resolves py3Dmol's loader promise.
+        # Kept as the repository-relative provenance of the inlined bundle.
+        js="shared/3dmol-2.5.5/3Dmol-min.js",
+    )
+    view.addModel(_atoms_to_xyz(oriented), "xyz")
+    # One `setStyle` per element rather than a single `colorscheme` map: 3Dmol
+    # 2.5.5 tests a custom map with `scheme[element]` but reads the colour back
+    # from `scheme.map[element]`, so the map never applies and carbon keeps its
+    # near-white default next to hydrogen.
+    for number in sorted({int(number) for number in atoms.get_atomic_numbers()}):
+        color = _ELEMENT_COLORS.get(chemical_symbols[number], _GREEN)
+        view.setStyle(
+            {"elem": chemical_symbols[number]},
+            {
+                "sphere": {"scale": sphere_scale, "color": color},
+                "stick": {"radius": 0.09, "color": color},
+            },
+        )
+    view.setClickable({}, True, _atom_click_callback(atoms))
+    framed = [oriented.get_positions()]
+    if atoms.pbc.any():
+        for edge in _cell_edge_points(atoms.cell):
+            start, end = _to_view_frame(np.asarray(edge), origin, rotation)
+            framed.append(np.stack([start, end]))
+            view.addLine(
+                {
+                    "start": _viewer_point(start),
+                    "end": _viewer_point(end),
+                    "color": _BORDER,
+                }
+            )
+    view.setBackgroundColor(_BACKGROUND)
+    view.zoomTo()
+    view.zoom(_zoom_factor(np.concatenate(framed)))
+    # A fixed oblique tilt, so a linear or planar structure and a lattice box all
+    # still read as three-dimensional instead of as a rod or a flat outline.
+    view.rotate(-24, "y")
+    view.rotate(16, "x")
+    return HTML(
+        _viewer_html(
+            view,
+            height,
+            formula=_tutorial_formula(atoms),
+            atom_count=len(atoms),
+        )
+    )
 
 
 def _to_numpy(value: Any) -> np.ndarray:
@@ -389,6 +854,35 @@ def _bundle_preamble() -> str:
     )
 
 
+def _trajectory_viewers_javascript() -> str:
+    """Return the shared py3Dmol setup for synchronized trajectory cards."""
+
+    return (
+        f"const elementColors={_json_for_script(_ELEMENT_COLORS)};\n"
+        "const applyStyle=function(viewer){viewer.setStyle({},"
+        f"{{sphere:{{scale:.23,color:'{_GREEN}'}},stick:{{radius:.09,color:'{_GREEN}'}}}});"
+        "Object.keys(elementColors).forEach(function(symbol){viewer.setStyle("
+        "{elem:symbol},{sphere:{scale:.23,color:elementColors[symbol]},"
+        "stick:{radius:.09,color:elementColors[symbol]}});});};\n"
+        "const viewers=items.map(function(item,index){const node=document.querySelector("
+        "'[data-viewer=\"'+index+'\"]');const viewer=$3Dmol.createViewer(node,"
+        f"{{backgroundColor:'{_BACKGROUND}',antialias:true}});"
+        "viewer.addModelsAsFrames(item.trajectory_xyz,'xyz');applyStyle(viewer);"
+        "viewer.zoomTo();viewer.rotate(-18,'y');viewer.rotate(12,'x');"
+        "viewer.render();return viewer;});"
+    )
+
+
+def _player_iframe(document: str, *, title: str, height: int) -> str:
+    """Wrap one self-contained player document in its notebook iframe."""
+
+    return (
+        f'<iframe title="{escape(title, quote=True)}" '
+        f'srcdoc="{escape(document, quote=True)}" style="display:block;width:100%;'
+        f'height:{height}px;border:0;background:{_BACKGROUND};" loading="eager"></iframe>'
+    )
+
+
 def _common_css(root_id: str) -> str:
     return f"""
 <style>
@@ -420,49 +914,12 @@ def _common_css(root_id: str) -> str:
 """
 
 
-def _viewer_js_helpers() -> str:
-    colors = _json_for_script(_ELEMENT_COLORS)
-    return f"""
-const elementColors={colors};
-const applyStyle=function(viewer,item){{
-  const sphereOnly=Boolean(item&&item.sphere_only);const scale=sphereOnly ? .38 : .23;
-  viewer.setStyle({{}},{{
-    sphere:{{scale:scale,color:'{_GREEN}'}},
-    ...(sphereOnly?{{}}:{{stick:{{radius:0.09,color:'{_GREEN}'}}}})
-  }});
-  Object.keys(elementColors).forEach(function(symbol){{
-    viewer.setStyle({{elem:symbol}},{{
-      sphere:{{scale:scale,color:elementColors[symbol]}},
-      ...(sphereOnly?{{}}:{{stick:{{radius:0.09,color:elementColors[symbol]}}}})
-    }});
-  }});
-}};
-const addCell=function(viewer,edges){{
-  (edges||[]).forEach(function(edge){{viewer.addLine({{
-    start:{{x:edge.start[0],y:edge.start[1],z:edge.start[2]}},
-    end:{{x:edge.end[0],y:edge.end[1],z:edge.end[2]}},color:'{_BORDER}'
-  }});}});
-}};
-const drawStructure=function(viewer,item){{
-  viewer.removeAllModels();viewer.removeAllShapes();viewer.removeAllLabels();
-  viewer.addModel(item.xyz,'xyz',{{assignBonds:!item.sphere_only}});applyStyle(viewer,item);addCell(viewer,item.cell_edges);
-  viewer.zoomTo();viewer.rotate(-18,'y');viewer.rotate(12,'x');viewer.render();
-}};
-const makeViewer=function(node){{
-  if(!node)throw new Error('3Dmol viewer container is missing');
-  node.style.position='relative';node.style.overflow='hidden';
-  return window.$3Dmol.createViewer(node,{{backgroundColor:'{_BACKGROUND}',antialias:true}});
-}};
-"""
-
-
 def _metadata_from_spec(key: str, spec: Any, atoms: Atoms) -> dict[str, Any]:
     return {
         "key": key,
         "display_name": str(_field(spec, "display_name", key)),
         "domain": str(_field(spec, "domain", "Other")),
         "purpose": str(_field(spec, "purpose", "Structure exploration")),
-        "is_default": bool(_field(spec, "is_default", True)),
         **_structure_payload(atoms),
     }
 
@@ -513,141 +970,22 @@ def _py3dmol_card_view(item: Mapping[str, Any], *, height: int = 172) -> Any:
 def _py3dmol_card_markup(item: Mapping[str, Any], *, height: int = 172) -> str:
     """Return py3Dmol HTML that works inside Jupyter and VS Code webviews."""
 
-    return _py3dmol_card_view(item, height=height)._make_html()
+    view = _py3dmol_card_view(item, height=height)
+    return _bundle_preamble() + view.write_html()
 
 
-def _viewer_iframe(markup: str, *, height: int, auto_height: bool = False) -> str:
+def _viewer_iframe(markup: str, *, height: int) -> str:
     """Run viewer scripts in an isolated dark document without Output widgets."""
 
-    body_size = (
-        "min-height:100%;overflow:visible" if auto_height else "height:100%;overflow:hidden"
-    )
-    resize_script = (
-        """
-<script>(function(){
-  const frame=window.frameElement;if(!frame||!window.ResizeObserver)return;
-  const resize=function(){
-    const height=Math.ceil(document.documentElement.scrollHeight);
-    if(frame.style.height!==height+'px')frame.style.height=height+'px';
-  };
-  new ResizeObserver(resize).observe(document.body);
-  window.addEventListener('load',resize);window.requestAnimationFrame(resize);
-})();</script>
-"""
-        if auto_height
-        else ""
-    )
     document = (
         "<!doctype html><html><head><meta charset='utf-8'>"
-        f"<style>html,body{{margin:0;width:100%;{body_size};"
+        "<style>html,body{margin:0;width:100%;height:100%;overflow:hidden;"
         f"background:{_BACKGROUND};}}</style></head><body>"
-        f"{markup}{resize_script}</body></html>"
+        f"{markup}</body></html>"
     )
     return (
         f'<iframe title="Interactive 3D structure" srcdoc="{escape(document, quote=True)}" '
         f'style="display:block;width:100%;height:{height}px;border:0;'
-        f'background:{_BACKGROUND};" loading="eager"></iframe>'
-    )
-
-
-def _picker_iframe(
-    items: Sequence[Mapping[str, Any]],
-    *,
-    widget_class: str,
-    selected_keys: Sequence[str],
-) -> str:
-    """Render all selectable py3Dmol views in one shared dark document."""
-
-    selected = set(selected_keys)
-    cards = []
-    for index, item in enumerate(items):
-        is_selected = item["key"] in selected
-        cards.append(
-            f'<article class="picker-card{" is-selected" if is_selected else ""}" '
-            f'data-card="{index}">'
-            f'<div class="viewer">{_py3dmol_card_markup(item, height=164)}</div>'
-            '<div class="facts">'
-            f'<strong>{escape(item["display_name"])}</strong>'
-            f'<span>{item["atom_count"]} atoms · {escape(item["domain"])}</span>'
-            f'<p>{escape(item["purpose"])}</p>'
-            '</div>'
-            f'<button type="button" data-select="{index}" aria-pressed="'
-            f'{str(is_selected).lower()}">'
-            f'{"✓ In batch" if is_selected else "+ Add to batch"}</button>'
-            '</article>'
-        )
-
-    document = f"""<!doctype html>
-<html><head><meta charset="utf-8"><style>
-html,body{{margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};
-  font-family:'NVIDIA Sans',Arial,sans-serif}}
-*{{box-sizing:border-box}}
-.picker-shell{{padding:12px;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
-.picker-head{{display:flex;align-items:flex-end;justify-content:space-between;gap:16px;margin:0 0 10px}}
-.picker-head strong{{font-size:1rem}}
-.picker-head span{{display:block;color:{_MUTED};font-size:.82rem;margin-top:3px}}
-.picker-status{{color:{_MUTED};font-size:.84rem;font-weight:700;white-space:nowrap}}
-.picker-grid{{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px}}
-.picker-card{{min-width:0;height:292px;display:grid;grid-template-rows:164px 76px 40px;
-  gap:6px;padding:6px;border:2px solid {_BORDER};border-radius:10px;
-  overflow:hidden;background:{_SURFACE}}}
-.picker-card.is-selected{{border-color:{_GREEN}}}
-.viewer,.viewer>div{{min-width:0;width:100%!important;height:164px!important;
-  overflow:hidden;background:{_BACKGROUND}!important}}
-.facts{{min-width:0;padding:2px 4px;line-height:1.3;overflow:hidden}}
-.facts strong{{display:block;font-size:.92rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-.facts span{{display:block;color:{_MUTED};font-size:.75rem;margin-top:2px;
-  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-.facts p{{margin:3px 0 0;font-size:.77rem;line-height:1.25}}
-.picker-card button{{width:100%;height:40px;border:2px solid {_GREEN};border-radius:7px;
-  background:{_SURFACE_RAISED};color:{_GREEN};font:inherit;font-size:.82rem;font-weight:800;
-  cursor:pointer}}
-.picker-card.is-selected button{{background:{_GREEN};color:{_BACKGROUND}}}
-.picker-card button:focus-visible{{outline:3px solid {_TEXT};outline-offset:2px}}
-@media(max-width:760px){{.picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr))}}}}
-@media(max-width:520px){{.picker-grid{{grid-template-columns:1fr}}}}
-</style></head><body>
-{_bundle_preamble()}
-<main class="picker-shell">
-  <header class="picker-head"><div><strong>Choose systems for the Batch</strong>
-    <span>Drag to rotate · scroll to zoom · choose up to five systems</span></div>
-    <div class="picker-status" role="status" aria-live="polite"></div>
-  </header>
-  <section class="picker-grid">{"".join(cards)}</section>
-</main>
-<script>$3Dmolpromise.then(function(){{
-const selected=new Set({_json_for_script(list(selected_keys))});
-const cards=Array.from(document.querySelectorAll('[data-card]'));
-const buttons=Array.from(document.querySelectorAll('[data-select]'));
-const status=document.querySelector('.picker-status');
-const keys={_json_for_script([item['key'] for item in items])};
-const parentRoot=window.parent.document.querySelector('.{widget_class}');
-const parentButtons=parentRoot
-  ? Array.from(parentRoot.querySelectorAll('.alchemi-picker-state')) : [];
-const update=function(message){{
-  cards.forEach(function(card,index){{
-    const active=selected.has(keys[index]);const button=buttons[index];
-    card.classList.toggle('is-selected',active);button.setAttribute('aria-pressed',String(active));
-    button.textContent=active?'✓ In batch':'+ Add to batch';
-  }});
-  status.textContent=message || (selected.size
-    ? selected.size+' '+(selected.size===1?'system':'systems')+' in batch'
-    : 'Choose one or more systems');
-}};
-buttons.forEach(function(button,index){{button.addEventListener('click',function(){{
-  const key=keys[index];
-  if(!selected.has(key)&&selected.size>=5){{update('Choose up to five systems');return;}}
-  if(selected.has(key))selected.delete(key);else selected.add(key);
-  if(parentButtons[index])parentButtons[index].click();
-  update();
-}});}});
-update();
-}})();</script>
-</body></html>"""
-    return (
-        f'<iframe title="Interactive py3Dmol structure picker" '
-        f'srcdoc="{escape(document, quote=True)}" '
-        f'style="display:block;width:100%;height:1000px;border:0;'
         f'background:{_BACKGROUND};" loading="eager"></iframe>'
     )
 
@@ -696,10 +1034,10 @@ class StructureSelection:
             facts = widgets.HTML(
                 value=(
                     '<div class="alchemi-picker-facts">'
-                    f'<strong>{escape(item["display_name"])}</strong>'
-                    f'<span>{item["atom_count"]} atoms · '
-                    f'{escape(item["domain"])}</span>'
-                    f'<p>{escape(item["purpose"])}</p></div>'
+                    f"<strong>{escape(item['display_name'])}</strong>"
+                    f"<span>{item['atom_count']} atoms</span>"
+                    f"<p>{escape(item['purpose'])} · "
+                    f"{escape(item['domain'])}</p></div>"
                 ),
                 layout=widgets.Layout(width="100%", height="76px"),
             )
@@ -722,7 +1060,7 @@ class StructureSelection:
             value=(
                 "<div><strong>Choose systems for the Batch</strong>"
                 '<span class="alchemi-picker-guidance">Drag to rotate · scroll '
-                "to zoom · choose up to five systems</span></div>"
+                f"to zoom · choose up to {MAX_RELAXATION_SYSTEMS} systems</span></div>"
             )
         )
         header = widgets.HBox(
@@ -809,17 +1147,10 @@ class StructureSelection:
 
         keys = self.selected_keys
         if not keys:
-            raise ValueError("Select at least one molecular card before building a Batch")
+            raise ValueError(
+                "Select at least one molecular card before building a Batch"
+            )
         return [self._catalog[key] for key in keys]
-
-    def selected_atoms(self) -> list[Atoms]:
-        """Build fresh ASE structures for the current selection."""
-
-        structures = []
-        for spec in self.selected_specs():
-            structure = spec.copy() if isinstance(spec, Atoms) else spec.build()
-            structures.append(structure)
-        return structures
 
     def _repr_mimebundle_(self, **kwargs: Any) -> Any:
         bundle = self.widget._repr_mimebundle_(**kwargs)
@@ -836,6 +1167,9 @@ class StructureSelection:
         control = self._checkboxes[key]
         card = self._cards[key]
         selected = bool(change["new"])
+        if selected and len(self.selected_keys) > MAX_RELAXATION_SYSTEMS:
+            control.value = False
+            return
         control.description = "✓ In batch" if selected else "+ Add to batch"
         if selected:
             control.add_class("is-selected")
@@ -857,70 +1191,7 @@ class StructureSelection:
         )
 
     def _build_static_fallback(self) -> str:
-        return (
-            '<div role="note" style="box-sizing:border-box;width:100%;max-width:920px;'
-            f'padding:16px 18px;border:1px solid {_BORDER};border-left:3px solid {_GREEN};'
-            f'border-radius:8px;background:{_BACKGROUND};color:{_TEXT};'
-            'font-family:NVIDIA Sans,Arial,sans-serif">'
-            '<strong>Interactive molecular explorer</strong>'
-            f'<p style="color:{_MUTED};font-size:.86rem;line-height:1.5;margin:6px 0 0">'
-            'This output needs a running notebook. Open it in Jupyter or VS Code, '
-            'connect a runtime, and run this cell to choose systems and explore them in 3D.'
-            '</p></div>'
-        )
-
-
-def _single_structure_markup(item: Mapping[str, Any]) -> str:
-    root_id = f"alchemi-preview-{uuid4().hex}"
-    payload = _json_for_script(item)
-    return f"""
-<div id="{root_id}" tabindex="0" aria-label="3Dmol structure preview">
-  {_common_css(root_id)}
-  <div style="padding:10px 14px;background:{_SURFACE};display:flex;gap:12px;
-              align-items:center;justify-content:space-between;flex-wrap:wrap">
-    <div><strong data-name></strong><div data-area class="alchemi-muted" style="font-size:.82rem;margin-top:3px"></div></div>
-    <div class="alchemi-toolbar" aria-label="Viewer controls">
-      <button type="button" data-action="rotate-left" aria-label="Rotate left">↶</button>
-      <button type="button" data-action="rotate-right" aria-label="Rotate right">↷</button>
-      <button type="button" data-action="zoom-in" aria-label="Zoom in">＋</button>
-      <button type="button" data-action="zoom-out" aria-label="Zoom out">−</button>
-      <button type="button" data-action="reset">Reset</button>
-    </div>
-  </div>
-  <div data-live-view aria-label="Interactive 3D structure"></div>
-  <div style="padding:9px 14px;background:{_SURFACE};font-size:.82rem">
-    <span data-facts></span><span aria-hidden="true"> · </span>
-    <span data-measure role="status" aria-live="polite">Select two atoms to measure a distance.</span>
-  </div>
-</div>
-{_bundle_preamble()}
-<script>(function(){{
-const root=document.getElementById('{root_id}');if(!root||!window.$3Dmol){{return;}}
-const item={payload};{_viewer_js_helpers()}
-const viewer=makeViewer(root.querySelector('[data-live-view]'));let selectedAtoms=[];
-const setText=function(selector,text){{root.querySelector(selector).textContent=text;}};
-const installMeasurement=function(){{viewer.setClickable({{}},true,function(atom){{
-  const index=Number(atom.index===undefined?atom.serial:atom.index);
-  if(selectedAtoms.length===2){{selectedAtoms=[];viewer.removeAllShapes();addCell(viewer,item.cell_edges);}}
-  selectedAtoms.push(atom);viewer.addSphere({{center:atom,radius:.32,color:'{_GREEN}',opacity:.28}});
-  if(selectedAtoms.length===1){{setText('[data-measure]','row '+index+' selected; choose one more atom');}}
-  else{{const a=selectedAtoms[0],b=selectedAtoms[1];const distance=Math.hypot(a.x-b.x,a.y-b.y,a.z-b.z);
-    viewer.addLine({{start:a,end:b,color:'{_BLUE}',dashed:true,dashLength:.12,gapLength:.07}});
-    setText('[data-measure]','distance '+distance.toFixed(3)+' Å · rows '
-      +Number(a.index===undefined?a.serial:a.index)+'–'+index);}}
-  viewer.render();
-}});}};
-const reset=function(){{selectedAtoms=[];drawStructure(viewer,item);installMeasurement();
-  setText('[data-measure]','Select two atoms to measure a distance.');}};
-setText('[data-name]',item.display_name);setText('[data-area]',item.domain+' · '+item.purpose);
-setText('[data-facts]',item.atom_count+' atoms');reset();
-root.querySelectorAll('[data-action]').forEach(function(button){{button.addEventListener('click',function(){{
-  const action=button.dataset.action;if(action==='rotate-left')viewer.rotate(-12,'y');
-  if(action==='rotate-right')viewer.rotate(12,'y');if(action==='zoom-in')viewer.zoom(1.15);
-  if(action==='zoom-out')viewer.zoom(.87);if(action==='reset')reset();viewer.render();
-}});}});
-}})();</script>
-"""
+        return runtime_required_notice(margin="0")
 
 
 def show_structure_explorer(
@@ -931,15 +1202,15 @@ def show_structure_explorer(
     """Show a selectable molecular grid linked to later Python cells.
 
     ``catalog`` accepts the ordered mapping returned by ``opening_performance_catalog``.
-    A value may also be an ASE ``Atoms`` object, which is useful for small custom
-    extensions in a notebook.
     """
 
     if not catalog:
         raise ValueError("catalog must contain at least one structure")
     items = []
     for key, spec in catalog.items():
-        atoms = spec.copy() if isinstance(spec, Atoms) else spec.build()
+        if isinstance(spec, Atoms) or not callable(getattr(spec, "build", None)):
+            raise TypeError(f"catalog entry {key!r} must provide a build() method")
+        atoms = spec.build()
         if not isinstance(atoms, Atoms):
             raise TypeError(f"catalog entry {key!r} did not build an ASE Atoms object")
         items.append(_metadata_from_spec(str(key), spec, atoms))
@@ -954,6 +1225,10 @@ def show_structure_explorer(
     missing = [key for key in selected_keys if key not in valid_keys]
     if missing:
         raise KeyError(f"selected structures are absent from catalog: {missing}")
+    if len(set(selected_keys)) > MAX_RELAXATION_SYSTEMS:
+        raise ValueError(
+            f"select at most {MAX_RELAXATION_SYSTEMS} systems for the synchronized player"
+        )
     return StructureSelection(catalog, items, selected_keys)
 
 
@@ -987,10 +1262,7 @@ def _reference_structure_map(
         missing = [name for name in names if name not in reference_structures]
         if missing:
             raise KeyError(f"reference structures are missing labels: {missing}")
-        references = {
-            name: reference_structures[name]
-            for name in names
-        }
+        references = {name: reference_structures[name] for name in names}
     else:
         values = list(reference_structures)
         if len(values) != len(names):
@@ -1003,17 +1275,16 @@ def _reference_structure_map(
     return references
 
 
-def _force_sparkline_svg(
-    item: Mapping[str, Any], index: int, frame_count: int
-) -> str:
+def _force_sparkline_svg(item: Mapping[str, Any], index: int, frame_count: int) -> str:
     """Draw one compact maximum-force trace for a trajectory card."""
 
-    width, height = 280, 68
-    left, right, top, bottom = 32, 10, 22, 14
+    width, height = 300, 42
+    left, right, top, bottom = 4, 4, 4, 5
     plot_width = width - left - right
     plot_height = height - top - bottom
     finite = [
-        float(value) for value in item["forces"]
+        float(value)
+        for value in item["forces"]
         if value is not None and np.isfinite(value)
     ]
     maximum = max(finite, default=1.0)
@@ -1034,23 +1305,20 @@ def _force_sparkline_svg(
         )
         series = (
             f'<polyline points="{points}" fill="none" stroke="{_GREEN}" '
-            'stroke-width="2.4" stroke-linejoin="round" stroke-linecap="round"/>'
+            'stroke-width="1.6" stroke-linejoin="round" stroke-linecap="round"/>'
             f'<circle data-trace-dot="{index}" cx="{x_coord(0):.2f}" '
-            f'cy="{y_coord(float(values[0])):.2f}" r="3.5" fill="{_GREEN}" '
+            f'cy="{y_coord(float(values[0])):.2f}" r="3" fill="{_GREEN}" '
             f'stroke="{_BACKGROUND}" stroke-width="1.5"/>'
         )
 
     return f"""
-<svg data-force-trace="{index}" data-force-maximum="{maximum}" viewBox="0 0 {width} {height}"
-  role="img" aria-label="Maximum force for {escape(str(item['name']), quote=True)}"
+<svg data-force-trace="{index}" data-force-maximum="{maximum}"
+  data-plot-left="{left}" data-plot-width="{plot_width}"
+  data-plot-top="{top}" data-plot-height="{plot_height}"
+  viewBox="0 0 {width} {height}"
+  role="img" aria-label="Maximum force for {escape(str(item["name"]), quote=True)}"
   style="display:block;width:100%;height:auto">
   <rect width="{width}" height="{height}" fill="{_SURFACE}"/>
-  <text x="{left}" y="14" fill="{_TEXT}" font-size="9.5" font-weight="700">
-    Maximum force (eV/Å)
-  </text>
-  <line x1="{left}" y1="{top + plot_height}" x2="{width - right}" y2="{top + plot_height}" stroke="{_BORDER}"/>
-  <text x="{left - 5}" y="{top + 3}" text-anchor="end" fill="{_MUTED}" font-size="8">{maximum:.1f}</text>
-  <text x="{left - 5}" y="{top + plot_height + 3}" text-anchor="end" fill="{_MUTED}" font-size="8">0</text>
   {series}
   <line data-trace-cursor="{index}" x1="{x_coord(0):.2f}" y1="{top}" x2="{x_coord(0):.2f}"
     y2="{top + plot_height}" stroke="{_TEXT}" stroke-width="1" stroke-dasharray="3 3"/>
@@ -1063,63 +1331,89 @@ def _py3dmol_relaxation_player(
     *,
     frame_count: int,
     frame_interval_ms: int,
+    batch_multiplier: int,
 ) -> tuple[str, int]:
     """Build one isolated py3Dmol grid driven by a shared native frame index."""
 
-    columns = 5
     rows = 1
     row_height = 286
-    stage_height = rows * row_height + 20
+    stage_height = rows * row_height + 28
+    grid_columns = f"repeat({MAX_RELAXATION_SYSTEMS},minmax(0,1fr))"
     cards = "".join(
-        f'<section class="trajectory-card" data-panel="{index}">'
+        f'<section class="trajectory-card" data-panel="{index}" '
+        f'data-atom-count="{item["atom_count"]}">'
         f'<div class="molecule-view" data-viewer="{index}" '
         f'aria-label="Trajectory for {escape(str(item["name"]), quote=True)}"></div>'
-        f'<strong>{escape(str(item["name"]))}</strong>'
-        '<div class="force-panel"><span data-panel-status></span>'
-        f'{_force_sparkline_svg(item, index, frame_count)}</div></section>'
+        f'<div class="card-title"><strong>{escape(str(item["name"]))}</strong>'
+        f"<span>{item['atom_count']} atoms</span></div>"
+        '<div class="force-panel"><span data-panel-status>'
+        '<span class="metric"><b>MAX FORCE</b><em>…<i>eV/Å</i></em></span>'
+        "</span>"
+        f"{_force_sparkline_svg(item, index, frame_count)}</div></section>"
         for index, item in enumerate(items)
     )
-    cards += '<section class="trajectory-card empty" aria-hidden="true"></section>' * (
-        rows * columns - len(items)
+    cards += "".join(
+        '<section class="trajectory-card trajectory-placeholder" data-empty-slot>'
+        '<div class="placeholder-message">Go back to the selector to choose '
+        "another system.</div>"
+        "</section>"
+        for _ in range(MAX_RELAXATION_SYSTEMS - len(items))
     )
-    iframe_height = 66 + stage_height
+    total_graphs = len(items) * batch_multiplier
+    total_atoms = sum(int(item["atom_count"]) for item in items) * batch_multiplier
+    molecule_label = "molecule" if len(items) == 1 else "molecules"
+    replica_label = "replica" if batch_multiplier == 1 else "replicas"
+    graph_label = "graph" if total_graphs == 1 else "graphs"
+    atom_label = "atom" if total_atoms == 1 else "atoms"
+    batch_status = (
+        f"Batch · {len(items)} {molecule_label} × {batch_multiplier} "
+        f"{replica_label} = {total_graphs:,} {graph_label} · "
+        f"{total_atoms:,} {atom_label}"
+    )
+    iframe_height = 56 + stage_height + 2
 
     document = f"""<!doctype html>
 <html><head><meta charset="utf-8"><style>
-html,body{{margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans',Arial,sans-serif}}
-*{{box-sizing:border-box}}.player{{width:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
-.toolbar{{height:66px;padding:10px 12px;display:flex;align-items:center;gap:12px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
-button{{min-width:92px;height:40px;border:1px solid {_GREEN};border-radius:7px;background:{_SURFACE_RAISED};color:{_TEXT};font:inherit;font-weight:700;cursor:pointer}}
-button:hover{{background:{_GREEN};color:{_BACKGROUND}}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
-label{{color:{_MUTED};font-size:.78rem}}.frame-control{{flex:1;min-width:180px}}
-input{{accent-color:{_GREEN}}}.range-shell{{position:relative;display:block;height:18px;margin-top:5px}}
+html,body{{height:100%;overflow:hidden;margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif}}
+*{{box-sizing:border-box}}.player{{width:100%;height:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
+.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+button{{min-width:92px;height:36px;padding:0 16px;border:0;border-radius:7px;background:{_GREEN};color:#11170D;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s ease}}
+button:hover{{background:#8CD400}}button:active{{background:#6AA700}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
+.batch-status{{flex:0 0 auto;padding:5px 8px;border:1px solid #3A444D;border-radius:5px;color:{_TEXT};font-size:.72rem;font-weight:650;white-space:nowrap}}
+.frame-control{{flex:1;min-width:180px;display:flex;align-items:center;gap:14px;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}
+input{{accent-color:{_GREEN}}}.range-shell{{position:relative;display:flex;align-items:center;flex:1;height:18px;margin:0}}
 .range-shell input{{position:absolute;z-index:2;inset:0;width:100%;height:18px;margin:0;opacity:0;cursor:pointer}}
-.range-track{{position:absolute;z-index:1;left:7px;right:7px;top:7px;height:4px;border-radius:4px;background:{_BORDER};pointer-events:none}}
+.range-track{{position:absolute;z-index:1;left:7px;right:7px;top:7px;height:4px;border-radius:2px;background:#3A444D;pointer-events:none}}
 .range-fill{{position:absolute;inset:0;border-radius:inherit;background:{_GREEN};transform:scaleX(0);transform-origin:left center;transition:transform 110ms linear}}
-.range-thumb{{position:absolute;left:0;top:-4px;width:12px;height:12px;border:2px solid {_TEXT};border-radius:50%;background:{_GREEN};transform:translate3d(-6px,0,0);transition:transform 110ms linear}}
+.range-thumb{{position:absolute;left:0;top:-5px;width:14px;height:14px;border-radius:50%;background:{_GREEN};box-shadow:0 0 0 3px {_SURFACE};transform:translate3d(-7px,0,0);transition:transform 110ms linear}}
 .range-shell input:focus-visible~.range-track{{outline:3px solid {_GREEN};outline-offset:3px}}
 .force-toggle{{display:flex;align-items:center;gap:7px;white-space:nowrap}}.force-toggle input{{width:16px;height:16px;margin:0}}
-output{{flex:0 0 118px;width:118px;text-align:right;font-size:.8rem;font-variant-numeric:tabular-nums}}
-.stage-grid{{display:grid;grid-template-columns:repeat({columns},minmax(0,1fr));grid-template-rows:repeat({rows},{row_height}px);gap:10px;width:100%;height:{stage_height}px;padding:10px;overflow:hidden;background:{_BACKGROUND}}}
-.trajectory-card{{position:relative;min-width:0;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_SURFACE}}}
-.trajectory-card.empty{{border-color:transparent;background:transparent}}
-.molecule-view{{position:absolute;inset:0 0 92px;overflow:hidden;background:{_BACKGROUND}}}
+output{{flex:0 0 auto;text-align:right;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}}
+output .of{{color:#68737E;font-weight:500}}
+.stage-grid{{display:grid;grid-template-columns:{grid_columns};grid-template-rows:repeat({rows},{row_height}px);justify-content:start;gap:12px;width:100%;height:{stage_height}px;padding:14px;overflow:hidden;background:{_BACKGROUND}}}
+.trajectory-card{{position:relative;min-width:0;overflow:hidden;border:1px solid #3A444D;border-radius:8px;background:{_SURFACE}}}
+.trajectory-placeholder{{display:grid;place-items:center;padding:16px;border-style:dashed;background:#1B2126}}
+.placeholder-message{{max-width:120px;text-align:center;color:#8A939B;font-size:.66rem;line-height:1.4}}
+.molecule-view{{position:absolute;inset:0 0 82px;margin:10px 14px 0;overflow:hidden;border-radius:5px;background:#12181A}}
 .molecule-view canvas{{position:absolute!important;inset:0;width:100%!important;height:100%!important}}
-.trajectory-card strong{{position:absolute;z-index:3;top:12px;left:12px;display:block;max-width:calc(100% - 24px);width:max-content;padding:4px 7px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(23,29,32,.86);font-size:.82rem;pointer-events:none}}
-.force-panel{{position:absolute;left:0;right:0;bottom:0;height:92px;padding:5px 8px 2px;border-top:1px solid {_BORDER};background:{_SURFACE};pointer-events:auto;cursor:crosshair}}
-.force-panel span{{display:block;height:15px;padding:0 5px;color:{_MUTED};font-size:.7rem;line-height:15px;font-variant-numeric:tabular-nums}}
+.card-title{{position:absolute;z-index:3;top:12px;left:12px;display:flex;align-items:baseline;gap:7px;max-width:calc(100% - 24px);width:max-content;padding:4px 7px;border-radius:5px;overflow:hidden;white-space:nowrap;background:rgba(23,29,32,.86);pointer-events:none}}
+.card-title strong{{overflow:hidden;text-overflow:ellipsis;font-size:.82rem}}.card-title span{{flex:0 0 auto;color:#A8B0B8;font-size:.68rem;font-weight:600}}
+.force-panel{{position:absolute;left:0;right:0;bottom:0;height:82px;padding:0 14px 4px;border-top:1px solid #2C353B;background:{_SURFACE};pointer-events:auto;cursor:crosshair}}
+[data-panel-status]{{height:36px;display:flex;align-items:flex-end;gap:20px;color:{_TEXT}}}
+.metric{{display:flex;flex-direction:column;min-width:118px}}.metric b{{font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.94rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.72rem;font-weight:500;color:#8A939B;margin-left:.25em}}
 [data-trace-cursor]{{transition:x1 110ms linear,x2 110ms linear}}
 [data-trace-dot]{{transition:cx 110ms linear,cy 110ms linear}}
 @media(prefers-reduced-motion:reduce){{button,.range-fill,.range-thumb,[data-trace-cursor],[data-trace-dot]{{transition:none}}}}
 </style></head><body>{_bundle_preamble()}
-<main class="player" aria-label="Synchronized py3Dmol relaxation player">
+<main class="player" aria-label="Synchronized py3Dmol relaxation player" data-batch-multiplier="{batch_multiplier}" data-total-graphs="{total_graphs}" data-total-atoms="{total_atoms}">
   <div class="toolbar"><button type="button" data-play aria-label="Play relaxation">▶ Play</button>
+    <span class="batch-status">{batch_status}</span>
     <label class="frame-control">Shared step<span class="range-shell" data-range-shell>
       <input data-frame aria-label="Shared relaxation step" type="range" min="0" max="{frame_count - 1}" value="0" step="1">
       <span class="range-track"><span class="range-fill" data-progress-fill></span><span class="range-thumb" data-progress-thumb></span></span>
     </span></label>
     <label class="force-toggle"><input data-force-color type="checkbox" checked>Color atoms by force</label>
-    <output data-frame-label>Step 1 / {frame_count}</output></div>
+    <output data-frame-label>Step 1<span class="of"> / {frame_count}</span></output></div>
   <div class="stage-grid">{cards}</div>
 </main>
 <script>$3Dmolpromise.then(function(){{
@@ -1157,18 +1451,20 @@ const colorAtoms=function(viewer,item,magnitudes,forceScale){{
 }};
 const updateProgress=function(index){{
   const fraction=index/Math.max({frame_count - 1},1);const travel=Math.max(0,rangeShell.clientWidth-14);
-  progressFill.style.transform='scaleX('+fraction+')';progressThumb.style.transform='translate3d('+(fraction*travel-6)+'px,0,0)';
+  progressFill.style.transform='scaleX('+fraction+')';progressThumb.style.transform='translate3d('+(fraction*travel-7)+'px,0,0)';
 }};
 const update=function(index){{
   rendering=true;frameQueue=frameQueue.then(function(){{return Promise.all(viewers.map(function(viewer){{return viewer.setFrame(index);}}));}}).then(function(){{
     viewers.forEach(function(viewer,panel){{colorAtoms(viewer,items[panel],items[panel].atom_forces[index],scales[panel]);viewer.render();}});
-    items.forEach(function(item,panel){{const value=item.forces[index];const first=item.forces[0];const last=item.forces[item.forces.length-1];
-      document.querySelector('[data-panel="'+panel+'"] [data-panel-status]').textContent=value===null?'frame '+(index+1):'max force '+value.toFixed(3)+' eV/Å · '+first.toFixed(3)+' → '+last.toFixed(3);
+    items.forEach(function(item,panel){{const value=item.forces[index];
+      document.querySelector('[data-panel="'+panel+'"] [data-panel-status]').innerHTML=value===null?'<span class="metric"><b>FRAME</b><em>'+(index+1)+'</em></span>':'<span class="metric"><b>MAX FORCE</b><em>'+value.toFixed(3)+'<i>eV/Å</i></em></span>';
       const trace=document.querySelector('[data-force-trace="'+panel+'"]');const cursor=document.querySelector('[data-trace-cursor="'+panel+'"]');const dot=document.querySelector('[data-trace-dot="'+panel+'"]');
-      const x=32+238*index/Math.max({frame_count - 1},1);cursor.style.setProperty('x1',x+'px');cursor.style.setProperty('x2',x+'px');
-      if(dot&&value!==null){{dot.style.setProperty('cx',x+'px');dot.style.setProperty('cy',(22+32*(1-value/Number(trace.dataset.forceMaximum)))+'px');}}
+      const plotLeft=Number(trace.dataset.plotLeft);const plotWidth=Number(trace.dataset.plotWidth);
+      const plotTop=Number(trace.dataset.plotTop);const plotHeight=Number(trace.dataset.plotHeight);
+      const x=plotLeft+plotWidth*index/Math.max({frame_count - 1},1);cursor.style.setProperty('x1',x+'px');cursor.style.setProperty('x2',x+'px');
+      if(dot&&value!==null){{dot.style.setProperty('cx',x+'px');dot.style.setProperty('cy',(plotTop+plotHeight*(1-value/Number(trace.dataset.forceMaximum)))+'px');}}
     }});
-    slider.value=String(index);updateProgress(index);document.querySelector('[data-frame-label]').textContent='Step '+(index+1)+' / {frame_count}';
+    slider.value=String(index);updateProgress(index);document.querySelector('[data-frame-label]').innerHTML='Step '+(index+1)+'<span class="of"> / {frame_count}</span>';
   }}).finally(function(){{rendering=false;}});return frameQueue;
 }};
 const stop=function(){{if(animationFrame!==null)window.cancelAnimationFrame(animationFrame);animationFrame=null;lastFrameTime=null;play.textContent='▶ Play';}};
@@ -1177,14 +1473,13 @@ play.addEventListener('click',function(){{if(animationFrame!==null){{stop();retu
 slider.addEventListener('input',function(){{stop();update(Number(slider.value));}});
 forceToggle.addEventListener('change',function(){{update(Number(slider.value));}});
 window.addEventListener('resize',function(){{updateProgress(Number(slider.value));}});
-document.querySelectorAll('[data-force-trace]').forEach(function(trace){{trace.addEventListener('pointerdown',function(event){{const box=trace.getBoundingClientRect();const svgX=(event.clientX-box.left)/box.width*280;const fraction=Math.max(0,Math.min(1,(svgX-32)/238));stop();update(Math.round(fraction*{frame_count - 1}));}});}});
+document.querySelectorAll('[data-force-trace]').forEach(function(trace){{trace.addEventListener('pointerdown',function(event){{const box=trace.getBoundingClientRect();const svgX=(event.clientX-box.left)/box.width*300;const plotLeft=Number(trace.dataset.plotLeft);const plotWidth=Number(trace.dataset.plotWidth);const fraction=Math.max(0,Math.min(1,(svgX-plotLeft)/plotWidth));stop();update(Math.round(fraction*{frame_count - 1}));}});}});
 update(0);
 }});</script></body></html>"""
-    iframe = (
-        f'<iframe title="Synchronized py3Dmol relaxation player" '
-        f'srcdoc="{escape(document, quote=True)}" style="display:block;width:100%;'
-        f'height:{iframe_height}px;border:0;background:{_BACKGROUND};" '
-        'loading="eager"></iframe>'
+    iframe = _player_iframe(
+        document,
+        title="Synchronized py3Dmol relaxation player",
+        height=iframe_height,
     )
     return iframe, iframe_height
 
@@ -1197,6 +1492,7 @@ def show_relaxation_player(
     device: str = "device not recorded",
     elapsed_s: float | None = None,
     convergence: Mapping[str, str] | str | None = None,
+    batch_multiplier: int = 1,
     frame_interval_ms: int = 120,
     reference_structures: Mapping[str, Atoms] | Sequence[Atoms] | None = None,
 ) -> Any:
@@ -1204,8 +1500,17 @@ def show_relaxation_player(
 
     atom_force_history = _normalise_atom_force_magnitudes(trajectories, labels)
     normalised = _normalise_trajectories(trajectories, labels)
-    if len(normalised) > 5:
-        raise ValueError("the Core relaxation player supports at most five systems")
+    if len(normalised) > MAX_RELAXATION_SYSTEMS:
+        raise ValueError(
+            "the Core relaxation player supports at most "
+            f"{MAX_RELAXATION_SYSTEMS} systems"
+        )
+    if (
+        isinstance(batch_multiplier, bool)
+        or not isinstance(batch_multiplier, int)
+        or batch_multiplier < 1
+    ):
+        raise ValueError("batch_multiplier must be a positive integer")
     if (
         isinstance(frame_interval_ms, bool)
         or not isinstance(frame_interval_ms, int)
@@ -1213,6 +1518,18 @@ def show_relaxation_player(
     ):
         raise ValueError("frame_interval_ms must be an integer of at least 16")
     names = list(normalised)
+    total_graphs = len(names) * batch_multiplier
+    atom_counts = {name: len(frames[0]) for name, frames in normalised.items()}
+    total_atoms = sum(atom_counts.values()) * batch_multiplier
+    molecule_label = "molecule" if len(names) == 1 else "molecules"
+    replica_label = "replica" if batch_multiplier == 1 else "replicas"
+    graph_label = "graph" if total_graphs == 1 else "graphs"
+    atom_label = "atom" if total_atoms == 1 else "atoms"
+    batch_status = (
+        f"Batch · {len(names)} {molecule_label} × {batch_multiplier} "
+        f"{replica_label} = {total_graphs:,} {graph_label} · "
+        f"{total_atoms:,} {atom_label}"
+    )
     references = _reference_structure_map(reference_structures, names)
     frame_count = len(next(iter(normalised.values())))
     forces = _force_values(force_history, names, frame_count)
@@ -1228,9 +1545,8 @@ def show_relaxation_player(
         items.append(
             {
                 "name": name,
-                "trajectory_xyz": "".join(
-                    _atoms_to_xyz(frame) for frame in frames
-                ),
+                "atom_count": atom_counts[name],
+                "trajectory_xyz": "".join(_atoms_to_xyz(frame) for frame in frames),
                 "cell_edges": rendering_payload["cell_edges"],
                 "sphere_only": rendering_payload["sphere_only"],
                 "forces": forces[name],
@@ -1254,18 +1570,22 @@ def show_relaxation_player(
                 frames[0], frames[-1], title=f"{name}: initial and final"
             )
             + '<div style="padding:8px 2px 0;font-size:.78rem">'
-            + f"{escape(name)} · {escape(force_text)}</div></section>"
+            + f"{escape(name)} · {atom_counts[name]} atoms · "
+            + f"{escape(force_text)}</div></section>"
         )
     static_cards = "".join(static_card_parts)
     player_iframe, _ = _py3dmol_relaxation_player(
         items,
         frame_count=frame_count,
         frame_interval_ms=frame_interval_ms,
+        batch_multiplier=batch_multiplier,
     )
     markup = f"""
-<div id="{root_id}" aria-label="Synchronized relaxation player" style="max-width:none">
+<div id="{root_id}" aria-label="Synchronized relaxation player" data-batch-multiplier="{batch_multiplier}" data-total-graphs="{total_graphs}" data-total-atoms="{total_atoms}" style="max-width:none">
   {_common_css(root_id)}
   <div data-static-fallback style="padding:12px">
+    {runtime_required_notice()}
+    <p style="margin:0 2px 10px;font-size:.82rem;font-weight:650">{batch_status}</p>
     <div class="alchemi-grid" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:0">{static_cards}</div>
     <p class="alchemi-muted" style="margin:10px 2px 0;font-size:.82rem">Static initial/final preview. Run this cell in Jupyter to play synchronized frames.</p>
   </div>
@@ -1279,708 +1599,523 @@ if(root&&root.querySelector('iframe'))root.classList.add('is-live');
     return _html(markup)
 
 
-def show_bond_slider(
-    atoms: Atoms,
-    bond: tuple[int, int],
-    *,
-    spring_constant: float = 10.0,
-    activation_distance: float | None = None,
-    distance_range: tuple[float, float] | None = None,
-) -> Any:
-    """Move one bond endpoint and calculate a one-sided Hookean response in-browser."""
+def _fragment_com_line(atoms: Atoms, fragment_a_size: int) -> dict[str, Any]:
+    """Return the mass-weighted fragment centers and their separation."""
 
-    if not isinstance(atoms, Atoms):
-        raise TypeError("atoms must be an ASE Atoms object")
-    first, second = (int(index) for index in bond)
-    if first == second or min(first, second) < 0 or max(first, second) >= len(atoms):
-        raise ValueError("bond must contain two different valid atom indices")
-    if not np.isfinite(spring_constant) or spring_constant <= 0:
-        raise ValueError("spring_constant must be positive and finite")
-
-    vector = np.asarray(atoms.positions[second] - atoms.positions[first], dtype=float)
-    initial_distance = float(np.linalg.norm(vector))
-    if initial_distance <= 1.0e-12:
-        raise ValueError("the selected bond has zero length")
-    threshold = (
-        initial_distance if activation_distance is None else float(activation_distance)
+    if (
+        isinstance(fragment_a_size, bool)
+        or not isinstance(fragment_a_size, int)
+        or not 0 < fragment_a_size < len(atoms)
+    ):
+        raise ValueError("fragment split must leave at least one atom in each fragment")
+    masses = np.asarray(atoms.get_masses(), dtype=float)
+    if not np.isfinite(masses).all() or np.any(masses <= 0):
+        raise ValueError("fragment centers require finite positive atomic masses")
+    positions = np.asarray(atoms.positions, dtype=float)
+    first = np.average(
+        positions[:fragment_a_size], axis=0, weights=masses[:fragment_a_size]
     )
-    if not np.isfinite(threshold) or threshold <= 0:
-        raise ValueError("activation_distance must be positive and finite")
-    limits = distance_range or (
-        max(0.25, initial_distance * 0.70),
-        initial_distance * 1.65,
+    second = np.average(
+        positions[fragment_a_size:], axis=0, weights=masses[fragment_a_size:]
     )
-    low, high = (float(value) for value in limits)
-    if not np.isfinite([low, high]).all() or low <= 0 or high <= low:
-        raise ValueError(
-            "distance_range must contain increasing positive finite values"
-        )
-
-    final_atoms = atoms.copy()
-    final_atoms.positions[second] = (
-        atoms.positions[first] + vector / initial_distance * high
-    )
-    payload = _structure_payload(atoms)
-    bond_label = f"{atoms[first].symbol}–{atoms[second].symbol}"
-    root_id = f"alchemi-bond-{uuid4().hex}"
-    markup = f"""
-<div id="{root_id}" aria-label="Interactive one-sided Hookean bond experiment">
-  {_common_css(root_id)}
-  <div style="padding:11px 14px;background:{_SURFACE}">
-    <strong>{bond_label} bond experiment</strong>
-    <span class="alchemi-muted" style="margin-left:8px;font-size:.8rem">atom rows {first}–{second}</span>
-  </div>
-  <div data-static-fallback style="padding:12px">
-    {_static_pair_svg(atoms, final_atoms, title="Bond at the initial and maximum slider distances", first_label=f"start · {initial_distance:.2f} Å", last_label=f"end · {high:.2f} Å")}
-    <p class="alchemi-muted" style="margin:10px 2px 0;font-size:.82rem">Static start/end preview. Run this cell in Jupyter to move the bond.</p>
-  </div>
-  <div data-interactive>
-    <div data-live-view aria-label="Bond slider structure viewer"></div>
-    <div style="padding:12px 14px;background:{_SURFACE}">
-      <label style="display:block;font-size:.82rem;font-weight:650">{bond_label} distance
-        <input data-distance type="range" min="{low:.8g}" max="{high:.8g}" value="{initial_distance:.8g}" step="{max((high - low) / 180, 0.001):.8g}" style="width:100%;margin-top:8px">
-      </label>
-      <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px;margin-top:10px;font-size:.8rem">
-        <div><span class="alchemi-muted">Distance</span><br><strong data-value-distance></strong></div>
-        <div><span class="alchemi-muted">Hookean energy</span><br><strong data-value-energy></strong></div>
-        <div><span class="alchemi-muted">Restoring force</span><br><strong data-value-force></strong></div>
-        <div><span class="alchemi-muted">Threshold</span><br><strong data-value-active></strong></div>
-      </div>
-      <p class="alchemi-muted" style="margin:10px 0 0;font-size:.78rem">For Δr above the threshold: E = ½kΔr² and |F| = kΔr.</p>
-    </div>
-  </div>
-</div>
-{_bundle_preamble()}
-<script>(function(){{
-const root=document.getElementById('{root_id}');if(!root||!window.$3Dmol)return;
-const base={_json_for_script(payload)};const first={first},second={second},k={float(spring_constant):.12g},threshold={threshold:.12g};
-{_viewer_js_helpers()}
-const viewer=makeViewer(root.querySelector('[data-live-view]'));const slider=root.querySelector('[data-distance]');
-drawStructure(viewer,base);
-const origin=base.positions[first];const endpoint=base.positions[second];const length=Math.hypot(endpoint[0]-origin[0],endpoint[1]-origin[1],endpoint[2]-origin[2]);
-const direction=[(endpoint[0]-origin[0])/length,(endpoint[1]-origin[1])/length,(endpoint[2]-origin[2])/length];
-const xyz=function(symbols,positions){{return symbols.length+'\\nALCHEMI bond slider\\n'+symbols.map(function(symbol,index){{return symbol+' '+positions[index].join(' ');}}).join('\\n')+'\\n';}};
-const update=function(){{
-  const view=viewer.getView();const distance=Number(slider.value);const positions=base.positions.map(function(row){{return row.slice();}});
-  positions[second]=[origin[0]+direction[0]*distance,origin[1]+direction[1]*distance,origin[2]+direction[2]*distance];
-  const item=Object.assign({{}},base,{{positions:positions,xyz:xyz(base.symbols,positions)}});
-  viewer.removeAllModels();viewer.removeAllShapes();viewer.removeAllLabels();viewer.addModel(item.xyz,'xyz');applyStyle(viewer);addCell(viewer,item.cell_edges);
-  viewer.addLine({{start:{{x:origin[0],y:origin[1],z:origin[2]}},end:{{x:positions[second][0],y:positions[second][1],z:positions[second][2]}},color:'{_GREEN}',dashed:true}});
-  viewer.setView(view);viewer.render();
-  const stretch=Math.max(0,distance-threshold);const energy=.5*k*stretch*stretch;const force=k*stretch;
-  root.querySelector('[data-value-distance]').textContent=distance.toFixed(3)+' Å';
-  root.querySelector('[data-value-energy]').textContent=energy.toFixed(3)+' eV';
-  root.querySelector('[data-value-force]').textContent=force.toFixed(3)+' eV/Å';
-  root.querySelector('[data-value-active]').textContent=stretch>0?'active above '+threshold.toFixed(3)+' Å':'inactive below '+threshold.toFixed(3)+' Å';
-}};
-slider.addEventListener('input',update);update();root.classList.add('is-live');
-}})();</script>
-"""
-    return _html(markup)
-
-
-_BASELINE_BRANCH = "AIMNet2 + FIRE2"
-_HOOKEAN_BRANCH = "AIMNet2 + Hookean hook + FIRE2"
-
-
-def copy_with_bond_distance(
-    atoms: Atoms, bond_indices: tuple[int, int], distance: float
-) -> Atoms:
-    """Copy ``atoms`` and move the second bond endpoint to ``distance`` in Å."""
-
-    if not isinstance(atoms, Atoms):
-        raise TypeError("atoms must be an ASE Atoms object")
-    if len(bond_indices) != 2:
-        raise ValueError("bond_indices must contain exactly two atom indices")
-    first, second = (int(index) for index in bond_indices)
-    if first == second or min(first, second) < 0 or max(first, second) >= len(atoms):
-        raise ValueError("bond_indices must contain two different valid atom indices")
-    value = float(distance)
-    if not np.isfinite(value) or value <= 0:
-        raise ValueError("distance must be positive and finite")
-    moved = atoms.copy()
-    vector = np.asarray(atoms.positions[second] - atoms.positions[first], dtype=float)
-    length = float(np.linalg.norm(vector))
-    if length <= 1.0e-12:
-        raise ValueError("the selected bond has zero length")
-    moved.positions[second] = atoms.positions[first] + vector / length * value
-    return moved
-
-
-def _normalise_hook_experiment_result(
-    result: Mapping[str, Any],
-) -> tuple[
-    dict[str, Sequence[Any]],
-    dict[str, Sequence[float]] | None,
-    str,
-    float | None,
-    Mapping[str, str] | str | None,
-]:
-    if not isinstance(result, Mapping):
-        raise TypeError("the run callback must return a mapping")
-    trajectories = result.get("trajectories")
-    if not isinstance(trajectories, Mapping):
-        raise TypeError("callback data must contain a trajectories mapping")
-    missing = {"baseline", "hookean"}.difference(trajectories)
-    if missing:
-        names = ", ".join(sorted(missing))
-        raise ValueError(f"callback trajectories are missing: {names}")
-    named_trajectories = {
-        _BASELINE_BRANCH: trajectories["baseline"],
-        _HOOKEAN_BRANCH: trajectories["hookean"],
+    return {
+        "start": first.tolist(),
+        "end": second.tolist(),
+        "distance_a": float(np.linalg.norm(second - first)),
     }
 
-    force_history = result.get("force_history")
-    named_forces = None
-    if force_history is not None:
-        if not isinstance(force_history, Mapping):
-            raise TypeError("force_history must be a mapping when supplied")
-        named_forces = {
-            _BASELINE_BRANCH: force_history["baseline"],
-            _HOOKEAN_BRANCH: force_history["hookean"],
-        }
 
-    convergence = result.get("convergence")
-    if isinstance(convergence, Mapping):
-        convergence = {
-            _BASELINE_BRANCH: str(convergence.get("baseline", "not recorded")),
-            _HOOKEAN_BRANCH: str(convergence.get("hookean", "not recorded")),
-        }
-    elapsed = result.get("elapsed_s")
-    elapsed_s = None if elapsed is None else float(elapsed)
-    return (
-        named_trajectories,
-        named_forces,
-        str(result.get("device", "device not recorded")),
-        elapsed_s,
-        convergence,
+def _closest_interfragment_contact(
+    atoms: Atoms, fragment_a_size: int
+) -> dict[str, Any]:
+    """Return the closest atom pair across two contiguous fragments."""
+
+    if (
+        isinstance(fragment_a_size, bool)
+        or not isinstance(fragment_a_size, int)
+        or not 0 < fragment_a_size < len(atoms)
+    ):
+        raise ValueError("fragment split must leave at least one atom in each fragment")
+    positions = np.asarray(atoms.positions, dtype=float)
+    displacements = (
+        positions[:fragment_a_size, None, :] - positions[None, fragment_a_size:, :]
     )
+    distances = np.linalg.norm(displacements, axis=-1)
+    if not np.isfinite(distances).all():
+        raise ValueError("closest-contact distances must be finite")
+    local_a, local_b = np.unravel_index(int(np.argmin(distances)), distances.shape)
+    atom_b = int(local_b + fragment_a_size)
+    return {
+        "start": positions[local_a].tolist(),
+        "end": positions[atom_b].tolist(),
+        "distance_a": float(distances[local_a, local_b]),
+        "atom_indices": [int(local_a), atom_b],
+    }
 
 
-def _hook_experiment_result_html(
-    result: Mapping[str, Any], bond: tuple[int, int]
-) -> str:
-    trajectories, forces, device, elapsed_s, convergence = (
-        _normalise_hook_experiment_result(result)
-    )
-    return show_trajectory_comparison(
-        trajectories,
-        bond=bond,
-        force_history=forces,
-        device=device,
-        elapsed_s=elapsed_s,
-        convergence=convergence,
-    ).data
+def _source_coordinate_text(scale: float) -> str:
+    """Label one NCI Atlas source interaction coordinate."""
+
+    suffix = " (equilibrium)" if np.isclose(scale, 1.0) else ""
+    return f"Source coordinate s = {float(scale):.2f}{suffix}"
 
 
-def _curve_path(
-    distances: np.ndarray, values: np.ndarray, maximum: float
-) -> str:
-    safe_maximum = max(float(maximum), 1.0e-12)
-    x_values = 42.0 + 238.0 * (distances - distances[0]) / (
-        distances[-1] - distances[0]
-    )
-    y_values = 118.0 - 82.0 * values / safe_maximum
-    return " ".join(
-        f"{'M' if index == 0 else 'L'}{x:.2f},{y:.2f}"
-        for index, (x, y) in enumerate(zip(x_values, y_values, strict=True))
-    )
-
-
-def _hook_experiment_preview_markup(
-    atoms: Atoms,
-    bond: tuple[int, int],
+def _interpolate_nci_display_frames(
+    trajectories: Mapping[str, Sequence[Atoms]],
+    scales: np.ndarray,
     *,
-    spring_constant: float,
-    activation_distance: float,
-    distance_range: tuple[float, float],
-    commit_slider_class: str,
+    maximum_scale_step: float = 0.01,
+) -> tuple[dict[str, list[Atoms]], np.ndarray]:
+    """Add display-only frames between the calculated NCI scan geometries."""
+
+    segment_steps = [
+        max(1, int(np.ceil((stop - start) / maximum_scale_step - 1.0e-12)))
+        for start, stop in pairwise(scales)
+    ]
+    display_scales = [float(scales[0])]
+    display_frames = {name: [frames[0].copy()] for name, frames in trajectories.items()}
+
+    for source_index, steps in enumerate(segment_steps):
+        start_scale = float(scales[source_index])
+        stop_scale = float(scales[source_index + 1])
+        for step in range(1, steps + 1):
+            fraction = step / steps
+            display_scales.append(start_scale + fraction * (stop_scale - start_scale))
+            for name, frames in trajectories.items():
+                start = frames[source_index]
+                stop = frames[source_index + 1]
+                if start.get_chemical_symbols() != stop.get_chemical_symbols():
+                    raise ValueError(f"NCI scan atom order changes for {name!r}")
+                if step == steps:
+                    display_frames[name].append(stop.copy())
+                    continue
+                frame = start.copy()
+                frame.positions = (1.0 - fraction) * np.asarray(
+                    start.positions
+                ) + fraction * np.asarray(stop.positions)
+                display_frames[name].append(frame)
+
+    return display_frames, np.asarray(display_scales, dtype=float)
+
+
+def _normalise_fragment_sizes(
+    fragment_sizes: Mapping[str, int] | Sequence[int], names: Sequence[str]
+) -> dict[str, int]:
+    """Align one fragment-A size with each named NCI scan."""
+
+    if isinstance(fragment_sizes, Mapping):
+        missing = [name for name in names if name not in fragment_sizes]
+        extra = [name for name in fragment_sizes if name not in names]
+        if missing or extra:
+            raise ValueError(
+                "fragment_sizes must contain exactly one entry per NCI system"
+            )
+        return {name: fragment_sizes[name] for name in names}
+    values = list(fragment_sizes)
+    if len(values) != len(names):
+        raise ValueError("fragment_sizes must contain one value per NCI system")
+    return dict(zip(names, values, strict=True))
+
+
+def _static_nci_frame_svg(
+    atoms: Atoms,
+    line: Mapping[str, Any],
+    *,
+    state_label: str,
+    width: int = 240,
+    height: int = 170,
 ) -> str:
-    first, second = bond
-    bond_label = f"{atoms[first].symbol}–{atoms[second].symbol}"
-    bond_ascii = f"{atoms[first].symbol}-{atoms[second].symbol}"
-    low, high = distance_range
-    initial_distance = atoms.get_distance(first, second)
-    stretched = copy_with_bond_distance(atoms, bond, high)
-    distances = np.linspace(low, high, 81)
-    extension = np.maximum(0.0, distances - activation_distance)
-    energies = 0.5 * spring_constant * extension**2
-    forces = spring_constant * extension
-    energy_max = max(float(energies.max()), 1.0e-12)
-    force_max = max(float(forces.max()), 1.0e-12)
-    initial_extension = max(0.0, initial_distance - activation_distance)
-    initial_energy = 0.5 * spring_constant * initial_extension**2
-    initial_force = spring_constant * initial_extension
-    initial_x = 42.0 + 238.0 * (initial_distance - low) / (high - low)
-    energy_y = 118.0 - 82.0 * initial_energy / energy_max
-    force_y = 118.0 - 82.0 * initial_force / force_max
-    payload = _structure_payload(atoms)
-    root_id = f"alchemi-phenol-hook-preview-{uuid4().hex}"
-    markup = f"""
-<div id="{root_id}" aria-label="Phenol {bond_label} hook experiment preview">
-  {_common_css(root_id)}
-  <div style="padding:11px 14px;background:{_SURFACE}">
-    <strong>Phenol {bond_label} hook experiment</strong>
-    <span class="alchemi-muted" style="margin-left:8px;font-size:.8rem">atom rows {first}–{second}</span>
-  </div>
-  <div data-static-fallback style="padding:12px">
-    {_static_pair_svg(atoms, stretched, title=f"Phenol {bond_label} preview", first_label=f"start · {initial_distance:.2f} Å", last_label=f"slider end · {high:.2f} Å")}
-  </div>
-  <div data-interactive>
-    <div data-live-view aria-label="Phenol {bond_label} structure preview"></div>
-  </div>
-  <div style="padding:10px 14px 12px;background:{_SURFACE};border-top:1px solid {_BORDER}">
-    <label style="display:flex;justify-content:space-between;gap:12px;align-items:baseline;font-size:.82rem;font-weight:650">
-      <span>{bond_label} distance</span>
-      <strong data-preview-distance>{initial_distance:.3f} Å</strong>
-    </label>
-    <input data-distance type="range" min="{low:.6g}" max="{high:.6g}"
-      step="{max((high - low) / 180, 0.001):.6g}" value="{initial_distance:.6g}"
-      aria-label="{bond_label} distance in ångström"
-      style="display:block;width:100%;margin:9px 0 4px;accent-color:{_GREEN}">
-    <div class="alchemi-muted" style="display:flex;justify-content:space-between;font-size:.72rem">
-      <span>{low:.2f} Å</span><span>Release to run both optimizations</span><span>{high:.2f} Å</span>
-    </div>
-  </div>
-  <div class="alchemi-grid" style="display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;padding:12px;background:{_SURFACE}">
-    <figure style="margin:0;border:1px solid {_BORDER};border-radius:8px;padding:8px">
-      <figcaption style="font-size:.8rem;font-weight:650">Hookean potential energy, E (eV)</figcaption>
-      <svg viewBox="0 0 300 145" role="img" aria-label="Quadratic Hookean potential energy against {bond_label} distance" style="display:block;width:100%;height:auto">
-        <path d="M42 24V118H286" fill="none" stroke="{_BORDER}" stroke-width="1"/>
-        <path d="{_curve_path(distances, energies, energy_max)}" fill="none" stroke="{_GREEN}" stroke-width="3"/>
-        <circle data-energy-marker cx="{initial_x:.2f}" cy="{energy_y:.2f}" r="5" fill="{_GREEN}" stroke="{_TEXT}" stroke-width="1.5"/>
-        <text x="42" y="137" fill="{_MUTED}" font-size="10">{low:.2f} Å</text><text x="248" y="137" fill="{_MUTED}" font-size="10">{high:.2f} Å</text>
-      </svg>
-      <div class="alchemi-muted" style="font-size:.76rem">E = ½kΔr² · quadratic</div>
-    </figure>
-    <figure style="margin:0;border:1px solid {_BORDER};border-radius:8px;padding:8px">
-      <figcaption style="font-size:.8rem;font-weight:650">Restoring-force magnitude, |F| (eV/Å)</figcaption>
-      <svg viewBox="0 0 300 145" role="img" aria-label="Linear restoring-force magnitude against {bond_label} distance" style="display:block;width:100%;height:auto">
-        <path d="M42 24V118H286" fill="none" stroke="{_BORDER}" stroke-width="1"/>
-        <path d="{_curve_path(distances, forces, force_max)}" fill="none" stroke="{_BLUE}" stroke-width="3"/>
-        <circle data-force-marker cx="{initial_x:.2f}" cy="{force_y:.2f}" r="5" fill="{_BLUE}" stroke="{_TEXT}" stroke-width="1.5"/>
-        <text x="42" y="137" fill="{_MUTED}" font-size="10">{low:.2f} Å</text><text x="248" y="137" fill="{_MUTED}" font-size="10">{high:.2f} Å</text>
-      </svg>
-      <div class="alchemi-muted" style="font-size:.76rem">|F| = kΔr · linear</div>
-    </figure>
-  </div>
-  <div style="padding:0 14px 12px;background:{_SURFACE};font-size:.8rem">
-    <span class="alchemi-muted" data-preview-values></span>
-  </div>
-</div>
-{_bundle_preamble()}
-<script>(function(){{
-const root=document.getElementById('{root_id}');if(!root||!window.$3Dmol)return;
-const base={_json_for_script(payload)};const first={first},second={second};
-const k={spring_constant:.12g},threshold={activation_distance:.12g},low={low:.12g},high={high:.12g};
-const energyMax={energy_max:.12g},forceMax={force_max:.12g};
-{_viewer_js_helpers()}
-const viewer=makeViewer(root.querySelector('[data-live-view]'));drawStructure(viewer,base);
-const slider=root.querySelector('[data-distance]');
-const origin=base.positions[first],endpoint=base.positions[second];
-const length=Math.hypot(endpoint[0]-origin[0],endpoint[1]-origin[1],endpoint[2]-origin[2]);
-const direction=[(endpoint[0]-origin[0])/length,(endpoint[1]-origin[1])/length,(endpoint[2]-origin[2])/length];
-const xyz=function(symbols,positions){{return symbols.length+'\\nPhenol {bond_ascii} preview\\n'+symbols.map(function(symbol,index){{return symbol+' '+positions[index].join(' ');}}).join('\\n')+'\\n';}};
-const updatePreview=function(event){{
-  const distance=Number(event.target.value),view=viewer.getView();
-  const positions=base.positions.map(function(row){{return row.slice();}});
-  positions[second]=[origin[0]+direction[0]*distance,origin[1]+direction[1]*distance,origin[2]+direction[2]*distance];
-  viewer.removeAllModels();viewer.removeAllShapes();viewer.removeAllLabels();viewer.addModel(xyz(base.symbols,positions),'xyz');applyStyle(viewer);
-  viewer.addLine({{start:{{x:origin[0],y:origin[1],z:origin[2]}},end:{{x:positions[second][0],y:positions[second][1],z:positions[second][2]}},color:'{_GREEN}',dashed:true}});
-  viewer.setView(view);viewer.render();
-  const extension=Math.max(0,distance-threshold),energy=.5*k*extension*extension,force=k*extension;
-  const x=42+238*(distance-low)/(high-low);
-  root.querySelector('[data-energy-marker]').setAttribute('cx',String(x));
-  root.querySelector('[data-energy-marker]').setAttribute('cy',String(118-82*energy/energyMax));
-  root.querySelector('[data-force-marker]').setAttribute('cx',String(x));
-  root.querySelector('[data-force-marker]').setAttribute('cy',String(118-82*force/forceMax));
-  root.querySelector('[data-preview-distance]').textContent=distance.toFixed(3)+' Å';
-  root.querySelector('[data-preview-values]').textContent='Hookean energy '+energy.toFixed(3)+' eV · restoring force '+force.toFixed(3)+' eV/Å';
-}};
-const commitPreview=function(){{
-  const bridge=window.parent.document.querySelector('.{commit_slider_class} input[type="range"]');
-  if(!bridge)return;
-  const setValue=Object.getOwnPropertyDescriptor(window.parent.HTMLInputElement.prototype,'value').set;
-  setValue.call(bridge,slider.value);
-  bridge.dispatchEvent(new window.parent.Event('input',{{bubbles:true}}));
-  bridge.dispatchEvent(new window.parent.Event('change',{{bubbles:true}}));
-}};
-slider.addEventListener('input',updatePreview);
-slider.addEventListener('change',commitPreview);
-updatePreview({{target:slider}});root.classList.add('is-live');
-}})();</script>
-"""
-    return markup
+    """Draw one static NCI frame with the same COM separation as the live view."""
 
+    positions = np.asarray(atoms.positions, dtype=float)
+    origin = positions.mean(axis=0)
+    rotation = _viewing_rotation(positions)
+    projected_atoms = _to_view_frame(positions, origin, rotation)[:, :2]
+    projected_line = _to_view_frame(
+        np.asarray([line["start"], line["end"]]), origin, rotation
+    )[:, :2]
+    all_points = np.concatenate([projected_atoms, projected_line])
+    lower = all_points.min(axis=0)
+    upper = all_points.max(axis=0)
+    extent = upper - lower
+    scale_factor = min(
+        (width - 34) / max(float(extent[0]), 1.0),
+        (height - 76) / max(float(extent[1]), 1.0),
+    )
 
-class PhenolHookExperiment:
-    """Presentation and event wiring for a notebook-owned two-branch run."""
-
-    def __init__(
-        self,
-        phenol: Atoms,
-        bond_indices: tuple[int, int],
-        run_callback: Callable[[Atoms], Mapping[str, Any]],
-        static_fallback_data: Mapping[str, Any],
-        *,
-        spring_constant: float,
-        activation_distance: float,
-        distance_range: tuple[float, float],
-    ) -> None:
-        self._phenol = phenol.copy()
-        self.bond_indices = bond_indices
-        self.bond_label = (
-            f"{phenol[bond_indices[0]].symbol}–{phenol[bond_indices[1]].symbol}"
-        )
-        self._run_callback = run_callback
-        self.spring_constant = spring_constant
-        self.activation_distance = activation_distance
-        self.distance_range = distance_range
-        self.preview_distance = phenol.get_distance(*bond_indices)
-        self.status = "ready"
-        self.status_message = (
-            f"Move {self.bond_label}, then release the slider to run both branches."
-        )
-        self.result_html = _hook_experiment_result_html(
-            static_fallback_data, bond_indices
-        )
-        self._widget: Any = None
-        self._status_widget: Any = None
-        self._result_widget: Any = None
-        self._commit_slider_class = f"alchemi-hook-commit-{uuid4().hex}"
-        self._preview_html = _hook_experiment_preview_markup(
-            self._phenol,
-            bond_indices,
-            spring_constant=spring_constant,
-            activation_distance=activation_distance,
-            distance_range=distance_range,
-            commit_slider_class=self._commit_slider_class,
-        )
-
-    def preview(self, distance: float) -> Atoms:
-        """Return preview coordinates without starting either optimization."""
-
-        value = self._validate_distance(distance)
-        self.preview_distance = value
-        return copy_with_bond_distance(self._phenol, self.bond_indices, value)
-
-    def commit(self, distance: float) -> Mapping[str, Any]:
-        """Run both notebook-owned branches once for a committed bond distance."""
-
-        edited = self.preview(distance)
-        self._set_status("running", "Running both FIRE2 optimization branches…")
-        try:
-            result = self._run_callback(edited)
-            result_html = _hook_experiment_result_html(result, self.bond_indices)
-        except Exception as error:
-            self._set_status("error", f"Run failed: {error}")
-            raise
-        self.result_html = result_html
-        self._replace_result_output()
-        self._set_status("success", "Both trajectories updated from returned coordinates.")
+    def screen(points: np.ndarray) -> np.ndarray:
+        centered = points - (lower + upper) / 2
+        result = centered * scale_factor
+        result[:, 0] += width / 2
+        result[:, 1] = height / 2 - result[:, 1] + 17
         return result
 
-    def _validate_distance(self, distance: float) -> float:
-        value = float(distance)
-        low, high = self.distance_range
-        if not np.isfinite(value) or not low <= value <= high:
-            raise ValueError(f"distance must be between {low:.3f} and {high:.3f} Å")
-        return value
-
-    def _set_status(self, state: str, message: str) -> None:
-        self.status = state
-        self.status_message = message
-        if self._status_widget is not None:
-            colors = {"ready": _MUTED, "running": _BLUE, "success": _GREEN, "error": "#E05252"}
-            self._status_widget.value = (
-                f'<div role="status" aria-live="polite" style="padding:9px 12px;'
-                f'border-left:4px solid {colors[state]};background:{_SURFACE};color:{_TEXT}">'
-                f"<strong>{escape(state.title())}</strong> · {escape(message)}</div>"
-            )
-
-    def _replace_result_output(self) -> None:
-        if self._result_widget is None:
-            return
-        self._result_widget.value = _viewer_iframe(self.result_html, height=500)
-
-    def _build_widget(self) -> Any:
-        import ipywidgets as widgets
-
-        preview = widgets.HTML(
-            value=_viewer_iframe(self._preview_html, height=720, auto_height=True),
-            layout=widgets.Layout(width="100%"),
+    atom_xy = screen(projected_atoms)
+    line_xy = screen(projected_line)
+    atom_marks = []
+    for symbol, (x_coord, y_coord) in zip(
+        atoms.get_chemical_symbols(), atom_xy, strict=True
+    ):
+        atom_marks.append(
+            f'<circle cx="{x_coord:.1f}" cy="{y_coord:.1f}" r="5.2" '
+            f'fill="{_ELEMENT_COLORS.get(symbol, _GREEN)}" stroke="{_BACKGROUND}" '
+            f'stroke-width="1"><title>{escape(symbol)}</title></circle>'
         )
-        commit_slider = widgets.FloatSlider(
-            value=self.preview_distance,
-            min=self.distance_range[0],
-            max=self.distance_range[1],
-            step=max((self.distance_range[1] - self.distance_range[0]) / 180, 0.001),
-            description=f"{self.bond_label} distance",
-            readout_format=".3f",
-            continuous_update=False,
-            layout=widgets.Layout(
-                width="100%",
-                height="1px",
-                min_height="1px",
-                margin="0",
-                overflow="hidden",
-                visibility="hidden",
-            ),
-        )
-        commit_slider.add_class(self._commit_slider_class)
-        self._status_widget = widgets.HTML()
-        self._result_widget = widgets.HTML(
-            value=_viewer_iframe(self.result_html, height=500),
-            layout=widgets.Layout(width="100%", height="500px", overflow="hidden"),
-        )
-        self._result_widget.add_class("alchemi-phenol-hook-results")
-        commit_slider.observe(lambda change: self.commit(change["new"]), names="value")
-        self._widget = widgets.VBox(
-            [
-                commit_slider,
-                preview,
-                self._status_widget,
-                self._result_widget,
-            ],
-            layout=widgets.Layout(width="100%", max_width=f"{_MAX_WIDTH}px"),
-        )
-        self._widget.add_class("alchemi-phenol-hook-experiment")
-        self._set_status(self.status, self.status_message)
-        return self._widget
-
-    def _static_fallback(self) -> str:
-        return (
-            f'<section aria-label="Static fallback" style="max-width:{_MAX_WIDTH}px;'
-            f'background:{_BACKGROUND};color:{_TEXT};border:1px solid {_BORDER};border-radius:10px;overflow:hidden">'
-            f'<div style="padding:9px 12px;background:{_SURFACE};font-weight:650">Static fallback</div>'
-            f"{self._preview_html}{self.result_html}</section>"
-        )
-
-    def _repr_mimebundle_(self, **kwargs: Any) -> Any:
-        try:
-            widget = self._widget or self._build_widget()
-        except ModuleNotFoundError as error:
-            if error.name != "ipywidgets":
-                raise
-            return {"text/html": self._static_fallback()}
-        bundle = widget._repr_mimebundle_(**kwargs)
-        if isinstance(bundle, tuple):
-            data, metadata = bundle
-            data = dict(data)
-            data["text/html"] = self._static_fallback()
-            return data, metadata
-        data = {} if bundle is None else dict(bundle)
-        data["text/html"] = self._static_fallback()
-        return data
-
-
-def show_phenol_hook_experiment(
-    phenol: Atoms,
-    bond_indices: tuple[int, int],
-    run_callback: Callable[[Atoms], Mapping[str, Any]],
-    static_fallback_data: Mapping[str, Any],
-    *,
-    spring_constant: float = 10.0,
-    activation_distance: float = 1.10,
-    distance_range: tuple[float, float] = (0.95, 1.45),
-) -> PhenolHookExperiment:
-    """Build one phenol C–H or O–H experiment with a notebook-owned callback."""
-
-    if not isinstance(phenol, Atoms):
-        raise TypeError("phenol must be an ASE Atoms object")
-    if not callable(run_callback):
-        raise TypeError("run_callback must be callable")
-    first, second = (int(index) for index in bond_indices)
-    if first == second or min(first, second) < 0 or max(first, second) >= len(phenol):
-        raise ValueError("bond_indices must contain two different valid atom indices")
-    if phenol[first].symbol not in {"C", "O"} or phenol[second].symbol != "H":
-        raise ValueError(
-            "bond_indices must be ordered as carbon or oxygen, then hydrogen"
-        )
-    if not np.isfinite(spring_constant) or spring_constant <= 0:
-        raise ValueError("spring_constant must be positive and finite")
-    if not np.isfinite(activation_distance) or activation_distance <= 0:
-        raise ValueError("activation_distance must be positive and finite")
-    low, high = (float(value) for value in distance_range)
-    if not np.isfinite([low, high]).all() or low <= 0 or high <= low:
-        raise ValueError("distance_range must contain increasing positive finite values")
-    initial = phenol.get_distance(first, second)
-    if not low <= initial <= high:
-        raise ValueError("the supplied bond distance must lie inside distance_range")
-
-    return PhenolHookExperiment(
-        phenol,
-        (first, second),
-        run_callback,
-        static_fallback_data,
-        spring_constant=float(spring_constant),
-        activation_distance=float(activation_distance),
-        distance_range=(low, high),
+    distance = float(line["distance_a"])
+    delta_distance = float(line["delta_distance_a"])
+    return (
+        f'<svg viewBox="0 0 {width} {height}" role="img" '
+        f'aria-label="{escape(state_label, quote=True)} NCI structure at closest '
+        f"contact distance "
+        f'{distance:.3f} angstrom" '
+        'style="display:block;width:100%;height:auto">'
+        f'<rect width="{width}" height="{height}" rx="7" fill="{_BACKGROUND}"/>'
+        f'<text x="12" y="18" fill="{_TEXT}" font-size="11" font-weight="650">'
+        f"{escape(state_label)}</text>"
+        f'<text x="12" y="36" fill="{_MUTED}" font-size="9.5">'
+        f"D min = {distance:.3f} Å; ΔD = {delta_distance:+.3f} Å</text>"
+        f'<line x1="{line_xy[0, 0]:.1f}" y1="{line_xy[0, 1]:.1f}" '
+        f'x2="{line_xy[1, 0]:.1f}" y2="{line_xy[1, 1]:.1f}" '
+        f'stroke="{_BLUE}" stroke-width="2" stroke-dasharray="3 4"/>'
+        + "".join(atom_marks)
+        + "</svg>"
     )
 
 
-def show_trajectory_comparison(
-    trajectories: Mapping[str, Sequence[Any]] | Sequence[Any],
+def _py3dmol_nci_player(
+    items: Sequence[Mapping[str, Any]],
     *,
-    bond: tuple[int, int],
-    labels: Sequence[str] | None = None,
-    force_history: Mapping[str, Sequence[float]] | None = None,
-    device: str = "device not recorded",
-    elapsed_s: float | None = None,
-    convergence: Mapping[str, str] | str | None = None,
-) -> Any:
-    """Compare two synchronized trajectories with bond, force, and run status.
+    scales: Sequence[float],
+    source_scales: Sequence[float],
+    frame_interval_ms: int,
+) -> str:
+    """Build three synchronized NCI cards driven by one separation control."""
 
-    A sequence of batched frames is split with ``batch_ptr``. ``bond`` is local
-    to each graph, so the second graph reads positions after its graph offset.
+    frame_count = len(scales)
+    cards = "".join(
+        f'<section class="nci-card" data-panel="{index}">'
+        f'<div class="molecule-view" data-viewer="{index}" '
+        f'aria-label="NCI scan for {escape(str(item["name"]), quote=True)}"></div>'
+        f'<strong class="card-title">{escape(str(item["name"]))}</strong>'
+        '<div class="separation-readout" data-separation-readout>'
+        '<span class="metric"><b>D MIN</b><em>…<i>Å</i></em></span>'
+        '<span class="metric"><b>ΔD</b><em>…<i>Å</i></em></span>'
+        "</div></section>"
+        for index, item in enumerate(items)
+    )
+    document = f"""<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{{margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif}}
+*{{box-sizing:border-box}}.player{{width:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
+.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+button{{min-width:92px;height:36px;padding:0 16px;border:0;border-radius:7px;background:{_GREEN};color:#11170D;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s ease}}
+button:hover{{background:#8CD400}}button:active{{background:#6AA700}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
+label{{flex:1;min-width:180px;display:flex;align-items:center;gap:14px;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}input{{width:100%;margin:0;accent-color:{_GREEN}}}
+.stage-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:12px;padding:14px;background:{_BACKGROUND}}}
+.nci-card{{position:relative;min-width:0;height:340px;overflow:hidden;border:1px solid #3A444D;border-radius:8px;background:{_SURFACE}}}
+.molecule-view{{position:absolute;inset:0 0 60px;margin:10px 14px 0;border-radius:5px;overflow:hidden;background:#12181A}}.molecule-view canvas{{position:absolute!important;inset:0;width:100%!important;height:100%!important}}
+.card-title{{position:absolute;z-index:3;top:12px;left:12px;display:block;max-width:calc(100% - 24px);padding:4px 7px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(23,29,32,.86);font-size:.82rem;pointer-events:none}}
+.separation-readout{{position:absolute;left:0;right:0;bottom:0;height:60px;padding:10px 14px;border-top:1px solid #2C353B;background:{_SURFACE};display:flex;align-items:flex-end;gap:20px;color:{_TEXT}}}
+.metric{{display:flex;flex-direction:column;min-width:92px}}.metric b{{font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.94rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.72rem;font-weight:500;color:#8A939B;margin-left:.25em}}
+@media(max-width:700px){{.stage-grid{{grid-template-columns:1fr}}.nci-card{{height:340px}}}}
+</style></head><body>{_bundle_preamble()}
+<main class="player" aria-label="Synchronized py3Dmol NCI separation player">
+  <div class="toolbar"><button type="button" data-play aria-label="Play NCI separation scan">▶ Play</button>
+    <label>Shared NCI Atlas coordinate
+      <input data-frame aria-label="Shared NCI Atlas scan coordinate" type="range" min="0" max="{frame_count - 1}" value="0" step="1">
+    </label>
+  </div>
+  <div class="stage-grid">{cards}</div>
+</main>
+<script>$3Dmolpromise.then(function(){{
+const items={_json_for_script(list(items))};const scales={_json_for_script(list(scales))};const sourceScales={_json_for_script(list(source_scales))};
+{_trajectory_viewers_javascript()}
+const slider=document.querySelector('[data-frame]');const play=document.querySelector('[data-play]');let timer=null;let queue=Promise.resolve();
+const point=function(values){{return {{x:values[0],y:values[1],z:values[2]}};}};
+const update=function(index){{queue=queue.then(function(){{return Promise.all(viewers.map(function(viewer){{return viewer.setFrame(index);}}));}}).then(function(){{viewers.forEach(function(viewer,panel){{const line=items[panel].contact_lines[index];viewer.removeAllShapes();viewer.addLine({{start:point(line.start),end:point(line.end),color:'{_BLUE}',dashed:true,dashLength:.12,gapLength:.08}});applyStyle(viewer);viewer.render();document.querySelector('[data-panel="'+panel+'"] [data-separation-readout]').innerHTML='<span class="metric"><b>D MIN</b><em>'+line.distance_a.toFixed(3)+'<i>Å</i></em></span><span class="metric"><b>ΔD</b><em>'+(line.delta_distance_a>=0?'+':'')+line.delta_distance_a.toFixed(3)+'<i>Å</i></em></span>';}});slider.value=String(index);}});return queue;}};
+const stop=function(){{if(timer!==null)window.clearTimeout(timer);timer=null;play.textContent='▶ Play';}};
+const advance=function(){{if(timer===null)return;update((Number(slider.value)+1)%{frame_count}).then(function(){{if(timer!==null)timer=window.setTimeout(advance,{frame_interval_ms});}});}};
+play.addEventListener('click',function(){{if(timer!==null){{stop();return;}}play.textContent='❚❚ Pause';timer=window.setTimeout(advance,{frame_interval_ms});}});
+slider.addEventListener('input',function(){{stop();update(Number(slider.value));}});update(0);
+}});</script></body></html>"""
+    return _player_iframe(
+        document,
+        title="Synchronized py3Dmol NCI separation player",
+        height=440,
+    )
+
+
+def show_nci_separation_player(
+    grouped_frames: Mapping[str, Sequence[Any]],
+    fragment_sizes: Mapping[str, int] | Sequence[int],
+    scale_values: Sequence[float],
+    *,
+    frame_interval_ms: int = 650,
+) -> Any:
+    """Show aligned NCI scans with closest contacts and one shared control.
+
+    ``grouped_frames`` holds one ordered scan per named complex. Each
+    ``fragment_sizes`` value is the number of leading atoms in fragment A.
+    ``scale_values`` supplies the NCI Atlas source interaction coordinate for
+    every frame. The frame at scale 1 defines each complex's reference closest
+    contact.
+    Linear display frames at one-percent scale increments smooth the player;
+    every supplied scan geometry remains an exact frame.
     """
 
-    normalised = _normalise_trajectories(trajectories, labels)
-    if len(normalised) != 2:
-        raise ValueError("trajectory comparison requires exactly two systems")
-    first_index, second_index = (int(index) for index in bond)
-    if first_index == second_index or min(first_index, second_index) < 0:
-        raise ValueError("bond must contain two different non-negative local indices")
-    for name, frames in normalised.items():
-        if max(first_index, second_index) >= len(frames[0]):
-            raise ValueError(f"bond indices are outside trajectory {name!r}")
-
+    normalised = _normalise_trajectories(grouped_frames, labels=None)
+    if len(normalised) != 3:
+        raise ValueError("the Core NCI player requires exactly three systems")
     names = list(normalised)
+    sizes = _normalise_fragment_sizes(fragment_sizes, names)
+    scales = np.asarray(scale_values, dtype=float).reshape(-1)
     frame_count = len(next(iter(normalised.values())))
-    forces = _force_values(force_history, names, frame_count)
-    convergence_map = (
-        {name: str(convergence.get(name, "not recorded")) for name in names}
-        if isinstance(convergence, Mapping)
-        else {name: str(convergence or "not recorded") for name in names}
-    )
-    elapsed_text = "not recorded" if elapsed_s is None else f"{float(elapsed_s):.3f} s"
+    if scales.size != frame_count:
+        raise ValueError("scale_values must contain one value per aligned frame")
+    if not np.isfinite(scales).all() or np.any(scales <= 0):
+        raise ValueError("scale_values must contain finite positive values")
+    if np.any(np.diff(scales) <= 0):
+        raise ValueError("scale_values must be strictly increasing")
+    equilibrium_indices = np.flatnonzero(np.isclose(scales, 1.0))
+    if equilibrium_indices.size != 1:
+        raise ValueError("scale_values must contain one reference value at scale 1")
+    if (
+        isinstance(frame_interval_ms, bool)
+        or not isinstance(frame_interval_ms, int)
+        or frame_interval_ms < 16
+    ):
+        raise ValueError("frame_interval_ms must be an integer of at least 16")
+
+    source_frame_count = frame_count
+    source_scales = scales.copy()
+    normalised, scales = _interpolate_nci_display_frames(normalised, scales)
+    frame_count = len(scales)
+    equilibrium_index = int(np.flatnonzero(np.isclose(scales, 1.0))[0])
     items = []
     for name, frames in normalised.items():
-        bond_label = (
-            f"{frames[0][first_index].symbol}–{frames[0][second_index].symbol}"
-        )
-        distances = [
-            float(
-                np.linalg.norm(
-                    frame.positions[second_index] - frame.positions[first_index]
-                )
-            )
-            for frame in frames
-        ]
+        lines = [_closest_interfragment_contact(frame, sizes[name]) for frame in frames]
+        reference_distance = float(lines[equilibrium_index]["distance_a"])
+        for line in lines:
+            line["delta_distance_a"] = float(line["distance_a"] - reference_distance)
         items.append(
             {
                 "name": name,
-                "bond_label": bond_label,
-                "frames": [_structure_payload(frame) for frame in frames],
-                "distances": distances,
-                "forces": forces[name],
+                "trajectory_xyz": "".join(_atoms_to_xyz(frame) for frame in frames),
+                "contact_lines": lines,
             }
         )
-    root_id = f"alchemi-compare-{uuid4().hex}"
-    static_card_parts = []
-    for name, frames in normalised.items():
-        bond_label = (
-            f"{frames[0][first_index].symbol}–{frames[0][second_index].symbol}"
-        )
-        values = forces[name]
-        force_text = (
-            "maximum force not recorded"
-            if values[0] is None
-            else f"fmax {values[0]:.3f} → {values[-1]:.3f} eV/Å"
-        )
-        static_card_parts.append(
-            f'<section style="border:1px solid {_BORDER};border-radius:8px;overflow:hidden">'
-            + _static_pair_svg(
-                frames[0], frames[-1], title=f"{name}: initial and final"
+    fallback_states = (
+        ("initial", 0),
+        ("equilibrium", equilibrium_index),
+        ("far", frame_count - 1),
+    )
+    static_sections = []
+    for item, (name, frames) in zip(items, normalised.items(), strict=True):
+        previews = "".join(
+            _static_nci_frame_svg(
+                frames[index],
+                item["contact_lines"][index],
+                state_label=state_label,
             )
-            + f'<div style="padding:8px 10px;background:{_SURFACE};font-size:.8rem">{escape(name)} · {escape(bond_label)} '
-            + f"{np.linalg.norm(frames[0].positions[second_index] - frames[0].positions[first_index]):.3f} → "
-            + f"{np.linalg.norm(frames[-1].positions[second_index] - frames[-1].positions[first_index]):.3f} Å · "
-            + f"{escape(force_text)} · {escape(convergence_map[name])}</div></section>"
+            for state_label, index in fallback_states
         )
-    static_status = f"""
-<section style="min-height:{_VIEWER_HEIGHT}px;padding:16px;border:1px solid {_BORDER};border-radius:8px;background:{_SURFACE}">
-  <strong>Run status</strong>
-  <dl style="display:grid;grid-template-columns:auto 1fr;gap:9px 14px;margin:16px 0 0;font-size:.82rem">
-    <dt class="alchemi-muted">Device</dt><dd style="margin:0">{escape(str(device))}</dd>
-    <dt class="alchemi-muted">Frames</dt><dd style="margin:0">{frame_count}</dd>
-    <dt class="alchemi-muted">Elapsed</dt><dd style="margin:0">{escape(elapsed_text)}</dd>
-  </dl>
-</section>
-"""
-    static_cards = "".join(static_card_parts) + static_status
-    panels = "".join(
-        f'<section data-panel="{index}" style="min-width:0;border:1px solid {_BORDER};border-radius:8px;overflow:hidden">'
-        f'<div style="padding:9px 11px;background:{_SURFACE};font-size:.84rem;font-weight:650">{escape(name)}</div>'
-        f'<div data-live-view aria-label="Trajectory for {escape(name, quote=True)}"></div>'
-        f'<div data-distance-output role="status" style="padding:8px 11px;background:{_SURFACE};font-size:.8rem"></div></section>'
-        for index, name in enumerate(names)
+        static_sections.append(
+            f'<section style="padding:10px;border-bottom:1px solid {_BORDER}">'
+            f'<strong style="display:block;margin:0 2px 8px;font-size:.84rem">'
+            f'{escape(name)}</strong><div style="display:grid;grid-template-columns:'
+            f'repeat(3,minmax(0,1fr));gap:8px">{previews}</div></section>'
+        )
+
+    root_id = f"alchemi-nci-{uuid4().hex}"
+    display_interval_ms = max(
+        32,
+        round(frame_interval_ms * source_frame_count / frame_count),
+    )
+    player = _py3dmol_nci_player(
+        items,
+        scales=scales.astype(float).tolist(),
+        source_scales=source_scales.astype(float).tolist(),
+        frame_interval_ms=display_interval_ms,
     )
     markup = f"""
-<div id="{root_id}" tabindex="0" aria-label="Synchronized trajectory comparison">
+<div id="{root_id}" aria-label="Synchronized NCI separation player">
   {_common_css(root_id)}
-  <div style="padding:10px 12px;background:{_SURFACE};display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-    <button type="button" data-play aria-label="Play trajectories">▶ Play</button>
-    <label style="flex:1;min-width:220px;font-size:.78rem">Shared frame
-      <input data-frame type="range" min="0" max="{frame_count - 1}" value="0" step="1" style="width:100%">
-    </label>
-    <output data-frame-label style="min-width:80px;text-align:right;font-size:.8rem">1 / {frame_count}</output>
+  <div data-static-fallback style="padding:2px 12px 12px">
+    {runtime_required_notice()}
+    {"".join(static_sections)}
   </div>
-  <div data-static-fallback style="padding:12px">
-    <div class="alchemi-grid" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px">{static_cards}</div>
-    <p class="alchemi-muted" style="margin:10px 2px 0;font-size:.82rem">Static initial/final comparison. Run this cell in Jupyter for synchronized playback.</p>
-  </div>
-  <div data-interactive class="alchemi-grid" style="padding:12px;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:8px">
-    {panels}
-    <section style="min-height:{_VIEWER_HEIGHT}px;padding:16px;border:1px solid {_BORDER};border-radius:8px;background:{_SURFACE}">
-      <strong>Run status</strong>
-      <dl style="display:grid;grid-template-columns:auto 1fr;gap:9px 14px;margin:16px 0 0;font-size:.82rem">
-        <dt class="alchemi-muted">Device</dt><dd style="margin:0">{escape(str(device))}</dd>
-        <dt class="alchemi-muted">Frame</dt><dd data-metric-frame style="margin:0">1 / {frame_count}</dd>
-        <dt class="alchemi-muted">Elapsed</dt><dd style="margin:0">{escape(elapsed_text)}</dd>
-        <dt class="alchemi-muted">Convergence</dt><dd data-convergence style="margin:0"></dd>
-      </dl>
-    </section>
-  </div>
+  <div data-interactive>{player}</div>
 </div>
-{_bundle_preamble()}
-<script>(function(){{
-const root=document.getElementById('{root_id}');if(!root||!window.$3Dmol)return;
-const items={_json_for_script(items)};const bond=[{first_index},{second_index}];const convergence={_json_for_script(convergence_map)};
-{_viewer_js_helpers()}
-const viewers=items.map(function(item,index){{return makeViewer(root.querySelector('[data-panel="'+index+'"] [data-live-view]'));}});
-const slider=root.querySelector('[data-frame]');const play=root.querySelector('[data-play]');let timer=null;
-const update=function(index){{
-  items.forEach(function(item,panel){{
-    drawStructure(viewers[panel],item.frames[index]);
-    const positions=item.frames[index].positions,a=positions[bond[0]],b=positions[bond[1]];
-    viewers[panel].addLine({{start:{{x:a[0],y:a[1],z:a[2]}},end:{{x:b[0],y:b[1],z:b[2]}},color:'{_GREEN}',dashed:true}});viewers[panel].render();
-    const force=item.forces[index];const forceText=force===null?'maximum force not recorded':'max force '+force.toFixed(3)+' eV/Å';
-    root.querySelector('[data-panel="'+panel+'"] [data-distance-output]').textContent=item.bond_label+' distance: '+item.distances[index].toFixed(3)+' Å · '+forceText+' · fixed-step frame '+(index+1);
-  }});
-  slider.value=String(index);root.querySelector('[data-frame-label]').textContent=(index+1)+' / {frame_count}';
-  root.querySelector('[data-metric-frame]').textContent=(index+1)+' / {frame_count}';
-  root.querySelector('[data-convergence]').textContent=items.map(function(item){{return item.name+': '+convergence[item.name];}}).join(' · ');
-}};
-const stop=function(){{if(timer)window.clearInterval(timer);timer=null;play.textContent='▶ Play';}};
-play.addEventListener('click',function(){{if(timer){{stop();return;}}play.textContent='❚❚ Pause';timer=window.setInterval(function(){{let next=Number(slider.value)+1;if(next>Number(slider.max))next=0;update(next);}},500);}});
-slider.addEventListener('input',function(){{stop();update(Number(slider.value));}});
-root.addEventListener('keydown',function(event){{
-  if(event.key===' '){{event.preventDefault();play.click();}}
-  if(event.key==='ArrowLeft'||event.key==='ArrowRight'){{event.preventDefault();stop();update(Math.max(0,Math.min({frame_count - 1},Number(slider.value)+(event.key==='ArrowLeft'?-1:1))));}}
-}});
-update(0);root.classList.add('is-live');
-}})();</script>
+<script>(function(){{const root=document.getElementById('{root_id}');if(root&&root.querySelector('iframe'))root.classList.add('is-live');}})();</script>
 """
     return _html(markup)
 
 
-__all__ = [
-    "copy_with_bond_distance",
-    "show_bond_slider",
-    "show_phenol_hook_experiment",
-    "show_relaxation_player",
-    "show_structure_explorer",
-    "show_trajectory_comparison",
-    "snapshot_batches",
-]
+def _py3dmol_bias_comparison_player(
+    items: Sequence[Mapping[str, Any]],
+    *,
+    frame_count: int,
+    frame_interval_ms: int,
+) -> str:
+    """Build a two-condition, three-system player with one frame control."""
+
+    cards = "".join(
+        f'<section class="trajectory-card" data-panel="{index}">'
+        f'<div class="molecule-view" data-viewer="{index}" '
+        f'aria-label="{escape(str(item["condition"]), quote=True)} trajectory for '
+        f'{escape(str(item["name"]), quote=True)}"></div>'
+        f'<strong class="card-title">{escape(str(item["condition"]))}</strong>'
+        f'<span class="card-sub">{escape(str(item["name"]))}</span>'
+        '<div class="trajectory-readout" data-trajectory-readout>'
+        '<span class="metric"><b>SEPARATION</b><em>…<i>Å</i></em></span>'
+        '<span class="metric"><b>MAX BIAS FORCE</b><em>…<i>eV/Å</i></em></span>'
+        "</div></section>"
+        for index, item in enumerate(items)
+    )
+    document = f"""<!doctype html>
+<html><head><meta charset="utf-8"><style>
+html,body{{margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif}}
+*{{box-sizing:border-box}}.player{{width:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
+.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+button{{min-width:92px;height:36px;padding:0 16px;border:0;border-radius:7px;background:{_GREEN};color:#11170D;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s ease}}
+button:hover{{background:#8CD400}}button:active{{background:#6AA700}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
+label{{flex:1;min-width:180px;display:flex;align-items:center;gap:14px;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}input{{width:100%;margin:0;accent-color:{_GREEN}}}
+output{{flex:0 0 auto;text-align:right;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}}output .of{{color:#68737E;font-weight:500}}
+.stage-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,278px);gap:12px;padding:14px;background:{_BACKGROUND}}}
+.trajectory-card{{position:relative;min-width:0;overflow:hidden;border:1px solid #3A444D;border-radius:8px;background:{_SURFACE}}}
+.molecule-view{{position:absolute;inset:0 0 66px;margin:10px 14px 0;border-radius:5px;overflow:hidden;background:#12181A}}.molecule-view canvas{{position:absolute!important;inset:0;width:100%!important;height:100%!important}}
+.card-title{{position:absolute;z-index:3;top:12px;left:12px;display:block;max-width:calc(100% - 24px);padding:4px 7px;border-radius:5px;background:rgba(23,29,32,.86);font-size:.8rem;pointer-events:none}}
+.card-sub{{position:absolute;z-index:3;top:42px;left:12px;display:block;max-width:calc(100% - 24px);padding:2px 7px;border-radius:4px;background:rgba(23,29,32,.82);color:#8A939B;font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}}
+.trajectory-readout{{position:absolute;left:0;right:0;bottom:0;height:66px;padding:10px 14px;border-top:1px solid #2C353B;background:{_SURFACE};display:flex;align-items:flex-end;gap:18px;color:{_TEXT}}}
+.metric{{display:flex;flex-direction:column;min-width:92px}}.metric b{{font-size:.58rem;font-weight:700;letter-spacing:.1em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.9rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.68rem;font-weight:500;color:#8A939B;margin-left:.25em}}
+</style></head><body>{_bundle_preamble()}
+<main class="player" aria-label="Matched molecular dynamics comparison">
+  <div class="toolbar"><button type="button" data-play aria-label="Play matched trajectories">▶ Play</button>
+    <label>Shared trajectory frame
+      <input data-frame aria-label="Shared trajectory frame" type="range" min="0" max="{frame_count - 1}" value="0" step="1">
+    </label>
+    <output data-frame-label>1<span class="of"> / {frame_count}</span></output>
+  </div>
+  <div class="stage-grid">{cards}</div>
+</main>
+<script>$3Dmolpromise.then(function(){{
+const items={_json_for_script(list(items))};
+{_trajectory_viewers_javascript()}
+const slider=document.querySelector('[data-frame]');const play=document.querySelector('[data-play]');let timer=null;let queue=Promise.resolve();
+const point=function(values){{return {{x:values[0],y:values[1],z:values[2]}};}};
+const update=function(index){{queue=queue.then(function(){{return Promise.all(viewers.map(function(viewer){{return viewer.setFrame(index);}}));}}).then(function(){{viewers.forEach(function(viewer,panel){{const item=items[panel],line=item.com_lines[index];viewer.removeAllShapes();viewer.addLine({{start:point(line.start),end:point(line.end),color:'{_MUTED}',dashed:true,dashLength:.12,gapLength:.08}});applyStyle(viewer);viewer.render();document.querySelector('[data-panel="'+panel+'"] [data-trajectory-readout]').innerHTML='<span class="metric"><b>SEPARATION</b><em>'+line.distance_a.toFixed(3)+'<i>Å</i></em></span><span class="metric"><b>MAX BIAS FORCE</b><em>'+item.maximum_bias_force[index].toFixed(3)+'<i>eV/Å</i></em></span>';}});slider.value=String(index);document.querySelector('[data-frame-label]').innerHTML=(index+1)+'<span class="of"> / {frame_count}</span>';}});return queue;}};
+const stop=function(){{if(timer!==null)window.clearInterval(timer);timer=null;play.textContent='▶ Play';}};
+play.addEventListener('click',function(){{if(timer!==null){{stop();return;}}play.textContent='❚❚ Pause';timer=window.setInterval(function(){{update((Number(slider.value)+1)%{frame_count});}},{frame_interval_ms});}});
+slider.addEventListener('input',function(){{stop();update(Number(slider.value));}});update(0);
+}});</script></body></html>"""
+    return _player_iframe(
+        document,
+        title="Matched molecular dynamics comparison",
+        height=660,
+    )
+
+
+def show_bias_comparison_player(
+    unrestrained_frames: Mapping[str, Sequence[Any]] | Sequence[Any],
+    restrained_frames: Mapping[str, Sequence[Any]] | Sequence[Any],
+    *,
+    labels: Sequence[str],
+    fragment_sizes: Mapping[str, int] | Sequence[int],
+    reference_distances: Sequence[float],
+    force_constant_ev_per_a2: float,
+    frame_interval_ms: int = 250,
+) -> Any:
+    """Compare three matched MD trajectories with and without a COM bias."""
+
+    names = [str(label) for label in labels]
+    unrestrained = _normalise_trajectories(unrestrained_frames, names)
+    restrained = _normalise_trajectories(restrained_frames, names)
+    if list(unrestrained) != names or list(restrained) != names or len(names) != 3:
+        raise ValueError("labels must identify the same three systems in both runs")
+    frame_counts = {
+        *(len(frames) for frames in unrestrained.values()),
+        *(len(frames) for frames in restrained.values()),
+    }
+    if len(frame_counts) != 1:
+        raise ValueError("both conditions must contain the same frame count")
+    frame_count = frame_counts.pop()
+    sizes = _normalise_fragment_sizes(fragment_sizes, names)
+    references = np.asarray(reference_distances, dtype=float).reshape(-1)
+    if references.size != len(names) or not np.isfinite(references).all():
+        raise ValueError("reference_distances must contain one finite value per system")
+    if np.any(references <= 0):
+        raise ValueError("reference_distances must be positive")
+    if not np.isfinite(force_constant_ev_per_a2) or force_constant_ev_per_a2 <= 0:
+        raise ValueError("force_constant_ev_per_a2 must be positive and finite")
+    if (
+        isinstance(frame_interval_ms, bool)
+        or not isinstance(frame_interval_ms, int)
+        or frame_interval_ms < 16
+    ):
+        raise ValueError("frame_interval_ms must be an integer of at least 16")
+
+    items = []
+    for condition, trajectories, has_bias in (
+        ("Without bias", unrestrained, False),
+        ("With BiasedPotentialHook", restrained, True),
+    ):
+        for system_index, name in enumerate(names):
+            frames = trajectories[name]
+            lines = [_fragment_com_line(frame, sizes[name]) for frame in frames]
+            if has_bias:
+                force = force_constant_ev_per_a2 * np.abs(
+                    np.asarray([line["distance_a"] for line in lines])
+                    - references[system_index]
+                )
+                maximum_bias_force = np.maximum.accumulate(force).tolist()
+            else:
+                maximum_bias_force = [0.0] * frame_count
+            items.append(
+                {
+                    "condition": condition,
+                    "name": name,
+                    "trajectory_xyz": "".join(_atoms_to_xyz(frame) for frame in frames),
+                    "com_lines": lines,
+                    "maximum_bias_force": maximum_bias_force,
+                }
+            )
+
+    static_cards = []
+    for item, condition_data in zip(
+        items,
+        [*unrestrained.items(), *restrained.items()],
+        strict=True,
+    ):
+        name, frames = condition_data
+        final_line = item["com_lines"][-1]
+        final_force = item["maximum_bias_force"][-1]
+        static_cards.append(
+            f'<section style="min-width:0;padding:10px;border:1px solid {_BORDER};'
+            f'border-radius:8px;background:{_SURFACE}"><strong style="display:block;'
+            f'margin-bottom:8px;font-size:.78rem">{escape(str(item["condition"]))}'
+            f'<br><span style="color:{_MUTED};font-weight:500">{escape(name)}</span>'
+            f"</strong>{_static_pair_svg(frames[0], frames[-1], title='Initial and final', first_label='start', last_label='end')}"
+            f'<div style="margin-top:7px;font-size:.75rem;line-height:1.5">'
+            f"Final R = {float(final_line['distance_a']):.3f} Å<br>"
+            f"max derived |F<sub>bias</sub>(R)| = {float(final_force):.3f} eV/Å</div></section>"
+        )
+
+    root_id = f"alchemi-bias-comparison-{uuid4().hex}"
+    player = _py3dmol_bias_comparison_player(
+        items,
+        frame_count=frame_count,
+        frame_interval_ms=frame_interval_ms,
+    )
+    markup = f"""
+<div id="{root_id}" aria-label="Matched molecular dynamics comparison" style="max-width:none">
+  {_common_css(root_id)}
+  <div data-static-fallback style="padding:12px">
+    {runtime_required_notice()}
+    <div class="alchemi-grid" style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">{"".join(static_cards)}</div>
+    <p class="alchemi-muted" style="margin:10px 2px 0;font-size:.82rem">Static initial/final comparison. Run this cell in Jupyter to play all six matched trajectories.</p>
+  </div>
+  <div data-interactive>{player}</div>
+</div>
+<script>(function(){{const root=document.getElementById('{root_id}');if(root&&root.querySelector('iframe'))root.classList.add('is-live');}})();</script>
+"""
+    return _html(markup)

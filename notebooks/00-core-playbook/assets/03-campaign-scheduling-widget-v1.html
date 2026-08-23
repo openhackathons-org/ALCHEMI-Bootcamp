@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ALCHEMI: fixed, fused, and inflight scheduling</title>
+<!--
+  SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+  SPDX-License-Identifier: Apache-2.0
+
+  The timing table is deterministic and illustrative. It is not a measured
+  performance trace. All CSS is scoped under .alchemi-sched.
+-->
+<style>
+.alchemi-sched,.alchemi-sched *{box-sizing:border-box}
+.alchemi-sched{width:100%;max-width:1104px;margin:0 auto;
+  font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif;color:#F3F4F6}
+.alchemi-sched .as-bar{display:flex;align-items:center;gap:10px;margin:10px 0}
+.alchemi-sched .as-btn{font:600 12px/1 'NVIDIA Sans',Arial,sans-serif;color:#F3F4F6;
+  background:#20262C;border:1px solid #4B565F;border-radius:4px;padding:9px 14px;
+  cursor:pointer;min-width:84px}
+.alchemi-sched .as-btn:hover{border-color:#76B900}
+.alchemi-sched .as-btn:focus-visible{outline:2px solid #76B900;outline-offset:2px}
+.alchemi-sched .as-hint{font-size:12px;font-weight:500;color:#A8B0B8}
+.alchemi-sched svg{display:block;width:100%;height:auto;border-radius:8px}
+html,body{margin:0;padding:0;background:#0E1214}
+</style>
+</head>
+<body>
+
+<div class="alchemi-sched" data-alchemi-sched>
+  <div class="as-bar">
+    <button type="button" class="as-btn" data-as-rewind>Rewind</button>
+    <button type="button" class="as-btn" data-as-play>Play</button>
+    <span style="flex:1"></span>
+    <span class="as-hint">Click any step to jump to it</span>
+  </div>
+  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1104 470"
+       font-family="'NVIDIA Sans', 'NVIDIA Sans Regular', Arial, Helvetica, sans-serif">
+      <rect width="1104" height="470" fill="#171D20" />
+      <rect x="24" y="20" width="1056" height="28" rx="6" fill="#1B2126" stroke="#3A444D" />
+      <text x="40" y="38" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">PROGRESS</text>
+      <g id="as-ticks"></g>
+      <rect id="as-seek" x="216" y="20" width="700" height="28" fill="transparent" style="cursor:pointer" />
+      <g>
+        <rect x="24" y="62" width="1056" height="108" rx="8" fill="#1B2126" stroke="#4B565F" />
+        <text x="44" y="112" font-size="15" font-weight="600" fill="#F3F4F6">Fixed stages</text>
+        <text x="44" y="132" font-size="11.5" font-weight="500" fill="#8A939B">NVT on whole batch, then NVE</text>
+        <g id="as-strip-0"></g>
+        <text id="as-tally-0" x="274" y="152" font-size="11" font-weight="500" fill="#8A939B"></text>
+        <text x="861" y="104" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">COMPLETED</text>
+        <rect x="861" y="114" width="199" height="12" rx="3" fill="#171D20" stroke="#3A444D" />
+        <rect id="as-bar-0" x="861" y="114" width="0" height="12" rx="3" fill="#2E8A73" />
+      </g>
+      <g>
+        <rect x="24" y="184" width="1056" height="108" rx="8" fill="#1B2126" stroke="#4B565F" />
+        <text x="44" y="234" font-size="15" font-weight="600" fill="#F3F4F6">FusedStage</text>
+        <text x="44" y="254" font-size="11.5" font-weight="500" fill="#8A939B">Each system moves on as it converges</text>
+        <g id="as-strip-1"></g>
+        <text id="as-tally-1" x="274" y="274" font-size="11" font-weight="500" fill="#8A939B"></text>
+        <text x="861" y="226" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">COMPLETED</text>
+        <rect x="861" y="236" width="199" height="12" rx="3" fill="#171D20" stroke="#3A444D" />
+        <rect id="as-bar-1" x="861" y="236" width="0" height="12" rx="3" fill="#2E8A73" />
+      </g>
+      <g>
+        <rect x="24" y="306" width="1056" height="108" rx="8" fill="#1B2126" stroke="#76B900" stroke-width="1.6" />
+        <text x="44" y="356" font-size="15" font-weight="600" fill="#F3F4F6">FusedStage + inflight</text>
+        <text x="44" y="376" font-size="11.5" font-weight="500" fill="#8A939B">Finished systems are replaced</text>
+        <g id="as-strip-2"></g>
+        <text id="as-tally-2" x="274" y="396" font-size="11" font-weight="500" fill="#8A939B"></text>
+        <text x="861" y="348" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">COMPLETED</text>
+        <rect x="861" y="358" width="199" height="12" rx="3" fill="#171D20" stroke="#3A444D" />
+        <rect id="as-bar-2" x="861" y="358" width="0" height="12" rx="3" fill="#2E8A73" />
+      </g>
+      <g font-size="12" font-weight="500" fill="#A8B0B8">
+        <rect x="253" y="432" width="24" height="15" rx="3" fill="#2E6F9E" stroke="#4D8CBC" /><text x="285" y="444">Running NVT</text>
+        <rect x="400" y="432" width="24" height="15" rx="3" fill="#C56A2D" stroke="#D8823F" /><text x="432" y="444">Running NVE</text>
+        <rect x="535" y="432" width="24" height="15" rx="3" fill="#2A3238" stroke="#4B565F" /><path d="M542 439l3 3 6-6" fill="none" stroke="#8A939B" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" /><text x="567" y="444">Converged, waiting</text>
+        <rect x="713" y="432" width="24" height="15" rx="3" fill="#76B900" stroke="#8FD117" /><text x="745" y="444">Inflight batching</text>
+      </g>
+  </svg>
+</div>
+
+<script>
+(function () {
+  var STEPS = 18, TOTAL = __ALCHEMI_TOTAL_SYSTEMS__, ACTIVE = __ALCHEMI_ACTIVE_SYSTEM_LIMIT__, CAP = __ALCHEMI_VISIBLE_SLOTS__, NS = 'http://www.w3.org/2000/svg';
+
+  // Deterministic schematic [nvt, nve] steps per system; not a measured trace.
+  var TIMING = [
+    [4,4],[2,2],[2,3],[2,2],[3,2],[3,3],[2,3],[3,3],
+    [3,2],[3,3],[2,3],[3,3],[3,2],[3,3],[2,3],[2,2]
+  ];
+  var DUR = [];
+  for (var i = 0; i < TOTAL; i++) DUR.push(TIMING[(i + Math.floor(i / CAP)) % TIMING.length]);
+
+  function sim(mode) {
+    var next = 0, done = 0, slots = [], out = [];
+    function admit(inflight) {
+      return next < TOTAL
+        ? { id: next, s: 'f', t: DUR[next++][0], fresh: !!inflight }
+        : { s: 'e' };
+    }
+    for (var i = 0; i < CAP; i++) slots.push(admit());
+    for (var k = 0; k < STEPS; k++) {
+      out.push({ slots: slots.map(function (o) { return { s: o.s, fresh: !!o.fresh }; }), c: done });
+      slots.forEach(function (o) { o.fresh = false; });
+      var ripe = [];
+      slots.forEach(function (o) {
+        if (o.s === 'f' || o.s === 'n') { o.t--; if (o.t <= 0) ripe.push(o); }
+      });
+      if (mode === 1) {
+        // two separate runs: nothing moves until the whole batch has converged
+        ripe.forEach(function (o) { o.s = o.s === 'f' ? 'h1' : 'h2'; });
+        if (!slots.some(function (o) { return o.s === 'f'; }) &&
+             slots.some(function (o) { return o.s === 'h1'; }))
+          slots.forEach(function (o) { if (o.s === 'h1') { o.s = 'n'; o.t = DUR[o.id][1]; } });
+        if (!slots.some(function (o) { return o.s === 'f' || o.s === 'n' || o.s === 'h1'; }) &&
+             slots.some(function (o) { return o.s === 'h2'; })) {
+          slots.forEach(function (o) { if (o.s === 'h2') done++; });
+          slots = slots.map(function () { return admit(); });
+        }
+      } else {
+        // fused: each system migrates on its own as it converges
+        ripe.forEach(function (o) {
+          if (o.s === 'f') { o.s = 'n'; o.t = DUR[o.id][1]; } else { done++; o.s = 'x'; }
+        });
+        if (mode === 3) {
+          slots = slots.map(function (o) { return o.s === 'x' ? admit(true) : o; });
+        } else {
+          slots.forEach(function (o) { if (o.s === 'x') o.s = 'e'; });
+          if (!slots.some(function (o) { return o.s === 'f' || o.s === 'n'; }))
+            slots = slots.map(function () { return admit(); });
+        }
+      }
+      slots.forEach(function (o) { if (o.s === 'x') o.s = 'e'; });
+    }
+    return out;
+  }
+
+  var RUNS = [sim(1), sim(2), sim(3)];
+  var LEAD = Math.max(1, RUNS[0][STEPS-1].c, RUNS[1][STEPS-1].c, RUNS[2][STEPS-1].c);
+
+  var EMPTY = { fill: '#171D20', stroke: '#3A444D', dash: '3 3', check: 0, ring: 0 };
+  var NVT_STAGE = { fill: '#2E6F9E', stroke: '#3D82B4', dash: '0', check: 0, ring: 0 };
+  var NVE_STAGE = { fill: '#C56A2D', stroke: '#D8823F', dash: '0', check: 0, ring: 0 };
+  var HELD  = { fill: '#2A3238', stroke: '#4B565F', dash: '0', check: 1, ring: 0 };
+  var FRESH = { fill: '#76B900', stroke: '#8FD117', dash: '0', check: 0, ring: 1 };
+  var S = { f: NVT_STAGE, n: NVE_STAGE, h1: HELD, h2: HELD, e: EMPTY };
+  var ROW_Y = [62, 184, 306];
+
+  function node(tag, attrs) {
+    var n = document.createElementNS(NS, tag);
+    for (var k in attrs) n.setAttribute(k, attrs[k]);
+    return n;
+  }
+
+  function build(root) {
+    var frame = 0, timer = null;
+    var svg = root.querySelector('svg');
+    var playBtn = root.querySelector('[data-as-play]');
+    var rewindBtn = root.querySelector('[data-as-rewind]');
+    var tickG = svg.querySelector('#as-ticks');
+    var seek = svg.querySelector('#as-seek');
+
+    var tickEls = [];
+    for (var i = 0; i < STEPS; i++) {
+      var t = node('rect', {
+        x: 216 + i * (700 / STEPS), y: 28, width: 700 / STEPS - 4, height: 12, rx: 2,
+        fill: '#242B31', style: 'transition:fill .18s ease'
+      });
+      tickG.appendChild(t);
+      tickEls.push(t);
+    }
+
+    // Three rows use the representative slot count supplied by the notebook.
+    var cells = ROW_Y.map(function (rowY, n) {
+      var g = svg.querySelector('#as-strip-' + n), row = [];
+      for (var j = 0; j < CAP; j++) {
+        var ox = 274 + j * 35, oy = rowY + 36;
+        var box = node('rect', {
+          x: ox, y: oy, width: 30, height: 30, rx: 4,
+          style: 'transition:fill .22s ease, stroke .22s ease'
+        });
+        var tick = node('path', {
+          d: 'M' + (ox + 9) + ' ' + (oy + 15) + 'l4 4 8-8',
+          fill: 'none', stroke: '#8A939B', 'stroke-width': 2,
+          'stroke-linecap': 'round', 'stroke-linejoin': 'round'
+        });
+        g.appendChild(box); g.appendChild(tick);
+        row.push({ box: box, tick: tick });
+      }
+      return row;
+    });
+    var tallies = ROW_Y.map(function (_, n) { return svg.querySelector('#as-tally-' + n); });
+    var bars = ROW_Y.map(function (_, n) { return svg.querySelector('#as-bar-' + n); });
+
+    function paint() {
+      tickEls.forEach(function (t, i) {
+        t.setAttribute('fill', i === frame ? '#F3F4F6' : (i < frame ? '#4B565F' : '#242B31'));
+      });
+      RUNS.forEach(function (run, n) {
+        var fr = run[frame], cnt = { f: 0, n: 0, h: 0, e: 0 };
+        fr.slots.forEach(function (o, j) {
+          var st = o.fresh ? FRESH : (S[o.s] || EMPTY), c = cells[n][j];
+          c.box.setAttribute('fill', st.fill);
+          c.box.setAttribute('stroke', st.stroke);
+          c.box.setAttribute('stroke-width', st.ring ? 2 : 1.2);
+          c.box.setAttribute('stroke-dasharray', st.dash);
+          c.tick.setAttribute('opacity', st.check ? 1 : 0);
+          cnt[o.s === 'h1' || o.s === 'h2' ? 'h' : o.s]++;
+        });
+        var parts = [];
+        if (cnt.f) parts.push(cnt.f + ' in NVT');
+        if (cnt.n) parts.push(cnt.n + ' in NVE');
+        if (cnt.h) parts.push(cnt.h + ' converged, waiting');
+        if (cnt.e) parts.push(cnt.e + ' idle');
+        tallies[n].textContent = parts.join('  \u00B7  ');
+        bars[n].setAttribute('width', (199 * fr.c / LEAD).toFixed(2));
+      });
+    }
+
+    function goTo(i) { frame = Math.max(0, Math.min(STEPS - 1, i | 0)); paint(); }
+    function stop() {
+      if (timer) { clearInterval(timer); timer = null; }
+      playBtn.textContent = frame >= STEPS - 1 ? 'Replay' : 'Play';
+    }
+    function start() {
+      if (timer) return;
+      if (frame >= STEPS - 1) goTo(0);
+      playBtn.textContent = 'Pause';
+      timer = setInterval(function () {
+        if (frame >= STEPS - 1) { stop(); return; }
+        goTo(frame + 1);
+      }, 620);
+    }
+
+    playBtn.addEventListener('click', function () { timer ? stop() : start(); });
+    rewindBtn.addEventListener('click', function () { stop(); goTo(0); });
+    seek.addEventListener('click', function (e) {
+      var r = seek.getBoundingClientRect();
+      stop();
+      goTo(Math.floor((e.clientX - r.left) / r.width * STEPS));
+    });
+
+    paint();
+    window.ALCHEMI_SCHED = { root: root, steps: STEPS, total: TOTAL, activeCapacity: ACTIVE, visibleSlots: CAP, goTo: goTo, play: start, pause: stop, runs: RUNS };
+  }
+
+  function init() {
+    var list = document.querySelectorAll('[data-alchemi-sched]:not([data-as-ready])');
+    for (var i = 0; i < list.length; i++) {
+      list[i].setAttribute('data-as-ready', '');
+      build(list[i]);
+    }
+  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+  else init();
+})();
+</script>
+</body>
+</html>

@@ -69,6 +69,6 @@
     "speedup": 9.965183048573873
   },
   "regeneration": {
-    "command": "cd /home/nfedik/alchemi-v3-h100-20260819 && sbatch alchemi_h100_benchmark.sbatch"
+    "command": "cd <repository-checkout> && sbatch alchemi_h100_benchmark.sbatch"
   }
 }

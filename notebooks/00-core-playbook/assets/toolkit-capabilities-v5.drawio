@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved. -->
+<!-- SPDX-License-Identifier: Apache-2.0 -->
+<mxfile host="app.diagrams.net" version="24.7.17" type="device">
+  <diagram id="toolkit-capabilities-v5" name="Page-1">
+    <mxGraphModel dx="920" dy="318" grid="0" guides="1" tooltips="1" connect="0" arrows="1" fold="1" page="1" pageScale="1" pageWidth="920" pageHeight="318" math="0" shadow="0">
+      <root>
+        <mxCell id="0"/>
+        <mxCell id="1" parent="0"/>
+        <mxCell id="capabilities-svg" value="" style="shape=image;verticalLabelPosition=bottom;verticalAlign=top;imageAspect=0;aspect=fixed;image=toolkit-capabilities-v5.svg;" vertex="1" parent="1">
+          <mxGeometry x="0" y="0" width="920" height="318" as="geometry"/>
+        </mxCell>
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

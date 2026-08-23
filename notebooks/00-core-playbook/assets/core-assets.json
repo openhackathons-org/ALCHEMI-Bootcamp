@@ -1,20 +1,44 @@
 {
   "assets": {
-    "atomicdata-batch-fields.svg": {
-      "filename": "atomicdata-batch-fields-6ad9f6537440df2f.svg",
-      "sha256": "6ad9f6537440df2f2651b7ae28745a4e9a4f1881263102a47ed3dc53190be9c2"
+    "course-roadmap-module00.svg": {
+      "filename": "course-roadmap-module00.svg",
+      "sha256": "79f25b28db99df9407fb001118a69b7d083f9406e3d2dd1186a3fc62fbe126c4"
     },
-    "batch-row-ownership.svg": {
-      "filename": "batch-row-ownership-5623ef2c43ebfbe0.svg",
-      "sha256": "5623ef2c43ebfbe0d463996d91811c11c79d92d7189b6cad2580d61831c49638"
+    "toolkit-capabilities-v5.svg": {
+      "filename": "toolkit-capabilities-v5.svg",
+      "sha256": "40910b4a53a0fbadb3230da6e3d59d8582e5f0d1a61878707b5da158bfca6ac7"
     },
-    "prefetch-window.svg": {
-      "filename": "prefetch-window-2c3fdad8872c3df2.svg",
-      "sha256": "2c3fdad8872c3df299d5efba80fa862884dae8c7e42a57a8e58958a7079bbd49"
+    "course-roadmap-module01-atomicdata.svg": {
+      "filename": "course-roadmap-module01-atomicdata.svg",
+      "sha256": "6db2a66b0ff9db2789791d86856451f2cc102c820a314bba20e71bf113df5211"
     },
-    "zarr-data-flow.svg": {
-      "filename": "zarr-data-flow-45edcaba8b6d220f.svg",
-      "sha256": "45edcaba8b6d220fbb552f32a27b821e1d3a7b76782feddea39daadb33e51251"
+    "course-roadmap-module01-batch.svg": {
+      "filename": "course-roadmap-module01-batch.svg",
+      "sha256": "816ef43163f5becf1a6ccb6a9cbe54e5ef3f51b4b920710152815ec4c735e38f"
+    },
+    "01-cell-38-packed-and-padded-rows.svg": {
+      "filename": "01-cell-38-packed-and-padded-rows-4df5c722168bbcf1.svg",
+      "sha256": "4df5c722168bbcf113535c924304fa41d6b7f4fc91220d9a0b8773173e3e042d"
+    },
+    "01-cell-73-prefetch-window-v3.svg": {
+      "filename": "01-cell-73-prefetch-window-v3-963036410d156b3e.svg",
+      "sha256": "963036410d156b3e00457b12865357364795f714e51dd9a7329acea656ea1986"
+    },
+    "course-roadmap-module02.svg": {
+      "filename": "course-roadmap-module02.svg",
+      "sha256": "e60d9263a0ceccf6ea950f19bdddcbf1130be293105fcca7deaf738030239529"
+    },
+    "course-roadmap-module03.svg": {
+      "filename": "course-roadmap-module03.svg",
+      "sha256": "dfe4dfd24c2241209a7dba463298109566e7b004b15dd061eb58a90059154c41"
+    },
+    "03-multi-gpu-continuations-v1.svg": {
+      "filename": "03-multi-gpu-continuations-v1.svg",
+      "sha256": "0e864deb2306ed4e6fc6c0261ef5995c4ee155dd36988d058df0b7591d621f5e"
+    },
+    "03-campaign-scheduling-widget-v1.html": {
+      "filename": "03-campaign-scheduling-widget-v1.html",
+      "sha256": "81980ed8cdc428db62c1cbb081ce75717aa04c08fee9ce9d0f197889e9566e63"
     }
   },
   "schema": "alchemi.core-assets.v1"
