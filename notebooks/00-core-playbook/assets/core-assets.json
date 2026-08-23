@@ -2,7 +2,7 @@
   "assets": {
     "course-roadmap-module00.svg": {
       "filename": "course-roadmap-module00.svg",
-      "sha256": "79f25b28db99df9407fb001118a69b7d083f9406e3d2dd1186a3fc62fbe126c4"
+      "sha256": "d8bb5efa4e60660d3c142645e472ca2ed99a1bd4d6e8e03f967eaad71244462f"
     },
     "toolkit-capabilities-v5.svg": {
       "filename": "toolkit-capabilities-v5.svg",
@@ -10,11 +10,15 @@
     },
     "course-roadmap-module01-atomicdata.svg": {
       "filename": "course-roadmap-module01-atomicdata.svg",
-      "sha256": "6db2a66b0ff9db2789791d86856451f2cc102c820a314bba20e71bf113df5211"
+      "sha256": "6c14a0cd4edfa44ea3e93c1b66ba16145dc136d4ff1c5ce1abc775875a76bc57"
     },
     "course-roadmap-module01-batch.svg": {
       "filename": "course-roadmap-module01-batch.svg",
-      "sha256": "816ef43163f5becf1a6ccb6a9cbe54e5ef3f51b4b920710152815ec4c735e38f"
+      "sha256": "e88db40a1da291e832e34e03f60dc3500e23b9d807a5e240b0147a294960dea8"
+    },
+    "course-roadmap-module01-prefetch.svg": {
+      "filename": "course-roadmap-module01-prefetch.svg",
+      "sha256": "307cea943ee06975923053203d8d9bd25abdf345ef15ed14cf83f713e445f437"
     },
     "01-cell-38-packed-and-padded-rows.svg": {
       "filename": "01-cell-38-packed-and-padded-rows-4df5c722168bbcf1.svg",
@@ -26,11 +30,31 @@
     },
     "course-roadmap-module02.svg": {
       "filename": "course-roadmap-module02.svg",
-      "sha256": "e60d9263a0ceccf6ea950f19bdddcbf1130be293105fcca7deaf738030239529"
+      "sha256": "b7de955ea0c90233fb0a430711b431dba726a5c4a9ad56d0b4f9187c63acc8ae"
+    },
+    "course-roadmap-module02-dynamics.svg": {
+      "filename": "course-roadmap-module02-dynamics.svg",
+      "sha256": "94d38ed8e6abe8e6a13e038bda28a7eaff15e05f00c81d52d6d097fb436b7703"
+    },
+    "course-roadmap-module02-hooks.svg": {
+      "filename": "course-roadmap-module02-hooks.svg",
+      "sha256": "aa10e6ff338b43e56c5d465b7d81f49158889b21f9f1553e9db3db43f3a17892"
     },
     "course-roadmap-module03.svg": {
       "filename": "course-roadmap-module03.svg",
-      "sha256": "dfe4dfd24c2241209a7dba463298109566e7b004b15dd061eb58a90059154c41"
+      "sha256": "b7445521d1cf318d39893e09f2b7a0ee1f7ba09b37061f4a8a5106cfbd668180"
+    },
+    "course-roadmap-module03-fused.svg": {
+      "filename": "course-roadmap-module03-fused.svg",
+      "sha256": "b860df513e998907280abdd60e045fd84fdea9d9a4b8aac80e2175a481858d6b"
+    },
+    "course-roadmap-module03-inflight.svg": {
+      "filename": "course-roadmap-module03-inflight.svg",
+      "sha256": "6382d18c37a4b56479400c590baedb1dbce10f94dd50cab5346fc6a12dc32cc7"
+    },
+    "course-roadmap-module03-compare.svg": {
+      "filename": "course-roadmap-module03-compare.svg",
+      "sha256": "eced20a62c3d0367ae807b77a8bbe01bfd387d7f6573d117833aa30def1ea8f1"
     },
     "03-multi-gpu-continuations-v1.svg": {
       "filename": "03-multi-gpu-continuations-v1.svg",
