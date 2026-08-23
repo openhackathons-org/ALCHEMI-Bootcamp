@@ -6,22 +6,18 @@ here.
 
 ## Distribution scope
 
-The source repository contains tutorial code and notebooks, one NCI Atlas data
-file, one RASPA2-derived Mg-MOF-74 primitive cell,
+The source repository contains tutorial code and notebooks, two NCI Atlas data
+files, one RASPA2-derived Mg-MOF-74 primitive cell,
 the 3Dmol.js browser bundle, a py3Dmol license copy, and course artwork.
 Installed Python packages, model checkpoints, the original DFT-D3 archive, and
-the generated D3 parameter table live in runtime caches or built images.
-
-A built container has a different distribution scope. The current build
-installs Python and CUDA packages, generates the D3 table, and downloads model
-assets. Review a container with an image-level software bill of materials and
-notice set before publishing it.
+the generated D3 parameter table live in runtime caches.
 
 ## Files included in the source repository
 
 | Material | Location | Terms |
 |---|---|---|
-| NCI Atlas curve subset | `notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz` | CC-BY stated upstream; version confirmation pending |
+| NCI Atlas curve subset | `notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz` | CC BY 4.0 |
+| NCI Atlas NCIA250 archive | `notebooks/00-core-playbook/data/nci_atlas/NCIA250.zip` | CC BY 4.0 |
 | Mg-MOF-74 primitive structure | `notebooks/00-core-playbook/data/mof74/mg-mof-74-primitive.cif` | MIT |
 | 3Dmol.js 2.5.5 browser bundle and notices | `shared/3dmol-2.5.5/` | BSD-3-Clause and the incorporated notices in `LICENSE` |
 | py3Dmol 2.5.5 license copy | `shared/py3dmol-2.5.5/LICENSE.txt` | MIT |
@@ -32,10 +28,10 @@ notice set before publishing it.
 
 Creator and attribution: Jan Řezáč and NCI Atlas contributors. The files come
 from [NCI Atlas](https://github.com/Honza-R/NCIAtlas) at revision
-`1816bfc72609d7deb1d4f93ab9e27eb13bb44bec`. The pinned README states
-`Creative Commons CC-BY` and the revision contains no license file. Confirm the
-exact CC-BY version with the data owner before redistribution. Retain the
-attribution and the change descriptions below.
+`1816bfc72609d7deb1d4f93ab9e27eb13bb44bec`. The upstream README links its
+`Creative Commons CC-BY` statement to the
+[Creative Commons Attribution 4.0 International license](https://creativecommons.org/licenses/by/4.0/).
+Retain this attribution and the change descriptions below.
 
 ### Three interaction curves
 
@@ -49,6 +45,23 @@ attribution and the change descriptions below.
 The tutorial selects three complexes at ten separations, extracts the `AB`,
 `A`, and `B` records, and reformats them as compressed CSV. Coordinates,
 stored energies, gradients, and source identifiers are unchanged.
+
+### NCIA250 equilibrium survey
+
+- File: `notebooks/00-core-playbook/data/nci_atlas/NCIA250.zip`
+- [Pinned upstream directory](https://github.com/Honza-R/NCIAtlas/tree/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec/NCIA250)
+- SHA-256:
+  `34e3c2cec763344dd9be41aa008672c7d052e50db57abe1abc59873d3935c433`
+- Source-set papers:
+  [D1200](https://doi.org/10.1039/D2CP01602H),
+  [HB300SPX](https://doi.org/10.1021/acs.jctc.0c00715),
+  [HB375](https://doi.org/10.1021/acs.jctc.9b01265),
+  [R739](https://doi.org/10.1021/acs.jctc.0c01341), and
+  [SH250](https://doi.org/10.1039/D2CP01600A)
+
+The archive matches the pinned upstream bytes. The tutorial reports statistics
+for all 250 complexes and evaluates the 205 complexes whose elements appear in
+the pinned AIMNet2 checkpoint metadata.
 
 The adjacent
 [`data/nci_atlas/README.md`](notebooks/00-core-playbook/data/nci_atlas/README.md)
@@ -102,9 +115,9 @@ The notebooks use py3Dmol 2.5.5 to create interactive HTML backed by 3Dmol.js
 
 The checked browser bundle and its complete incorporated notices are stored in
 `shared/3dmol-2.5.5/`. The py3Dmol MIT license is stored in
-`shared/py3dmol-2.5.5/LICENSE.txt`. Saved interactive outputs in Core Modules 1
-and 3 inline the same checked 3Dmol.js code. These notices apply to the
-standalone bundle and those embedded copies.
+`shared/py3dmol-2.5.5/LICENSE.txt`. Live interactive viewers use the same
+checked 3Dmol.js code. These notices apply to the standalone bundle and
+generated viewer HTML.
 
 ## Runtime software and model assets
 
@@ -123,12 +136,11 @@ Python package inventory and license texts are under [`.licenses/`](.licenses/).
 - RDKit 2026.3.4: BSD-3-Clause. Core Module 1 uses its Python 3.12 wheel for
   offline explicit-hydrogen ETKDGv3 structures followed by MMFF or UFF.
 - ASE 3.27.0: LGPL-2.1-or-later.
-- PyTorch: BSD-3-Clause. CUDA packages and the CUDA base image use the
+- PyTorch: BSD-3-Clause. CUDA packages use the
   [NVIDIA CUDA Toolkit EULA](https://docs.nvidia.com/cuda/eula/).
 - Toolkit's D3 setup parses the legacy Grimme DFT-D3 reference archive, which
   is GPL-1.0-or-later, and creates a checked parameter table in the runtime
-  cache. A built container carries that table and needs separate distribution
-  review.
+  cache.
 
 See [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) for direct links to the
 upstream licenses and model cards.

@@ -9,7 +9,7 @@ are recorded in `SOURCES_AND_LICENSES.md`.
 
 | Material | Terms | Local notice |
 |---|---|---|
-| NCI Atlas curve subset | CC-BY stated upstream; version confirmation pending | `notebooks/00-core-playbook/data/nci_atlas/README.md` |
+| NCI Atlas curve subset and NCIA250 archive | CC BY 4.0 | `notebooks/00-core-playbook/data/nci_atlas/README.md` |
 | Mg-MOF-74 primitive structure | MIT | `notebooks/00-core-playbook/data/mof74/README.md` |
 | 3Dmol.js 2.5.5 bundle | BSD-3-Clause with incorporated notices | `shared/3dmol-2.5.5/LICENSE` |
 | py3Dmol 2.5.5 license copy | MIT | `shared/py3dmol-2.5.5/LICENSE.txt` |
@@ -17,11 +17,11 @@ are recorded in `SOURCES_AND_LICENSES.md`.
 ### NCI Atlas data
 
 The two included data files are attributed to Jan Řezáč and NCI Atlas
-contributors. The pinned upstream README states `Creative Commons CC-BY` and
-the pinned revision contains no license file. Confirm the exact CC-BY version
-with the data owner before redistribution. The source, citations, checksums,
-and change descriptions are in [`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md)
-and the adjacent data README.
+contributors. The upstream README links its `Creative Commons CC-BY` statement
+to the [Creative Commons Attribution 4.0 International license](https://creativecommons.org/licenses/by/4.0/).
+The source, citations, checksums, and change descriptions are in
+[`SOURCES_AND_LICENSES.md`](SOURCES_AND_LICENSES.md) and the adjacent data
+README.
 
 ### py3Dmol and 3Dmol.js
 
@@ -32,9 +32,9 @@ BSD-3-Clause browser renderer. The repository stores the checked JavaScript
 bundle, its minifier notice, the complete 3Dmol.js incorporated-code notices,
 and a copy of the py3Dmol MIT license.
 
-Saved interactive outputs in the Core modules inline the same checked
-3Dmol.js bundle. The notices under `shared/3dmol-2.5.5/` apply to the standalone
-file and the copies embedded in notebook HTML.
+Live interactive viewers use the same checked 3Dmol.js bundle. The notices
+under `shared/3dmol-2.5.5/` apply to the standalone file and generated viewer
+HTML.
 
 3Dmol.js publication: <https://doi.org/10.1093/bioinformatics/btu829>
 
@@ -61,7 +61,7 @@ The tutorials pin Toolkit and Toolkit-Ops to immutable commits in
 
 Toolkit uses [PyTorch](https://github.com/pytorch/pytorch), distributed under
 BSD-3-Clause. [ASE](https://gitlab.com/ase/ase) supplies structure objects under
-LGPL-2.1-or-later. CUDA wheels and the container base image use the
+LGPL-2.1-or-later. CUDA wheels use the
 [NVIDIA CUDA Toolkit EULA](https://docs.nvidia.com/cuda/eula/).
 
 ### AIMNet2 and `aimnet`
@@ -92,9 +92,7 @@ GPL-1.0-or-later. Runtime setup verifies the archive MD5
 - [DFT-D3 implementation license comparison](https://dftd3.readthedocs.io/en/latest/comparison.html)
 - [Toolkit-Ops dispersion documentation](https://nvidia.github.io/nvalchemi-toolkit-ops/examples/dispersion/index.html)
 
-Local setup writes the generated table to the runtime cache. The current Docker
-build also generates it inside the image, so publishing a built image requires
-GPL review and an image-level notice set.
+Local setup writes the generated table to the runtime cache.
 
 ### MACE and MACE-MP
 
@@ -121,11 +119,3 @@ distributed under BSD-3-Clause. Core Module 1 uses RDKit locally to parse
 SMILES, add explicit hydrogens, generate a fixed-seed ETKDGv3 conformer, and
 optimize it with MMFF or UFF. The source repository contains no RDKit binary or
 copied RDKit data.
-
-## Container distribution
-
-This repository supplies a Docker build recipe. A built image contains
-installed Python packages, CUDA components, model assets, and the generated D3
-table. Publish a built image only with a separate image-level software bill of
-materials, license review, and notice set. The repository-level notices clear
-the source distribution described above.

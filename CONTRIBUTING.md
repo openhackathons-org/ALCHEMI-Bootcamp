@@ -1,13 +1,13 @@
-# Contributing to the ALCHEMI Playbook
+# Contributing to the ALCHEMI tutorials
 
-Thank you for helping improve the ALCHEMI Playbook. Contributions can include
+Thank you for helping improve the ALCHEMI tutorials. Contributions can include
 bug fixes, clearer explanations, new examples, runtime updates, and corrections
 to scientific or technical content.
 
 Before starting a significant change, please open a
 [GitHub issue](https://github.com/openhackathons-org/ALCHEMI-Bootcamp/issues)
 to discuss the proposal. This helps avoid duplicate work and gives maintainers
-a chance to confirm that the change fits the playbook.
+a chance to confirm that the change fits the tutorials.
 
 ## License
 
@@ -84,6 +84,13 @@ same pattern throughout a notebook.
 
 ## Validation
 
+Create the complete contributor environment, including notebook and test
+tools, with:
+
+```bash
+uv sync --locked
+```
+
 Run checks that match the files you changed and list the commands and results
 in the pull request.
 
@@ -104,18 +111,16 @@ practical. If a check requires a GPU, model download, licensed data, or a long
 runtime, state what you ran, the hardware and run scope, and what remains for a
 maintainer to verify. If you tested only the saved-result path, say so.
 
-For changes to the container or dependencies, rebuild the image:
-
-```bash
-docker build --tag alchemi-core:local .
-```
-
 Dependency changes must refresh `uv.lock`, synchronize the course runtime, and
 regenerate the third-party license inventory:
 
 ```bash
 uv lock
-./scripts/setup
+uv sync --locked
+uv run --locked --no-sync --env-file environment/runtime.env \
+  python environment/prewarm_assets.py
+uv run --locked --no-sync --env-file environment/runtime.env \
+  python environment/check_runtime.py
 .licenses/generate_licenses.sh
 ```
 
