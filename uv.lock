@@ -127,25 +127,30 @@ source = { virtual = "." }
 dependencies = [
     { name = "aimnet" },
     { name = "ase" },
+    { name = "dm-tree" },
     { name = "mace-torch" },
     { name = "matplotlib" },
     { name = "numpy" },
-    { name = "nvalchemi-toolkit", extra = ["aimnet", "ase", "mace"] },
+    { name = "nvalchemi-toolkit", extra = ["mace"] },
     { name = "nvalchemi-toolkit-ops", extra = ["torch-cu13"] },
+    { name = "pandas" },
     { name = "py3dmol" },
     { name = "rdkit" },
-    { name = "rich" },
     { name = "torch" },
     { name = "zarr" },
 ]
 
 [package.dev-dependencies]
-notebook = [
+kernel = [
     { name = "ipykernel" },
+    { name = "ipython" },
     { name = "ipywidgets" },
+]
+lab = [
     { name = "jupyterlab" },
 ]
 test = [
+    { name = "packaging" },
     { name = "pytest" },
     { name = "ruff" },
 ]
@@ -154,25 +159,28 @@ test = [
 requires-dist = [
     { name = "aimnet", specifier = "==0.2.0" },
     { name = "ase", specifier = "==3.27.0" },
+    { name = "dm-tree", specifier = "==0.1.10" },
     { name = "mace-torch", specifier = "==0.3.15" },
     { name = "matplotlib", specifier = ">=3.10,<4" },
     { name = "numpy", specifier = ">=2,<2.4" },
-    { name = "nvalchemi-toolkit", extras = ["aimnet", "ase", "mace"], git = "https://github.com/NVIDIA/nvalchemi-toolkit.git?rev=8c2c307c1c0c76baee6f7a68eb75a45da83ffd18" },
+    { name = "nvalchemi-toolkit", extras = ["mace"], git = "https://github.com/NVIDIA/nvalchemi-toolkit.git?rev=8c2c307c1c0c76baee6f7a68eb75a45da83ffd18" },
     { name = "nvalchemi-toolkit-ops", extras = ["torch-cu13"], git = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git?rev=c1e23460859a784e1d78043bcd1c8af0d1095fa2" },
+    { name = "pandas", specifier = ">=2.3,<3" },
     { name = "py3dmol", specifier = "==2.5.5" },
     { name = "rdkit", specifier = "==2026.3.4" },
-    { name = "rich", specifier = "==14.1.0" },
     { name = "torch", specifier = "==2.12.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "zarr", specifier = ">=3,<4" },
 ]
 
 [package.metadata.requires-dev]
-notebook = [
+kernel = [
     { name = "ipykernel", specifier = ">=7,<8" },
+    { name = "ipython", specifier = ">=9,<10" },
     { name = "ipywidgets", specifier = ">=8.1,<9" },
-    { name = "jupyterlab", specifier = ">=4,<5" },
 ]
+lab = [{ name = "jupyterlab", specifier = ">=4,<5" }]
 test = [
+    { name = "packaging", specifier = ">=26,<27" },
     { name = "pytest", specifier = ">=8,<9" },
     { name = "ruff", specifier = ">=0.11,<1" },
 ]
@@ -1711,12 +1719,6 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-aimnet = [
-    { name = "aimnet" },
-]
-ase = [
-    { name = "ase" },
-]
 mace = [
     { name = "cuequivariance-torch" },
     { name = "mace-torch" },

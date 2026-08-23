@@ -4,11 +4,18 @@
 
 set -euo pipefail
 
+setup_started_epoch="$(date +%s)"
 workspace_root="${ALCHEMI_BREV_WORKSPACE_ROOT:-${HOME}/workspace}"
 course_root="${ALCHEMI_BREV_COURSE_ROOT:-${workspace_root}/ALCHEMI-Bootcamp}"
 runtime_root="${ALCHEMI_RUNTIME_ROOT:-${workspace_root}/.alchemi-runtime}"
 bootstrap_root="${runtime_root}/bootstrap"
-uv_version="0.11.1"
+uv_version="0.12.1"
+expected_revision="${ALCHEMI_BREV_EXPECTED_REVISION:-}"
+
+if [[ ! "${expected_revision}" =~ ^[0-9a-f]{40}$ ]]; then
+    echo "ALCHEMI_BREV_EXPECTED_REVISION must be the 40-character release commit." >&2
+    exit 2
+fi
 
 script_parent="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 source_candidates=(
@@ -32,6 +39,13 @@ if [[ -z "${source_root}" ]]; then
     exit 2
 fi
 
+source_revision="$(git -C "${source_root}" rev-parse HEAD 2>/dev/null || printf 'unknown')"
+if [[ ! -e "${course_root}" && "${source_revision}" != "${expected_revision}" ]]; then
+    echo "Course revision mismatch: expected ${expected_revision}, found ${source_revision}" >&2
+    echo "Set the Launchable revision to the attached repository commit and deploy a new instance." >&2
+    exit 2
+fi
+
 mkdir -p "${workspace_root}" "${runtime_root}"
 
 if [[ "${source_root}" != "${course_root}" ]]; then
@@ -45,9 +59,9 @@ if [[ "${source_root}" != "${course_root}" ]]; then
 fi
 
 revision="$(git -C "${course_root}" rev-parse HEAD 2>/dev/null || printf 'unknown')"
-expected_revision="${ALCHEMI_BREV_EXPECTED_REVISION:-}"
-if [[ -n "${expected_revision}" && "${revision}" != "${expected_revision}" ]]; then
+if [[ "${revision}" != "${expected_revision}" ]]; then
     echo "Course revision mismatch: expected ${expected_revision}, found ${revision}" >&2
+    echo "This instance keeps its existing course files. Deploy a new instance for a new release." >&2
     exit 2
 fi
 
@@ -68,6 +82,7 @@ if [[ "${actual_uv_version}" != "${uv_version}" ]]; then
 fi
 
 export ALCHEMI_RUNTIME_ROOT="${runtime_root}"
+export ALCHEMI_INSTALL_PROFILE="brev"
 export ALCHEMI_UV_BIN="${uv_bin}"
 export UV_PYTHON_INSTALL_DIR="${runtime_root}/python"
 
@@ -79,17 +94,19 @@ echo "Checking package pins and prewarmed assets."
     python "${course_root}/environment/check_runtime.py"
 
 echo "Checking CUDA access."
-"${course_root}/scripts/run" python - <<'PY'
+cuda_device="$("${course_root}/scripts/run" python - <<'PY'
 import torch
 
 if not torch.cuda.is_available():
     raise RuntimeError("CUDA is unavailable in the Brev tutorial runtime")
 
-print(f"CUDA device: {torch.cuda.get_device_name(0)}")
+print(torch.cuda.get_device_name(0))
 PY
+)"
+echo "CUDA device: ${cuda_device}"
 
 kernel_root="${ALCHEMI_BREV_KERNEL_ROOT:-${HOME}/.local/share/jupyter/kernels}"
-kernel_directory="${kernel_root}/python3"
+kernel_directory="${kernel_root}/alchemi-core"
 kernel_json="${kernel_directory}/kernel.json"
 mkdir -p "${kernel_directory}"
 
@@ -117,7 +134,7 @@ specification = {
         "-f",
         "{connection_file}",
     ],
-    "display_name": "Python 3 (ALCHEMI)",
+    "display_name": "Python 3 (ALCHEMI Core)",
     "language": "python",
     "metadata": {"debugger": True},
     "env": {
@@ -131,6 +148,9 @@ temporary_json.write_text(json.dumps(specification, indent=2) + "\n")
 os.replace(temporary_json, kernel_json)
 PY
 
+setup_finished_epoch="$(date +%s)"
+setup_seconds="$((setup_finished_epoch - setup_started_epoch))"
+runtime_kib="$(du -sk "${runtime_root}" | awk '{print $1}')"
 ready_file="${runtime_root}/brev-ready.txt"
 {
     printf 'status=ready\n'
@@ -138,10 +158,15 @@ ready_file="${runtime_root}/brev-ready.txt"
     printf 'course_root=%s\n' "${course_root}"
     printf 'runtime_root=%s\n' "${runtime_root}"
     printf 'kernel=%s\n' "${kernel_json}"
+    printf 'gpu=%s\n' "${cuda_device}"
+    printf 'setup_seconds=%s\n' "${setup_seconds}"
+    printf 'runtime_kib=%s\n' "${runtime_kib}"
 } > "${ready_file}"
 
 echo "ALCHEMI is ready."
 echo "Course: ${course_root}"
 echo "Runtime: ${runtime_root}"
-echo "Jupyter kernel: Python 3 (ALCHEMI)"
+echo "Jupyter kernel: Python 3 (ALCHEMI Core)"
+echo "Setup time: ${setup_seconds} seconds"
+echo "Runtime disk use: ${runtime_kib} KiB"
 echo "Ready record: ${ready_file}"

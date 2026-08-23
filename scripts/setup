@@ -7,6 +7,7 @@ set -euo pipefail
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${ALCHEMI_RUNTIME_ROOT:-/tmp/alchemi-runtime}"
 uv_bin="${ALCHEMI_UV_BIN:-uv}"
+install_profile="${ALCHEMI_INSTALL_PROFILE:-development}"
 
 mkdir -p \
     "${runtime_root}/aimnet" \
@@ -35,6 +36,24 @@ export UV_PROJECT_ENVIRONMENT="${runtime_root}/venv"
 export WARP_CACHE_PATH="${runtime_root}/warp"
 export XDG_CACHE_HOME="${runtime_root}/cache"
 
-"${uv_bin}" sync --project "${repository_root}" --frozen
+sync_arguments=(sync --project "${repository_root}" --frozen)
+case "${install_profile}" in
+    development)
+        ;;
+    brev)
+        sync_arguments+=(--no-default-groups --group kernel)
+        ;;
+    runtime)
+        sync_arguments+=(--no-default-groups)
+        ;;
+    *)
+        echo "Unknown ALCHEMI install profile: ${install_profile}" >&2
+        echo "Choose development, brev, or runtime." >&2
+        exit 2
+        ;;
+esac
+
+echo "Installing ALCHEMI profile: ${install_profile}"
+"${uv_bin}" "${sync_arguments[@]}"
 "${uv_bin}" run --project "${repository_root}" --frozen --no-sync \
     python "${repository_root}/environment/prewarm_assets.py"

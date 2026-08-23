@@ -1,14 +1,15 @@
 # NVIDIA Brev workshop deployment
 
 This deployment installs the locked ALCHEMI environment from the repository
-recipe. Course distribution consists of the source, Dockerfile, lockfile, and
-installation scripts.
+recipe. Course distribution consists of the source, lockfile, and installation
+scripts.
 
 The Launchable uses Brev VM Mode with Jupyter. The setup script stores the
 course and runtime under the attendee's persistent `workspace` directory,
 prewarms required assets, verifies the locked runtime, checks the assigned CUDA
-GPU, and registers `Python 3 (ALCHEMI)` as the standard `python3` kernel used
-by the notebooks.
+GPU, and registers `Python 3 (ALCHEMI Core)` with the kernel name used by the
+notebooks. The Brev profile installs the course runtime and kernel packages. It
+leaves local JupyterLab and test tools out of the attendee environment.
 
 ## Organizer prerequisites
 
@@ -66,9 +67,10 @@ Add this Choice launch parameter with one allowed value:
 | Choice | The final workshop release commit |
 | Default | The final workshop release commit |
 
-The setup script compares the checked-out source to this commit before it
-installs the environment. This turns a moved source branch into a visible setup
-failure.
+The setup script requires this parameter and compares the checked-out source to
+the selected commit before it installs the environment. Copy the 40-character
+commit shown by `git rev-parse HEAD`; a branch name or shortened commit will
+fail validation.
 
 Record the final release commit, Launchable URL, primary compute selection,
 fallback selection, disk allocation, measured setup time, and measured credit
@@ -87,7 +89,7 @@ selection. Wait for setup to finish and confirm that its log contains:
 ALCHEMI runtime verified
 CUDA device: <assigned GPU>
 ALCHEMI is ready.
-Jupyter kernel: Python 3 (ALCHEMI)
+Jupyter kernel: Python 3 (ALCHEMI Core)
 ```
 
 Open Jupyter through the Brev link. Open a terminal and inspect the ready
@@ -97,8 +99,8 @@ record:
 cat ~/workspace/.alchemi-runtime/brev-ready.txt
 ```
 
-Open Module 1 and confirm that the selected kernel is
-`Python 3 (ALCHEMI)`. Run this preflight cell:
+Open Module 00 and confirm that the selected kernel is
+`Python 3 (ALCHEMI Core)`. Run this preflight cell:
 
 ```python
 import sys
@@ -116,7 +118,7 @@ Expected results:
 - `torch.cuda.is_available()` returns `True`
 - The GPU name matches the Launchable instance
 
-Run Modules 1 through 3 from fresh kernels. Record total setup wall time,
+Run Modules 00 through 02 from fresh kernels. Record total setup wall time,
 fresh-kernel runtime for each module, peak GPU memory, disk use after setup,
 and any provider-specific failure. Repeat this validation on the fallback
 compute selection.
@@ -128,7 +130,7 @@ Use the same Launchable link and release commit for each rehearsal:
 1. Deploy one primary and one fallback instance.
 2. Deploy ten primary instances concurrently.
 3. Run the largest coordinated rehearsal Brev can support before the event.
-4. Measure the time from selecting **Deploy** to a runnable Module 1 kernel.
+4. Measure the time from selecting **Deploy** to a runnable Module 00 kernel.
 5. Confirm that every instance downloads, verifies, and opens the course.
 6. Confirm the attendee cleanup instructions and measured credit use.
 
@@ -145,8 +147,8 @@ the measured setup time in the event schedule.
 5. Select **Deploy**.
 6. Wait for setup to report that ALCHEMI is ready.
 7. Open Jupyter.
-8. Open Module 1 under `ALCHEMI-Bootcamp/notebooks/00-core-playbook/`.
-9. Confirm the kernel shows `Python 3 (ALCHEMI)`.
+8. Open Module 00 under `ALCHEMI-Bootcamp/notebooks/00-core-playbook/`.
+9. Confirm the kernel shows `Python 3 (ALCHEMI Core)`.
 10. Delete the instance after the workshop to end compute and storage charges.
 
 Attendees need a Brev account and the event credit code. The public repository
@@ -184,10 +186,10 @@ setup log and instance type for the event support record.
 ### Jupyter opens with a different kernel
 
 Refresh Jupyter after setup completes. Select
-`Kernel > Change Kernel > Python 3 (ALCHEMI)`. Confirm that this file exists:
+`Kernel > Change Kernel > Python 3 (ALCHEMI Core)`. Confirm that this file exists:
 
 ```bash
-cat ~/.local/share/jupyter/kernels/python3/kernel.json
+cat ~/.local/share/jupyter/kernels/alchemi-core/kernel.json
 ```
 
 ### Attendee needs to preserve work
