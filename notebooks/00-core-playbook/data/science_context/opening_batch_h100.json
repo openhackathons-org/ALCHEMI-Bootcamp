@@ -1,0 +1,74 @@
+{
+  "schema": "alchemi.opening-batch-benchmark.v1",
+  "checked_date": "2026-08-20",
+  "run": {
+    "cluster": "cl",
+    "slurm_job_id": "3787837",
+    "node": "ipp2-0100",
+    "state": "COMPLETED",
+    "exit_code": "0:0"
+  },
+  "hardware": {
+    "gpu": "NVIDIA H100",
+    "gpu_count": 1
+  },
+  "software": {
+    "model": "MACE-MPA-0 medium-mpa-0",
+    "torch": "2.12.0+cu130",
+    "dtype": "float32",
+    "requested_outputs": [
+      "energy",
+      "forces"
+    ]
+  },
+  "workload": {
+    "systems": 12,
+    "atoms": 564,
+    "min_atoms_per_system": 33,
+    "max_atoms_per_system": 60,
+    "size_ratio": 1.8181818181818181,
+    "names": [
+      "Ibuprofen",
+      "Amoxicillin",
+      "Azoxystrobin",
+      "Capsaicin",
+      "Retinol",
+      "Avobenzone",
+      "Dibenzo-18-crown-6",
+      "Dibutyl phthalate",
+      "Nile red",
+      "C60",
+      "CO on Pt(111)",
+      "H2O on Cu(111)"
+    ]
+  },
+  "measurement": {
+    "boundary": "Synchronized MACE energy-and-force model calls with neighbors prepared before timing",
+    "warmups": 2,
+    "repeats": 7,
+    "separate_seconds": [
+      0.25087923399405554,
+      0.2511224919871893,
+      0.2515616710006725,
+      0.2513031919952482,
+      0.25097172299865633,
+      0.2528799530118704,
+      0.25203424799838103
+    ],
+    "batch_seconds": [
+      0.025165101018501446,
+      0.02521506100310944,
+      0.02531182998791337,
+      0.02521144101046957,
+      0.02521812100894749,
+      0.0253395100007765,
+      0.025245520984753966
+    ],
+    "separate_median_seconds": 0.2513031919952482,
+    "batch_median_seconds": 0.02521812100894749,
+    "speedup": 9.965183048573873
+  },
+  "regeneration": {
+    "command": "cd <repository-checkout> && sbatch alchemi_h100_benchmark.sbatch"
+  }
+}

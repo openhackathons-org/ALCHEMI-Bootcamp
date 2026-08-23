@@ -1,0 +1,45 @@
+<?xml version="1.0"?><svg xmlns="http://www.w3.org/2000/svg" width="1104" height="312" viewBox="0 0 1104 312" font-family="'NVIDIA Sans', 'NVIDIA Sans Regular', Arial, Helvetica, sans-serif">
+      <rect width="1104" height="312" fill="#171D20"></rect>
+      <text x="24" y="42" font-size="13" font-weight="700" letter-spacing="1.05" fill="#A8B0B8">NO PREFETCH</text>
+      <g fill="#20262C" stroke="#2E6F9E"><rect x="250" y="22" width="88" height="30" rx="4"></rect><rect x="434" y="22" width="88" height="30" rx="4"></rect><rect x="618" y="22" width="88" height="30" rx="4"></rect></g>
+      <g fill="#28312B" stroke="#76B900"><rect x="342" y="22" width="88" height="30" rx="4"></rect><rect x="526" y="22" width="88" height="30" rx="4"></rect><rect x="710" y="22" width="88" height="30" rx="4"></rect></g>
+      <g font-size="11" font-weight="600" fill="#8FC0DE" text-anchor="middle"><text x="294" y="41">load B1</text><text x="478" y="41">load B2</text><text x="662" y="41">load B3</text></g>
+      <g font-size="11" font-weight="600" fill="#76B900" text-anchor="middle"><text x="386" y="41">run B1</text><text x="570" y="41">run B2</text><text x="754" y="41">run B3</text></g>
+      <text x="240" y="41" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E" text-anchor="end">GPU</text>
+      <text x="240" y="74" font-size="10" font-weight="700" letter-spacing="1.2" fill="#68737E" text-anchor="end">WALL TIME</text>
+      <rect x="250" y="64" width="548" height="10" rx="5" fill="#4B565F"></rect>
+      <path d="M250 58v22M798 58v22" stroke="#68737E"></path>
+      <rect x="880" y="14" width="200" height="72" rx="6" fill="#20262C" stroke="#4B565F"></rect>
+      <text x="896" y="36" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">ON DEVICE</text>
+      <rect x="896" y="46" width="168" height="26" rx="4" fill="#28312B" stroke="#76B900"></rect>
+      <text x="980" y="63" font-size="11" font-weight="600" fill="#76B900" text-anchor="middle">B1 · current</text>
+
+      <path d="M24 114h1056" stroke="#3A444D"></path>
+
+      <text x="24" y="152" font-size="13" font-weight="700" letter-spacing="1.05" fill="#76B900">PREFETCH_FACTOR = 2</text>
+      <g font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E" text-anchor="end"><text x="240" y="157">GPU</text><text x="240" y="209">LOADER</text></g>
+      <rect x="250" y="138" width="88" height="30" rx="4" fill="#20262C" stroke="#2E6F9E"></rect>
+      <g fill="#28312B" stroke="#76B900"><rect x="342" y="138" width="88" height="30" rx="4"></rect><rect x="434" y="138" width="88" height="30" rx="4"></rect><rect x="526" y="138" width="88" height="30" rx="4"></rect></g>
+      <g fill="#20262C" stroke="#2E6F9E"><rect x="342" y="190" width="88" height="30" rx="4"></rect><rect x="434" y="190" width="88" height="30" rx="4"></rect></g>
+      <text x="294" y="157" font-size="11" font-weight="600" fill="#8FC0DE" text-anchor="middle">load B1</text>
+      <g font-size="11" font-weight="600" fill="#76B900" text-anchor="middle"><text x="386" y="157">run B1</text><text x="478" y="157">run B2</text><text x="570" y="157">run B3</text></g>
+      <g font-size="11" font-weight="600" fill="#8FC0DE" text-anchor="middle"><text x="386" y="209">prefetch B2</text><text x="478" y="209">prefetch B3</text></g>
+      <defs><marker id="hoff1f" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6.5" markerHeight="6.5" orient="auto"><path d="M0 0 10 5 0 10Z" fill="#8FC0DE"></path></marker></defs>
+      <g fill="none" stroke="#8FC0DE" stroke-width="1.8" stroke-linecap="round">
+        <path d="M430 200C442 200 446 188 446 168" marker-end="url(#hoff1f)"></path><path d="M522 200C534 200 538 188 538 168" marker-end="url(#hoff1f)"></path>
+      </g>
+      <text x="240" y="238" font-size="10" font-weight="700" letter-spacing="1.2" fill="#68737E" text-anchor="end">WALL TIME</text>
+      <rect x="250" y="228" width="364" height="10" rx="5" fill="#76B900"></rect>
+      <rect x="614" y="228" width="184" height="10" rx="5" fill="#171D20" stroke="#4B565F" stroke-dasharray="3 3"></rect>
+      <path d="M250 222v22M614 222v22M798 222v22" stroke="#68737E"></path>
+      <text x="706" y="219" font-size="10" font-weight="700" letter-spacing="1.2" fill="#76B900" text-anchor="middle">TIME SAVED</text>
+      <rect x="880" y="126" width="200" height="124" rx="6" fill="#20262C" stroke="#4B565F"></rect>
+      <text x="896" y="148" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">ON DEVICE</text>
+      <rect x="896" y="156" width="168" height="24" rx="4" fill="#28312B" stroke="#76B900"></rect>
+      <text x="980" y="172" font-size="11" font-weight="600" fill="#76B900" text-anchor="middle">B1 current</text>
+      <g fill="#20262C" stroke="#2E6F9E"><rect x="896" y="184" width="168" height="24" rx="4"></rect><rect x="896" y="212" width="168" height="24" rx="4"></rect></g>
+      <g font-size="11" font-weight="600" fill="#8FC0DE" text-anchor="middle"><text x="980" y="200">B2 ready</text><text x="980" y="228">B3 ready</text></g>
+
+      <rect x="24" y="268" width="1056" height="32" rx="6" fill="#20262C" stroke="#4B565F"></rect>
+      <text x="552" y="289" font-size="13" font-weight="500" fill="#A8B0B8" text-anchor="middle">No prefetch: <tspan fill="#F3F4F6" font-weight="700">1 Batch on device</tspan><tspan fill="#68737E">  vs  </tspan>factor 2: <tspan fill="#76B900" font-weight="700">3 Batches on device</tspan></text>
+    </svg>

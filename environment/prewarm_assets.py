@@ -87,14 +87,23 @@ def generate_d3_parameter_file(path: Path) -> None:
         raise RuntimeError(f"D3 parameters saved to unexpected path: {saved_path}")
 
 
+def resolve_mace_checkpoint(alias: str) -> str | Path:
+    """Resolve a named checkpoint through MACE's official cache helper."""
+
+    from mace.calculators.foundations_models import download_mace_mp_checkpoint
+
+    return download_mace_mp_checkpoint(alias)
+
+
 def main(
     *,
     pins: dict[str, Any] | None = None,
     environment: Mapping[str, str] | None = None,
     model_resolver: Callable[[str], str | Path] = get_model_path,
+    mace_model_resolver: Callable[[str], str | Path] = resolve_mace_checkpoint,
     d3_generator: Callable[[Path], None] = generate_d3_parameter_file,
 ) -> None:
-    """Create and verify the fixed AIMNet and D3 runtime assets."""
+    """Create and verify the fixed AIMNet, MACE, and D3 runtime assets."""
     pins = PINS if pins is None else pins
     environment = os.environ if environment is None else environment
     model = pins["model"]
@@ -104,6 +113,15 @@ def main(
     if actual != expected:
         raise RuntimeError(f"AIMNet checkpoint: expected {expected}, found {actual}")
     print(f"AIMNet checkpoint verified: {path}")
+
+    mace = pins["mace"]
+    mace_path = Path(mace_model_resolver(mace["checkpoint_alias"])).resolve()
+    require_file_sha256(
+        "MACE checkpoint",
+        mace_path,
+        mace["checkpoint_sha256"],
+    )
+    print(f"MACE checkpoint verified: {mace_path}")
 
     configured_d3_path = environment.get("ALCHEMI_D3_PARAM_FILE")
     if not configured_d3_path:

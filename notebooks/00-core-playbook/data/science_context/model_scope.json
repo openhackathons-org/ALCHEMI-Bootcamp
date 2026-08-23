@@ -1,0 +1,74 @@
+{
+  "schema": "alchemi.science-context.model-scope.v1",
+  "checked_date": "2026-08-18",
+  "models": [
+    {
+      "name": "MACE-MPA-0",
+      "checkpoint_alias": "medium-mpa-0",
+      "software_minimum_version": "mace-torch 0.3.10",
+      "elements_covered": 89,
+      "training_datasets": [
+        "MPTrj",
+        "sAlex"
+      ],
+      "reference_level": "DFT (PBE+U)",
+      "declared_target": "Materials",
+      "license": "MIT",
+      "source": {
+        "url": "https://github.com/ACEsuit/mace-foundations/blob/5d212684e33134d2607d4a5fb05abe357c1ba0b9/README.md",
+        "revision": "5d212684e33134d2607d4a5fb05abe357c1ba0b9"
+      },
+      "course_wording": "MACE-MPA-0 is an 89-element materials foundation model trained on MPTrj and sAlex DFT (PBE+U) data. In the mixed opening, its urea and caffeine results are exploratory applications. Report the observed forces and convergence state for those systems."
+    },
+    {
+      "name": "AIMNet2 wB97M-D3",
+      "checkpoint_alias": "aimnet2-wb97m-d3_0",
+      "checkpoint_sha256": "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28",
+      "supported_elements": [
+        "H",
+        "B",
+        "C",
+        "N",
+        "O",
+        "F",
+        "Si",
+        "P",
+        "S",
+        "Cl",
+        "As",
+        "Se",
+        "Br",
+        "I"
+      ],
+      "reference_level": "wB97M-D3/def2-TZVPP",
+      "declared_target": "Organic and main-group molecular chemistry",
+      "training_domain": "Molecular gas-phase structures",
+      "electronic_structure_scope": "Closed-shell",
+      "reported_validation_size": "Approximately 100 heavy atoms",
+      "license": "MIT",
+      "sources": [
+        {
+          "role": "maintained model documentation",
+          "url": "https://github.com/isayevlab/aimnetcentral/blob/3dabad9100de545b8ec859fe97c44f27e14f351b/docs/models/aimnet2.md",
+          "revision": "3dabad9100de545b8ec859fe97c44f27e14f351b"
+        },
+        {
+          "role": "checkpoint model card and license",
+          "url": "https://huggingface.co/isayevlab/aimnet2-wb97m-d3/tree/9f251a1400101048e2a71f4d28e3c5116bde18eb",
+          "revision": "9f251a1400101048e2a71f4d28e3c5116bde18eb"
+        },
+        {
+          "role": "model method",
+          "url": "https://doi.org/10.1039/D4SC08572H",
+          "license": "CC BY 3.0"
+        },
+        {
+          "role": "Toolkit wrapper behavior",
+          "url": "https://github.com/NVIDIA/nvalchemi-toolkit/blob/8c2c307c1c0c76baee6f7a68eb75a45da83ffd18/src/nvalchemi/models/aimnet2.py",
+          "revision": "8c2c307c1c0c76baee6f7a68eb75a45da83ffd18"
+        }
+      ],
+      "course_wording": "The Toolkit AIMNet2 wrapper evaluates the learned local energy and predicts atomic charges. The course composes that local term with explicit D3 and electrostatics that read the predicted charges. The source model targets closed-shell organic and main-group gas-phase molecules containing 14 supported elements; the model card describes validation to about 100 heavy atoms."
+    }
+  ]
+}

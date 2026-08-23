@@ -1,0 +1,118 @@
+{
+  "schema": "alchemi.science-context.nci-baseline.v1",
+  "checked_date": "2026-08-18",
+  "source_data": {
+    "name": "NCI Atlas tutorial subset",
+    "upstream_url": "https://github.com/Honza-R/NCIAtlas/tree/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec",
+    "upstream_revision": "1816bfc72609d7deb1d4f93ab9e27eb13bb44bec",
+    "local_file": "notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz",
+    "sha256": "7ffbc071e2998cee8e487a2697517187110a05f436920f8611d28d2af5d4d7b7",
+    "records": 90,
+    "interaction_curves": 30,
+    "license_audit": {
+      "upstream_statement": "Creative Commons CC-BY",
+      "upstream_version": null,
+      "upstream_license_file_present": false,
+      "local_notice": "CC BY 4.0",
+      "status": "exact upstream license version requires confirmation",
+      "release_blocker": true
+    }
+  },
+  "runtime": {
+    "python": "3.12.13",
+    "torch": "2.12.0+cu130",
+    "toolkit_commit": "8c2c307c1c0c76baee6f7a68eb75a45da83ffd18",
+    "toolkit_ops_commit": "c1e23460859a784e1d78043bcd1c8af0d1095fa2",
+    "aimnet_package": "0.2.0",
+    "checkpoint_alias": "aimnet2-wb97m-d3_0",
+    "checkpoint_sha256": "f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28",
+    "d3_parameter_sha256": "b4828b87b63a43918769d467249492b53f7af94d2ab7ac5ac584a44aa399ec84",
+    "device": "cuda",
+    "hardware": "NVIDIA RTX 4000 SFF Ada Generation",
+    "precision": "float32"
+  },
+  "composition": {
+    "aimnet_component": "Toolkit AIMNet2Wrapper learned local energy and predicted charges; internal Coulomb and dispersion disabled",
+    "d3": {
+      "damping": "wB97M-D3(BJ)",
+      "a1": 0.566,
+      "a2_bohr": 3.128,
+      "s8": 0.3908,
+      "cutoff_angstrom": 15.0
+    },
+    "electrostatics": "Finite direct 1/r Coulomb energy from AIMNet2-predicted charges",
+    "electrostatics_cutoff_angstrom": 15.0,
+    "maximum_absolute_system_charge_error_e": 3.5762786865234375e-07
+  },
+  "comparison_tolerance_kcal_mol": 0.05,
+  "repeatability_check": {
+    "same_runtime_and_hardware": true,
+    "cause": "Float32 CUDA reduction ordering",
+    "maximum_absolute_repeat_delta_kcal_mol": {
+      "aimnet_local": 0.04503295770181026,
+      "local_plus_d3": 0.02259894957963482,
+      "complete": 0.04501202338882848
+    },
+    "p90_absolute_repeat_delta_kcal_mol": {
+      "aimnet_local": 0.00007450244954423369,
+      "local_plus_d3": 0.0023215413782488132,
+      "complete": 0.00017373094183401614
+    },
+    "tolerance_rationale": "The 0.05 kcal/mol comparison tolerance covers the largest observed repeat delta on the pinned CUDA runtime."
+  },
+  "summary": [
+    {
+      "system": "phenol - N-methylacetamide",
+      "d3_shift_at_equilibrium_kcal_mol": -3.2267218224222383,
+      "electrostatic_shift_at_equilibrium_kcal_mol": 21.55185200976448,
+      "complete_curve_mae_vs_dft_kcal_mol": 0.2845168840424913,
+      "complete_curve_mae_vs_ccsd_t_cbs_kcal_mol": 0.30384401686432516
+    },
+    {
+      "system": "propyne - methyl azide",
+      "d3_shift_at_equilibrium_kcal_mol": -2.3793489991837644,
+      "electrostatic_shift_at_equilibrium_kcal_mol": -2.2557594134917625,
+      "complete_curve_mae_vs_dft_kcal_mol": 0.3403372248071198,
+      "complete_curve_mae_vs_ccsd_t_cbs_kcal_mol": 0.3167850720547324
+    },
+    {
+      "system": "ammonia - benzoate",
+      "d3_shift_at_equilibrium_kcal_mol": -1.328922731970799,
+      "electrostatic_shift_at_equilibrium_kcal_mol": 23.44324619153577,
+      "complete_curve_mae_vs_dft_kcal_mol": 0.4775666496842291,
+      "complete_curve_mae_vs_ccsd_t_cbs_kcal_mol": 0.4107139896648128
+    }
+  ],
+  "curves": [
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":0.8,"aimnet_local_kcal_mol":-26.767818,"local_plus_d3_kcal_mol":-30.836212,"complete_kcal_mol":-6.365679},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":0.85,"aimnet_local_kcal_mol":-29.67454,"local_plus_d3_kcal_mol":-33.535591,"complete_kcal_mol":-9.184494},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":0.9,"aimnet_local_kcal_mol":-30.298049,"local_plus_d3_kcal_mol":-33.944993,"complete_kcal_mol":-10.566014},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":0.95,"aimnet_local_kcal_mol":-30.29796,"local_plus_d3_kcal_mol":-33.732478,"complete_kcal_mol":-11.309526},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":1.0,"aimnet_local_kcal_mol":-29.906972,"local_plus_d3_kcal_mol":-33.133694,"complete_kcal_mol":-11.581842},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":1.05,"aimnet_local_kcal_mol":-29.482673,"local_plus_d3_kcal_mol":-32.507622,"complete_kcal_mol":-11.66566},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":1.1,"aimnet_local_kcal_mol":-29.026014,"local_plus_d3_kcal_mol":-31.856142,"complete_kcal_mol":-11.501994},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":1.25,"aimnet_local_kcal_mol":-24.911369,"local_plus_d3_kcal_mol":-27.202746,"complete_kcal_mol":-9.87946},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":1.5,"aimnet_local_kcal_mol":-15.828949,"local_plus_d3_kcal_mol":-17.386315,"complete_kcal_mol":-7.375204},
+    {"system_id":"1.041","system_name":"phenol - N-methylacetamide","scale":2.0,"aimnet_local_kcal_mol":-8.455221,"local_plus_d3_kcal_mol":-9.120702,"complete_kcal_mol":-3.728996},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":0.8,"aimnet_local_kcal_mol":11.033138,"local_plus_d3_kcal_mol":7.008978,"complete_kcal_mol":1.177328},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":0.85,"aimnet_local_kcal_mol":6.329322,"local_plus_d3_kcal_mol":2.748766,"complete_kcal_mol":-1.144091},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":0.9,"aimnet_local_kcal_mol":4.610469,"local_plus_d3_kcal_mol":1.457516,"complete_kcal_mol":-2.288086},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":0.95,"aimnet_local_kcal_mol":3.013611,"local_plus_d3_kcal_mol":0.263344,"complete_kcal_mol":-2.870065},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":1.0,"aimnet_local_kcal_mol":1.57264,"local_plus_d3_kcal_mol":-0.806709,"complete_kcal_mol":-3.062468},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":1.05,"aimnet_local_kcal_mol":1.903311,"local_plus_d3_kcal_mol":-0.141202,"complete_kcal_mol":-2.834481},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":1.1,"aimnet_local_kcal_mol":3.628933,"local_plus_d3_kcal_mol":1.881373,"complete_kcal_mol":-2.488544},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":1.25,"aimnet_local_kcal_mol":5.249901,"local_plus_d3_kcal_mol":4.177163,"complete_kcal_mol":-1.969408},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":1.5,"aimnet_local_kcal_mol":-1.953649,"local_plus_d3_kcal_mol":-2.431121,"complete_kcal_mol":-0.775067},
+    {"system_id":"1.07.74","system_name":"propyne - methyl azide","scale":2.0,"aimnet_local_kcal_mol":1.769559,"local_plus_d3_kcal_mol":1.656229,"complete_kcal_mol":-0.238267},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":0.8,"aimnet_local_kcal_mol":-31.45772,"local_plus_d3_kcal_mol":-33.325748,"complete_kcal_mol":-6.62373},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":0.85,"aimnet_local_kcal_mol":-31.616038,"local_plus_d3_kcal_mol":-33.345947,"complete_kcal_mol":-8.82226},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":0.9,"aimnet_local_kcal_mol":-32.308177,"local_plus_d3_kcal_mol":-33.900941,"complete_kcal_mol":-9.929182},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":0.95,"aimnet_local_kcal_mol":-33.013084,"local_plus_d3_kcal_mol":-34.471713,"complete_kcal_mol":-10.461648},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":1.0,"aimnet_local_kcal_mol":-32.72498,"local_plus_d3_kcal_mol":-34.053903,"complete_kcal_mol":-10.610656},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":1.05,"aimnet_local_kcal_mol":-31.605224,"local_plus_d3_kcal_mol":-32.809995,"complete_kcal_mol":-10.495196},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":1.1,"aimnet_local_kcal_mol":-29.864693,"local_plus_d3_kcal_mol":-30.951908,"complete_kcal_mol":-10.273755},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":1.25,"aimnet_local_kcal_mol":-22.250939,"local_plus_d3_kcal_mol":-23.030403,"complete_kcal_mol":-8.962216},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":1.5,"aimnet_local_kcal_mol":-14.18037,"local_plus_d3_kcal_mol":-14.603285,"complete_kcal_mol":-5.95836},
+    {"system_id":"08.007","system_name":"ammonia - benzoate","scale":2.0,"aimnet_local_kcal_mol":-1.211469,"local_plus_d3_kcal_mol":-1.336504,"complete_kcal_mol":-3.801857}
+  ]
+}

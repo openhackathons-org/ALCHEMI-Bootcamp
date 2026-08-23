@@ -2,9 +2,9 @@
 
 This generated snapshot includes direct and transitive Python packages installed for the locked Linux tutorial environment.
 
-- Source: pyproject.toml and uv.lock (SHA-256 `14afb76b221ae8b8ad9033d285cefda6d60f6700f925c4d32ef6b9889b30e127`)
+- Source: pyproject.toml and uv.lock (SHA-256 `8c7ab4e1ca7dce56d3c9ca8f82f97fbbe624fdfb19e96ba42bdbfe4ef8742f9f`)
 - Environment: Python 3.12.13 on linux-x86_64
-- Packages: 213 installed, 15 direct
+- Packages: 217 installed, 20 direct
 
 ## Terms requiring attention
 
@@ -19,17 +19,22 @@ This generated snapshot includes direct and transitive Python packages installed
 | --- | --- | --- | --- | --- | --- |
 | direct | aimnet | 0.2.0 | MIT | pyproject.toml [project.dependencies] | https://github.com/isayevlab/aimnetcentral |
 | direct | ase | 3.27.0 | LGPL-2.1-or-later | pyproject.toml [project.dependencies] | https://gitlab.com/ase/ase.git |
+| direct | dm-tree | 0.1.10 | Apache-2.0 | pyproject.toml [project.dependencies] | https://github.com/deepmind/tree |
 | direct | mace-torch | 0.3.15 | MIT | pyproject.toml [project.dependencies] | https://github.com/ACEsuit/mace |
 | direct | matplotlib | 3.11.1 | PSF-2.0 | pyproject.toml [project.dependencies] | https://matplotlib.org |
 | direct | nvalchemi-toolkit | 0.2.0 | Apache-2.0 | pyproject.toml [project.dependencies] | git+https://github.com/NVIDIA/nvalchemi-toolkit.git@8c2c307c1c0c76baee6f7a68eb75a45da83ffd18 |
 | direct | nvalchemi-toolkit-ops | 0.4.1 | Apache-2.0 | pyproject.toml [project.dependencies] | git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2 |
 | direct | numpy | 2.3.5 | BSD-3-Clause | pyproject.toml [project.dependencies] | https://github.com/numpy/numpy |
+| direct | pandas | 2.3.3 | BSD-3-Clause | pyproject.toml [project.dependencies] | https://github.com/pandas-dev/pandas |
 | direct | py3Dmol | 2.5.5 | MIT | pyproject.toml [project.dependencies] | https://3dmol.org |
-| direct | rich | 14.1.0 | MIT | pyproject.toml [project.dependencies] | https://rich.readthedocs.io/en/latest/ |
+| direct | rdkit | 2026.3.4 | BSD-3-Clause | pyproject.toml [project.dependencies] | https://github.com/kuelumbus/rdkit-pypi |
 | direct | torch | 2.12.0+cu130 | BSD-3-Clause | pyproject.toml [project.dependencies] | https://github.com/pytorch/pytorch |
 | direct | zarr | 3.3.0 | MIT | pyproject.toml [project.dependencies] | https://github.com/zarr-developers/zarr-python |
-| direct | ipykernel | 7.3.0 | BSD-3-Clause | pyproject.toml [dependency-groups.notebook] | https://github.com/ipython/ipykernel |
-| direct | jupyterlab | 4.6.3 | BSD-3-Clause | pyproject.toml [dependency-groups.notebook] | https://github.com/jupyterlab/jupyterlab |
+| direct | ipython | 9.16.1 | BSD-3-Clause | pyproject.toml [dependency-groups.kernel] | https://github.com/ipython/ipython |
+| direct | ipykernel | 7.3.0 | BSD-3-Clause | pyproject.toml [dependency-groups.kernel] | https://github.com/ipython/ipykernel |
+| direct | ipywidgets | 8.1.9 | BSD-3-Clause | pyproject.toml [dependency-groups.kernel] | http://jupyter.org |
+| direct | jupyterlab | 4.6.3 | BSD-3-Clause | pyproject.toml [dependency-groups.lab] | https://github.com/jupyterlab/jupyterlab |
+| direct | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause | pyproject.toml [dependency-groups.test] | https://github.com/pypa/packaging |
 | direct | pytest | 8.4.2 | MIT | pyproject.toml [dependency-groups.test] | https://github.com/pytest-dev/pytest |
 | direct | ruff | 0.16.2 | MIT | pyproject.toml [dependency-groups.test] | https://github.com/astral-sh/ruff |
 | transitive | absl-py | 2.5.0 | Apache-2.0 |  | https://github.com/abseil/abseil-py |
@@ -69,7 +74,6 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | cycler | 0.12.1 | BSD-3-Clause |  | https://github.com/matplotlib/cycler |
 | transitive | debugpy | 1.8.21 | MIT |  | https://github.com/microsoft/debugpy |
 | transitive | defusedxml | 0.7.1 | PSF-2.0 |  | https://github.com/tiran/defusedxml |
-| transitive | dm-tree | 0.1.10 | Apache-2.0 |  | https://github.com/deepmind/tree |
 | transitive | donfig | 0.8.1.post1 | MIT |  | https://github.com/pytroll/donfig |
 | transitive | e3nn | 0.4.4 | MIT |  | https://e3nn.org |
 | transitive | einops | 0.8.2 | MIT |  | https://github.com/arogozhnikov/einops |
@@ -93,7 +97,6 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | idna | 3.18 | BSD-3-Clause |  | https://github.com/kjd/idna |
 | transitive | importlib_metadata | 9.0.0 | Apache-2.0 |  | https://github.com/python/importlib_metadata |
 | transitive | iniconfig | 2.3.0 | MIT |  | https://github.com/pytest-dev/iniconfig |
-| transitive | ipython | 9.16.1 | BSD-3-Clause |  | https://github.com/ipython/ipython |
 | transitive | ipython_pygments_lexers | 1.1.1 | BSD-3-Clause |  | https://github.com/ipython/ipython-pygments-lexers |
 | transitive | isoduration | 20.11.0 | ISC |  | https://github.com/bolsote/isoduration |
 | transitive | jaxtyping | 0.3.11 | MIT |  | https://github.com/patrick-kidger/jaxtyping |
@@ -113,6 +116,7 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | jupyter_server_terminals | 0.5.4 | BSD-3-Clause |  | https://github.com/jupyter-server/jupyter_server_terminals |
 | transitive | jupyterlab_pygments | 0.3.0 | BSD-3-Clause |  | https://github.com/jupyterlab/jupyterlab_pygments.git |
 | transitive | jupyterlab_server | 2.28.0 | BSD-3-Clause |  | https://github.com/jupyterlab/jupyterlab_server |
+| transitive | jupyterlab_widgets | 3.0.17 | BSD-3-Clause |  | https://github.com/jupyter-widgets/ipywidgets |
 | transitive | kiwisolver | 1.5.0 | BSD-3-Clause |  | https://github.com/nucleic/kiwi |
 | transitive | lark | 1.3.1 | MIT |  | https://github.com/lark-parser/lark |
 | transitive | lightning-utilities | 0.15.3 | Apache-2.0 |  | https://dev-toolbox.rtfd.io/en/latest/ |
@@ -156,8 +160,6 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | opt_einsum | 3.4.0 | MIT |  | https://pypi.org/project/opt_einsum/3.4.0/ |
 | transitive | opt-einsum-fx | 0.1.4 | MIT |  | https://github.com/Linux-cpp-lisp/opt_einsum_fx |
 | transitive | orjson | 3.11.9 | MPL-2.0 AND (Apache-2.0 OR MIT) |  | https://github.com/ijl/orjson |
-| transitive | packaging | 26.3 | Apache-2.0 OR BSD-2-Clause |  | https://github.com/pypa/packaging |
-| transitive | pandas | 2.3.3 | BSD-3-Clause |  | https://github.com/pandas-dev/pandas |
 | transitive | pandocfilters | 1.5.1 | BSD-3-Clause |  | http://github.com/jgm/pandocfilters |
 | transitive | parso | 0.8.7 | MIT |  | https://github.com/davidhalter/parso |
 | transitive | periodictable | 2.0.2 | LicenseRef-Public-Domain |  | https://github.com/python-periodictable/periodictable |
@@ -192,6 +194,7 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | rfc3339-validator | 0.1.4 | MIT |  | https://github.com/naimetti/rfc3339-validator |
 | transitive | rfc3986-validator | 0.1.1 | MIT |  | https://github.com/naimetti/rfc3986-validator |
 | transitive | rfc3987-syntax | 1.1.0 | MIT |  | https://github.com/willynilly/rfc3987-syntax |
+| transitive | rich | 14.1.0 | MIT |  | https://rich.readthedocs.io/en/latest/ |
 | transitive | rpds-py | 2026.6.3 | MIT |  | https://github.com/crate-py/rpds |
 | transitive | s3fs | 2026.7.0 | BSD-3-Clause |  | http://github.com/fsspec/s3fs/ |
 | transitive | safetensors | 0.8.0 | Apache-2.0 |  | https://github.com/huggingface/safetensors |
@@ -227,6 +230,7 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | webcolors | 25.10.0 | BSD-3-Clause |  | https://webcolors.readthedocs.io |
 | transitive | webencodings | 0.5.1 | BSD-3-Clause |  | https://github.com/SimonSapin/python-webencodings |
 | transitive | websocket-client | 1.9.0 | Apache-2.0 |  | https://github.com/websocket-client/websocket-client/ |
+| transitive | widgetsnbextension | 4.0.16 | BSD-3-Clause |  | http://jupyter.org |
 | transitive | wrapt | 2.3.0 | BSD-2-Clause |  | https://github.com/GrahamDumpleton/wrapt |
 | transitive | yarl | 1.24.5 | Apache-2.0 |  | https://github.com/aio-libs/yarl |
 | transitive | zipp | 4.1.0 | MIT |  | https://github.com/jaraco/zipp |
