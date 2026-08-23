@@ -97,6 +97,29 @@ def test_power_user_code_is_folded(name: str) -> None:
     )
 
 
+@pytest.mark.parametrize(
+    "name",
+    [
+        "alchemi-core-01-data-and-batching.ipynb",
+        "alchemi-core-02-models-and-simulation.ipynb",
+    ],
+)
+def test_power_user_sections_start_collapsed(name: str) -> None:
+    """Keep each complete optional section folded when JupyterLab opens it."""
+    headings = [
+        cell
+        for cell in _tagged_power_user_cells(name)
+        if cell["cell_type"] == "markdown"
+        and "".join(cell["source"]).lstrip().startswith("### ⚡ Power User:")
+    ]
+
+    assert headings
+    assert all(
+        cell.get("metadata", {}).get("jp-MarkdownHeadingCollapsed") is True
+        for cell in headings
+    )
+
+
 def test_module_one_power_user_sections_are_fully_folded() -> None:
     """Prevent an untagged code cell from escaping an optional section fold."""
     optional_cells = _cells_in_power_user_sections(
