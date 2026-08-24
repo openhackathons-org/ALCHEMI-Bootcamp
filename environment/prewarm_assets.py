@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import os
 import tempfile
 import tomllib
@@ -15,26 +14,13 @@ from typing import Any
 
 from aimnet.calculators.model_registry import get_model_path
 
+if __package__:
+    from .runtime_files import require_file_sha256, sha256_file
+else:
+    from runtime_files import require_file_sha256, sha256_file
+
 ROOT = Path(__file__).resolve().parents[1]
 PINS = tomllib.loads((ROOT / "environment" / "runtime-pins.toml").read_text())
-
-
-def sha256_file(path: Path) -> str:
-    """Return a file SHA-256 digest."""
-    digest = hashlib.sha256()
-    with path.open("rb") as handle:
-        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
-            digest.update(chunk)
-    return digest.hexdigest()
-
-
-def require_file_sha256(label: str, path: Path, expected_sha256: str) -> None:
-    """Require an existing regular file with the pinned SHA-256 digest."""
-    if not path.is_file():
-        raise RuntimeError(f"{label} is missing: {path}")
-    actual = sha256_file(path)
-    if actual != expected_sha256:
-        raise RuntimeError(f"{label}: expected {expected_sha256}, found {actual}")
 
 
 def ensure_pinned_asset(

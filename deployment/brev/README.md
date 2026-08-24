@@ -27,12 +27,13 @@ Contact `brev-support@nvidia.com` before the event to confirm the resource
 limit and capacity plan. Brev resource limits are separate from the available
 credit balance.
 
-## Create the Launchable
+## Update the existing Launchable
 
-Complete the Launchable builder in this order:
+Edit the public workshop Launchable in place so its existing ID and stable
+`https://bit.ly/learn-alchemi` link continue to work. Complete the Launchable
+builder in this order:
 
-1. Under **Details**, use `NVIDIA ALCHEMI Core Playbook` as the name and add
-   the workshop description.
+1. Under **Details**, keep the current Launchable name and workshop description.
 2. Under **Default hardware configuration**, select the tested primary GPU,
    provider, and region. Start validation with 50 GiB of disk, then replace
    that value with the measured requirement.
@@ -78,8 +79,9 @@ fallback selection, disk allocation, measured setup time, and measured credit
 use in the event runbook.
 
 The setup script is idempotent. It preserves an existing course directory and
-runtime when the same instance runs setup again. A new course release should
-use a new instance so attendee edits remain untouched.
+runtime when the same instance runs setup again. It accepts any CUDA-capable
+NVIDIA GPU. A new course release should use a new instance so attendee edits
+remain untouched.
 
 ## Validate one instance
 
@@ -128,10 +130,15 @@ jupyter labextension list
 
 `@jupyter-widgets/jupyterlab-manager` must be enabled and report `OK`.
 
-Run Modules 00 through 02 from fresh kernels. Record total setup wall time,
+Run Modules 00 through 03 from fresh kernels. Record total setup wall time,
 fresh-kernel runtime for each module, peak GPU memory, disk use after setup,
 and any provider-specific failure. Repeat this validation on the fallback
 compute selection.
+
+The ready record contains setup start and finish epochs, total setup time,
+sequential phase durations, parallel job durations, and the setup-log path.
+Use Brev's deployment request time with `setup_started_epoch` to separate VM
+provisioning from setup-script time.
 
 ## Rehearse the workshop
 

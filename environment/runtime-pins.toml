@@ -1,6 +1,7 @@
 schema = "alchemi.tutorials.runtime-pins.v1"
 python = "3.12.13"
 torch = "2.12.0"
+ase = "3.27.0"
 cuda_index = "cu130"
 
 [toolkit]

@@ -5,7 +5,6 @@
 
 from __future__ import annotations
 
-import hashlib
 import importlib.metadata
 import json
 import os
@@ -13,6 +12,11 @@ import sys
 import sysconfig
 import tomllib
 from pathlib import Path
+
+if __package__:
+    from .runtime_files import require_file_sha256, sha256_file
+else:
+    from runtime_files import require_file_sha256, sha256_file
 
 ROOT = Path(__file__).resolve().parents[1]
 PINS = tomllib.loads((ROOT / "environment" / "runtime-pins.toml").read_text())
@@ -44,14 +48,6 @@ def require_equal(label: str, actual: str, expected: str) -> None:
     """Raise with a concise mismatch message."""
     if actual != expected:
         raise RuntimeError(f"{label}: expected {expected}, found {actual}")
-
-
-def require_file_sha256(label: str, path: Path, expected: str) -> None:
-    """Require an existing regular file with the pinned SHA-256 digest."""
-    if not path.is_file():
-        raise RuntimeError(f"{label} is missing: {path}")
-    actual = hashlib.sha256(path.read_bytes()).hexdigest()
-    require_equal(f"{label} SHA-256", actual, expected)
 
 
 def require_python_headers(include_directory: Path | None = None) -> Path:
@@ -88,7 +84,7 @@ def main() -> None:
             PINS["structure_viewer"]["package"],
             PINS["structure_viewer"]["package_version"],
         ),
-        ("ase", "3.27.0"),
+        ("ase", PINS["ase"]),
     ):
         actual = importlib.metadata.version(name).split("+")[0]
         require_equal(f"{name} version", actual, expected)
@@ -145,7 +141,7 @@ def main() -> None:
 
     checkpoint_name = "aimnet2_wb97m_d3_0.pt"
     checkpoint_path = Path(os.environ["AIMNET_CACHE_DIR"]) / checkpoint_name
-    checkpoint_sha256 = hashlib.sha256(checkpoint_path.read_bytes()).hexdigest()
+    checkpoint_sha256 = sha256_file(checkpoint_path)
     require_equal(
         f"{checkpoint_name} SHA-256",
         checkpoint_sha256,
