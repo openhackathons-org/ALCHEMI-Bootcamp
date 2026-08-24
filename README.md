@@ -11,7 +11,6 @@ Toolkit.
 
 [📦 Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) ·
 [📄 Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/) ·
-[⚙️ Toolkit-Ops docs](https://nvidia.github.io/nvalchemi-toolkit-ops/)
 
 ## Why Core?
 
@@ -32,7 +31,7 @@ workflows inspired by real research and development use cases.
 
 ### Background
 
-- basic Python and NumPy or PyTorch experience
+- basic Python and NumPy/PyTorch experience
 - some familiarity with basic computational chemistry
 
 ### Hardware
