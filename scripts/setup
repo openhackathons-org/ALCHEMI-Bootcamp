@@ -4,6 +4,24 @@
 
 set -euo pipefail
 
+sync_only=false
+if (( $# > 1 )); then
+    echo "Usage: $0 [--sync-only]" >&2
+    exit 2
+fi
+
+case "${1:-}" in
+    "")
+        ;;
+    --sync-only)
+        sync_only=true
+        ;;
+    *)
+        echo "Usage: $0 [--sync-only]" >&2
+        exit 2
+        ;;
+esac
+
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${ALCHEMI_RUNTIME_ROOT:-/tmp/alchemi-runtime}"
 uv_bin="${ALCHEMI_UV_BIN:-uv}"
@@ -66,6 +84,10 @@ esac
 
 echo "Installing ALCHEMI profile: ${install_profile}"
 "${uv_bin}" "${sync_arguments[@]}"
+if [[ "${sync_only}" == true ]]; then
+    exit 0
+fi
+
 "${uv_bin}" run --project "${repository_root}" --frozen --no-sync \
     --managed-python --python "${python_version}" \
     python "${repository_root}/environment/prewarm_assets.py"

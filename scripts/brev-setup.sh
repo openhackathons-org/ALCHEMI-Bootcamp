@@ -65,6 +65,9 @@ if [[ "${revision}" != "${expected_revision}" ]]; then
     exit 2
 fi
 
+ready_file="${runtime_root}/brev-ready.txt"
+rm -f "${ready_file}"
+
 uv_bin="${ALCHEMI_UV_BIN:-${bootstrap_root}/bin/uv}"
 if [[ ! -x "${uv_bin}" ]]; then
     echo "Installing uv ${uv_version} for the Brev runtime."
@@ -87,44 +90,86 @@ export ALCHEMI_UV_BIN="${uv_bin}"
 export UV_PYTHON_INSTALL_DIR="${runtime_root}/python"
 
 echo "Installing the frozen ALCHEMI environment."
-"${course_root}/scripts/setup"
-
-echo "Checking package pins and prewarmed assets."
-"${course_root}/scripts/run" \
-    python "${course_root}/environment/check_runtime.py"
+"${course_root}/scripts/setup" --sync-only
 
 host_jupyter_data_dir="${ALCHEMI_BREV_HOST_JUPYTER_DATA_DIR:-${HOME}/.local/share/jupyter}"
-echo "Publishing the widget frontend for Brev's host Jupyter server."
-"${course_root}/scripts/run" \
-    python "${course_root}/environment/install_widget_frontend.py" \
-    --jupyter-data-dir "${host_jupyter_data_dir}"
-
-echo "Checking CUDA access."
-cuda_device="$("${course_root}/scripts/run" python - <<'PY'
-import torch
-
-if not torch.cuda.is_available():
-    raise RuntimeError("CUDA is unavailable in the Brev tutorial runtime")
-
-print(torch.cuda.get_device_name(0))
-PY
-)"
-echo "CUDA device: ${cuda_device}"
-
-echo "Checking and prewarming the CUDA compiler path."
-"${course_root}/scripts/run" \
-    python "${course_root}/environment/check_cuda_compile.py"
-
 kernel_root="${ALCHEMI_BREV_KERNEL_ROOT:-${host_jupyter_data_dir}/kernels}"
 kernel_directory="${kernel_root}/alchemi-core"
 kernel_json="${kernel_directory}/kernel.json"
 mkdir -p "${kernel_directory}"
 
+job_root="$(mktemp -d "${runtime_root}/brev-setup-logs.XXXXXX")"
+cuda_device_file="${job_root}/cuda-device.txt"
+job_names=()
+job_pids=()
+job_logs=()
+
+cleanup_jobs() {
+    local pid
+    for pid in "${job_pids[@]}"; do
+        if kill -0 "${pid}" 2>/dev/null; then
+            kill "${pid}" 2>/dev/null || true
+            wait "${pid}" 2>/dev/null || true
+        fi
+    done
+}
+trap cleanup_jobs EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+
+echo "Starting asset prewarming and runtime verification."
+(
+    cd "${course_root}"
+    "${course_root}/scripts/run" python - <<'PY'
+from environment import check_runtime, prewarm_assets
+
+prewarm_assets.main()
+check_runtime.main()
+PY
+) > "${job_root}/assets-runtime.log" 2>&1 &
+job_names+=("assets-runtime")
+job_pids+=("$!")
+job_logs+=("${job_root}/assets-runtime.log")
+
+echo "Starting widget frontend installation."
+"${course_root}/scripts/run" \
+    python "${course_root}/environment/install_widget_frontend.py" \
+    --jupyter-data-dir "${host_jupyter_data_dir}" \
+    > "${job_root}/widgets.log" 2>&1 &
+job_names+=("widgets")
+job_pids+=("$!")
+job_logs+=("${job_root}/widgets.log")
+
+echo "Starting CUDA access and compiler verification."
+(
+    cd "${course_root}"
+    "${course_root}/scripts/run" python - "${cuda_device_file}" <<'PY'
+import sys
+from pathlib import Path
+
+import torch
+
+from environment import check_cuda_compile
+
+if not torch.cuda.is_available():
+    raise RuntimeError("CUDA is unavailable in the Brev tutorial runtime")
+
+cuda_device = torch.cuda.get_device_name(0)
+check_cuda_compile.main()
+Path(sys.argv[1]).write_text(cuda_device + "\n")
+print(f"CUDA device: {cuda_device}")
+PY
+) > "${job_root}/cuda.log" 2>&1 &
+job_names+=("cuda")
+job_pids+=("$!")
+job_logs+=("${job_root}/cuda.log")
+
+echo "Starting Jupyter kernel registration."
 python3 - \
     "${kernel_json}" \
     "${course_root}/scripts/run" \
     "${runtime_root}" \
-    "${uv_bin}" <<'PY'
+    "${uv_bin}" > "${job_root}/kernel.log" 2>&1 <<'PY' &
 import json
 import os
 import sys
@@ -157,11 +202,36 @@ temporary_json = kernel_json.with_suffix(".json.tmp")
 temporary_json.write_text(json.dumps(specification, indent=2) + "\n")
 os.replace(temporary_json, kernel_json)
 PY
+job_names+=("kernel")
+job_pids+=("$!")
+job_logs+=("${job_root}/kernel.log")
+
+job_failed=false
+for index in "${!job_pids[@]}"; do
+    name="${job_names[$index]}"
+    pid="${job_pids[$index]}"
+    log="${job_logs[$index]}"
+    if wait "${pid}"; then
+        echo "Brev setup job completed: ${name}"
+    else
+        status="$?"
+        echo "Brev setup job failed: ${name} (exit ${status})" >&2
+        job_failed=true
+    fi
+    cat "${log}"
+done
+
+trap - EXIT INT TERM
+if [[ "${job_failed}" == true ]]; then
+    exit 1
+fi
+
+cuda_device="$(<"${cuda_device_file}")"
 
 setup_finished_epoch="$(date +%s)"
 setup_seconds="$((setup_finished_epoch - setup_started_epoch))"
 runtime_kib="$(du -sk "${runtime_root}" | awk '{print $1}')"
-ready_file="${runtime_root}/brev-ready.txt"
+ready_temporary="${ready_file}.tmp.$$"
 {
     printf 'status=ready\n'
     printf 'revision=%s\n' "${revision}"
@@ -173,7 +243,8 @@ ready_file="${runtime_root}/brev-ready.txt"
     printf 'gpu=%s\n' "${cuda_device}"
     printf 'setup_seconds=%s\n' "${setup_seconds}"
     printf 'runtime_kib=%s\n' "${runtime_kib}"
-} > "${ready_file}"
+} > "${ready_temporary}"
+mv "${ready_temporary}" "${ready_file}"
 
 echo "ALCHEMI is ready."
 echo "Course: ${course_root}"
