@@ -7,7 +7,7 @@
 Build GPU-accelerated atomistic simulation workflows with NVIDIA ALCHEMI
 Toolkit.
 
-**[Start with Module 00: Toolkit quick tour](notebooks/00-core-playbook/alchemi-core-00-quick-tour.ipynb)**
+**[Start with Module 00: Toolkit quick tour](notebooks/alchemi-core-00-quick-tour.ipynb)**
 
 [📦 Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) ·
 [📄 Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/) ·
@@ -23,10 +23,10 @@ workflows inspired by real research and development use cases.
 
 | Module | What you will do | Time |
 |---|---|---:|
-| [00 · Toolkit quick tour](notebooks/00-core-playbook/alchemi-core-00-quick-tour.ipynb) | Choose research systems and run a complete batched relaxation. | 5–10 min |
-| [01 · Toolkit fundamentals and data structures](notebooks/00-core-playbook/alchemi-core-01-data-and-batching.ipynb) | Create `AtomicData`, pack several structures into a `Batch`, and work with Zarr data. | 30 min |
-| [02 · Simulate and compose](notebooks/00-core-playbook/alchemi-core-02-models-and-simulation.ipynb) | Compose a model and control molecular dynamics with a bias hook; optionally debug a failed update. | 40 min |
-| [03 · Scale a study](notebooks/00-core-playbook/alchemi-core-03-scale-a-study.ipynb) | Build fixed-stage, `FusedStage`, and inflight routes for one molecular study. | 15–20 min |
+| [00 · Toolkit quick tour](notebooks/alchemi-core-00-quick-tour.ipynb) | Choose research systems and run a complete batched relaxation. | 5–10 min |
+| [01 · Toolkit fundamentals and data structures](notebooks/alchemi-core-01-data-and-batching.ipynb) | Create `AtomicData`, pack several structures into a `Batch`, and work with Zarr data. | 30 min |
+| [02 · Simulate and compose](notebooks/alchemi-core-02-models-and-simulation.ipynb) | Compose a model and control molecular dynamics with a bias hook; optionally debug a failed update. | 40 min |
+| [03 · Scale a study](notebooks/alchemi-core-03-scale-a-study.ipynb) | Build fixed-stage, `FusedStage`, and inflight routes for one molecular study. | 15–20 min |
 
 ## Prerequisites
 
@@ -53,11 +53,13 @@ this repository, and run these commands from the repository root.
 Create `.venv` from the exact packages recorded in `uv.lock`:
 
 ```bash
-uv sync --locked --no-default-groups --group kernel --group lab
+uv sync --locked --managed-python --python 3.12.13 \
+  --no-default-groups --group kernel --group lab
 ```
 
 This installs the tutorial runtime, Jupyter kernel support, and JupyterLab. It
-leaves contributor test tools out of the learner environment.
+leaves contributor test tools out of the learner environment. The managed
+Python build includes the C headers used when Torch first compiles CUDA code.
 
 Download and verify the model files used by the tutorials:
 

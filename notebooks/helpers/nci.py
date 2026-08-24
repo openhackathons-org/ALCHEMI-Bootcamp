@@ -36,7 +36,6 @@ if TYPE_CHECKING:
 _NCI_DATA_FILE = (
     PROJECT_ROOT
     / "notebooks"
-    / "00-core-playbook"
     / "data"
     / "nci_atlas"
     / "nci-atlas-curves.csv.gz"

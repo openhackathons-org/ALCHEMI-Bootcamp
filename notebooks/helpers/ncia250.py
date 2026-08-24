@@ -18,11 +18,10 @@ from ase.data import chemical_symbols
 
 from .model_support import model_checkpoint
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _NCIA250_ARCHIVE = (
     _PROJECT_ROOT
     / "notebooks"
-    / "00-core-playbook"
     / "data"
     / "nci_atlas"
     / "NCIA250.zip"

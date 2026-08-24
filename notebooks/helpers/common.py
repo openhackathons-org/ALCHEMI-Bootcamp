@@ -9,7 +9,7 @@ import os
 import warnings
 from pathlib import Path
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _LOCAL_RUNTIME_ROOT = _PROJECT_ROOT / ".alchemi-runtime"
 _DIRECT_KERNEL_CACHE_PATHS = {
     "AIMNET_CACHE_DIR": _LOCAL_RUNTIME_ROOT / "aimnet",
@@ -17,6 +17,8 @@ _DIRECT_KERNEL_CACHE_PATHS = {
     "HF_HOME": _LOCAL_RUNTIME_ROOT / "huggingface",
     "MPLCONFIGDIR": _LOCAL_RUNTIME_ROOT / "matplotlib",
     "TORCH_HOME": _LOCAL_RUNTIME_ROOT / "torch",
+    "TORCHINDUCTOR_CACHE_DIR": _LOCAL_RUNTIME_ROOT / "torch-inductor",
+    "TRITON_CACHE_DIR": _LOCAL_RUNTIME_ROOT / "triton",
     "WARP_CACHE_PATH": _LOCAL_RUNTIME_ROOT / "warp",
 }
 

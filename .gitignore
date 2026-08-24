@@ -4,9 +4,9 @@
 **/_fullrun_status.log
 
 # Notebook assets are release files. Re-include them after the general rule.
-!notebooks/*/assets/
-!notebooks/*/assets/**
-notebooks/*/assets/**/__pycache__/
+!notebooks/assets/
+!notebooks/assets/**
+notebooks/assets/**/__pycache__/
 
 __pycache__/
 *.pyc

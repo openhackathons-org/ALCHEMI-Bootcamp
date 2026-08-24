@@ -48,7 +48,7 @@ def test_official_documentation_map_contains_resolved_https_links() -> None:
 def test_nci_baseline_source_hash_and_curve_grid() -> None:
     payload = _record("nci_baseline.json")
     source = payload["source_data"]
-    data_file = _CORE_DIR.parents[1] / source["local_file"]
+    data_file = _CORE_DIR.parent / source["local_file"]
 
     assert hashlib.sha256(data_file.read_bytes()).hexdigest() == source["sha256"]
     assert source["license_audit"]["release_blocker"] is True

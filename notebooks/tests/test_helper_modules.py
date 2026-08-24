@@ -12,7 +12,7 @@ import sys
 from pathlib import Path
 
 CORE_DIR = Path(__file__).resolve().parents[1]
-PROJECT_ROOT = CORE_DIR.parents[1]
+PROJECT_ROOT = CORE_DIR.parent
 
 
 def _helper_references(notebook_name: str) -> set[str]:

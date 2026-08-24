@@ -5,7 +5,7 @@
     "name": "NCI Atlas tutorial subset",
     "upstream_url": "https://github.com/Honza-R/NCIAtlas/tree/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec",
     "upstream_revision": "1816bfc72609d7deb1d4f93ab9e27eb13bb44bec",
-    "local_file": "notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz",
+    "local_file": "notebooks/data/nci_atlas/nci-atlas-curves.csv.gz",
     "sha256": "7ffbc071e2998cee8e487a2697517187110a05f436920f8611d28d2af5d4d7b7",
     "records": 90,
     "interaction_curves": 30,

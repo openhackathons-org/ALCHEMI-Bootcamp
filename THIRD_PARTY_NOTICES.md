@@ -9,8 +9,8 @@ are recorded in `SOURCES_AND_LICENSES.md`.
 
 | Material | Terms | Local notice |
 |---|---|---|
-| NCI Atlas curve subset and NCIA250 archive | CC BY 4.0 | `notebooks/00-core-playbook/data/nci_atlas/README.md` |
-| Mg-MOF-74 primitive structure | MIT | `notebooks/00-core-playbook/data/mof74/README.md` |
+| NCI Atlas curve subset and NCIA250 archive | CC BY 4.0 | `notebooks/data/nci_atlas/README.md` |
+| Mg-MOF-74 primitive structure | MIT | `notebooks/data/mof74/README.md` |
 | 3Dmol.js 2.5.5 bundle | BSD-3-Clause with incorporated notices | `shared/3dmol-2.5.5/LICENSE` |
 | py3Dmol 2.5.5 license copy | MIT | `shared/py3dmol-2.5.5/LICENSE.txt` |
 
