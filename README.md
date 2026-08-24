@@ -10,7 +10,7 @@ Toolkit.
 **[Start with Module 00: Toolkit quick tour](notebooks/alchemi-core-00-quick-tour.ipynb)**
 
 [📦 Toolkit docs](https://nvidia.github.io/nvalchemi-toolkit/) ·
-[📄 Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/) ·
+[📄 Toolkit examples](https://nvidia.github.io/nvalchemi-toolkit/examples/)
 
 ## Why Core?
 
