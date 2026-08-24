@@ -115,7 +115,7 @@ print(torch.cuda.get_device_name(0))
 
 Expected results:
 
-- Python 3.12
+- Python 3.12.13
 - `torch.cuda.is_available()` returns `True`
 - The GPU name matches the Launchable instance
 
@@ -157,7 +157,7 @@ the measured setup time in the event schedule.
 5. Select **Deploy**.
 6. Wait for setup to report that ALCHEMI is ready.
 7. Open Jupyter.
-8. Open Module 00 under `ALCHEMI-Bootcamp/notebooks/00-core-playbook/`.
+8. Open Module 00 under `ALCHEMI-Bootcamp/notebooks/`.
 9. Confirm the kernel shows `Python 3 (ALCHEMI Core)`.
 10. Delete the instance after the workshop to end compute and storage charges.
 

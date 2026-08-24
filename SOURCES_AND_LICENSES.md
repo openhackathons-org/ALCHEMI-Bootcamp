@@ -16,13 +16,13 @@ the generated D3 parameter table live in runtime caches.
 
 | Material | Location | Terms |
 |---|---|---|
-| NCI Atlas curve subset | `notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz` | CC BY 4.0 |
-| NCI Atlas NCIA250 archive | `notebooks/00-core-playbook/data/nci_atlas/NCIA250.zip` | CC BY 4.0 |
-| Mg-MOF-74 primitive structure | `notebooks/00-core-playbook/data/mof74/mg-mof-74-primitive.cif` | MIT |
+| NCI Atlas curve subset | `notebooks/data/nci_atlas/nci-atlas-curves.csv.gz` | CC BY 4.0 |
+| NCI Atlas NCIA250 archive | `notebooks/data/nci_atlas/NCIA250.zip` | CC BY 4.0 |
+| Mg-MOF-74 primitive structure | `notebooks/data/mof74/mg-mof-74-primitive.cif` | MIT |
 | 3Dmol.js 2.5.5 browser bundle and notices | `shared/3dmol-2.5.5/` | BSD-3-Clause and the incorporated notices in `LICENSE` |
 | py3Dmol 2.5.5 license copy | `shared/py3dmol-2.5.5/LICENSE.txt` | MIT |
 | NVIDIA course banner | `shared/alchemi-banner-left.png` | NVIDIA course artwork; excluded from Apache-2.0 |
-| Course diagrams, styles, and helper source | `shared/` and `notebooks/00-core-playbook/` | Apache-2.0 unless a nearby notice says otherwise |
+| Course diagrams, styles, and helper source | `shared/` and `notebooks/` | Apache-2.0 unless a nearby notice says otherwise |
 
 ## NCI Atlas scientific data
 
@@ -35,7 +35,7 @@ Retain this attribution and the change descriptions below.
 
 ### Three interaction curves
 
-- File: `notebooks/00-core-playbook/data/nci_atlas/nci-atlas-curves.csv.gz`
+- File: `notebooks/data/nci_atlas/nci-atlas-curves.csv.gz`
 - SHA-256:
   `7ffbc071e2998cee8e487a2697517187110a05f436920f8611d28d2af5d4d7b7`
 - Dataset papers:
@@ -48,7 +48,7 @@ stored energies, gradients, and source identifiers are unchanged.
 
 ### NCIA250 equilibrium survey
 
-- File: `notebooks/00-core-playbook/data/nci_atlas/NCIA250.zip`
+- File: `notebooks/data/nci_atlas/NCIA250.zip`
 - [Pinned upstream directory](https://github.com/Honza-R/NCIAtlas/tree/1816bfc72609d7deb1d4f93ab9e27eb13bb44bec/NCIA250)
 - SHA-256:
   `34e3c2cec763344dd9be41aa008672c7d052e50db57abe1abc59873d3935c433`
@@ -64,7 +64,7 @@ for all 250 complexes and evaluates the 205 complexes whose elements appear in
 the pinned AIMNet2 checkpoint metadata.
 
 The adjacent
-[`data/nci_atlas/README.md`](notebooks/00-core-playbook/data/nci_atlas/README.md)
+[`data/nci_atlas/README.md`](notebooks/data/nci_atlas/README.md)
 records the same attribution and checksums so that the data can travel with its
 notice.
 
@@ -84,7 +84,7 @@ The source is pinned to commit
 
 The included CIF applies the R-centered conventional-to-primitive cell
 transformation recorded in the adjacent
-[`data/mof74/manifest.json`](notebooks/00-core-playbook/data/mof74/manifest.json).
+[`data/mof74/manifest.json`](notebooks/data/mof74/manifest.json).
 The source contains 162 atoms; the primitive representation contains 54. The
 course uses Mg-MOF-74 as a compact porous-material example for CO₂ adsorption
 and carbon-capture research.

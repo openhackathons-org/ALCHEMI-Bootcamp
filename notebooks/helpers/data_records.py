@@ -11,7 +11,7 @@ from hashlib import sha256
 from pathlib import Path
 from typing import Any
 
-PROJECT_ROOT = Path(__file__).resolve().parents[3]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def sha256_file(path: Path) -> str:
@@ -34,7 +34,6 @@ def load_science_context_record(name: str) -> dict[str, Any]:
     path = (
         PROJECT_ROOT
         / "notebooks"
-        / "00-core-playbook"
         / "data"
         / "science_context"
         / f"{name}.json"

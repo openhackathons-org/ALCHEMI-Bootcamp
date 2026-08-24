@@ -10,6 +10,7 @@ import importlib.metadata
 import json
 import os
 import sys
+import sysconfig
 import tomllib
 from pathlib import Path
 
@@ -53,11 +54,22 @@ def require_file_sha256(label: str, path: Path, expected: str) -> None:
     require_equal(f"{label} SHA-256", actual, expected)
 
 
+def require_python_headers(include_directory: Path | None = None) -> Path:
+    """Require the Python C header used by Triton's CUDA launcher build."""
+    directory = include_directory or Path(sysconfig.get_path("include"))
+    header = directory / "Python.h"
+    if not header.is_file():
+        raise RuntimeError(
+            "Python development header is missing: "
+            f"{header}. Recreate the environment with uv managed Python."
+        )
+    return header
+
+
 def main() -> None:
     """Check Python, package versions, VCS commits, and runtime assets."""
-    require_equal(
-        "Python", f"{sys.version_info.major}.{sys.version_info.minor}", PINS["python"]
-    )
+    require_equal("Python", sys.version.split()[0], PINS["python"])
+    require_python_headers()
 
     for section in ("toolkit", "toolkit_ops"):
         pin = PINS[section]
@@ -92,6 +104,8 @@ def main() -> None:
         "MPLCONFIGDIR",
         "RUFF_CACHE_DIR",
         "TORCH_HOME",
+        "TORCHINDUCTOR_CACHE_DIR",
+        "TRITON_CACHE_DIR",
         "UV_CACHE_DIR",
         "WARP_CACHE_PATH",
         "XDG_CACHE_HOME",

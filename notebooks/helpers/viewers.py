@@ -28,7 +28,7 @@ from ase.io import write
 if TYPE_CHECKING:
     from nvalchemi.data import Batch
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[3]
+_PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _PALETTE = json.loads(
     (_PROJECT_ROOT / "shared" / "alchemi-palette.json").read_text(encoding="utf-8")
 )

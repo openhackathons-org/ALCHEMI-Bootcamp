@@ -269,6 +269,17 @@ def test_runtime_check_rejects_missing_d3_parameter_file(tmp_path: Path) -> None
         )
 
 
+def test_runtime_check_accepts_available_python_headers(tmp_path: Path) -> None:
+    (tmp_path / "Python.h").write_text("/* test header */\n")
+
+    assert check_runtime.require_python_headers(tmp_path) == tmp_path / "Python.h"
+
+
+def test_runtime_check_rejects_missing_python_headers(tmp_path: Path) -> None:
+    with pytest.raises(RuntimeError, match="Python development header is missing"):
+        check_runtime.require_python_headers(tmp_path)
+
+
 def test_runtime_check_rejects_mismatched_d3_parameter_file(tmp_path: Path) -> None:
     parameter_file = tmp_path / "dftd3_parameters.pt"
     parameter_file.write_bytes(b"not the pinned D3 parameters")
