@@ -8,6 +8,7 @@ repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 runtime_root="${ALCHEMI_RUNTIME_ROOT:-/tmp/alchemi-runtime}"
 uv_bin="${ALCHEMI_UV_BIN:-uv}"
 install_profile="${ALCHEMI_INSTALL_PROFILE:-development}"
+python_version="$(<"${repository_root}/.python-version")"
 
 mkdir -p \
     "${runtime_root}/aimnet" \
@@ -20,6 +21,8 @@ mkdir -p \
     "${runtime_root}/matplotlib" \
     "${runtime_root}/ruff" \
     "${runtime_root}/torch" \
+    "${runtime_root}/torch-inductor" \
+    "${runtime_root}/triton" \
     "${runtime_root}/uv-cache" \
     "${runtime_root}/warp"
 export AIMNET_CACHE_DIR="${runtime_root}/aimnet"
@@ -31,12 +34,20 @@ export JUPYTER_DATA_DIR="${runtime_root}/jupyter-data"
 export MPLCONFIGDIR="${runtime_root}/matplotlib"
 export RUFF_CACHE_DIR="${runtime_root}/ruff"
 export TORCH_HOME="${runtime_root}/torch"
+export TORCHINDUCTOR_CACHE_DIR="${runtime_root}/torch-inductor"
+export TRITON_CACHE_DIR="${runtime_root}/triton"
 export UV_CACHE_DIR="${runtime_root}/uv-cache"
 export UV_PROJECT_ENVIRONMENT="${runtime_root}/venv"
 export WARP_CACHE_PATH="${runtime_root}/warp"
 export XDG_CACHE_HOME="${runtime_root}/cache"
 
-sync_arguments=(sync --project "${repository_root}" --frozen)
+sync_arguments=(
+    sync
+    --project "${repository_root}"
+    --frozen
+    --managed-python
+    --python "${python_version}"
+)
 case "${install_profile}" in
     development)
         ;;
@@ -56,4 +67,5 @@ esac
 echo "Installing ALCHEMI profile: ${install_profile}"
 "${uv_bin}" "${sync_arguments[@]}"
 "${uv_bin}" run --project "${repository_root}" --frozen --no-sync \
+    --managed-python --python "${python_version}" \
     python "${repository_root}/environment/prewarm_assets.py"

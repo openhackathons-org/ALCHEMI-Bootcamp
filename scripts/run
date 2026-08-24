@@ -19,6 +19,8 @@ mkdir -p \
     "${runtime_root}/matplotlib" \
     "${runtime_root}/ruff" \
     "${runtime_root}/torch" \
+    "${runtime_root}/torch-inductor" \
+    "${runtime_root}/triton" \
     "${runtime_root}/uv-cache" \
     "${runtime_root}/warp"
 export AIMNET_CACHE_DIR="${runtime_root}/aimnet"
@@ -30,6 +32,8 @@ export JUPYTER_DATA_DIR="${runtime_root}/jupyter-data"
 export MPLCONFIGDIR="${runtime_root}/matplotlib"
 export RUFF_CACHE_DIR="${runtime_root}/ruff"
 export TORCH_HOME="${runtime_root}/torch"
+export TORCHINDUCTOR_CACHE_DIR="${runtime_root}/torch-inductor"
+export TRITON_CACHE_DIR="${runtime_root}/triton"
 export UV_CACHE_DIR="${runtime_root}/uv-cache"
 export UV_PROJECT_ENVIRONMENT="${runtime_root}/venv"
 export WARP_CACHE_PATH="${runtime_root}/warp"

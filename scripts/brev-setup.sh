@@ -111,6 +111,10 @@ PY
 )"
 echo "CUDA device: ${cuda_device}"
 
+echo "Checking and prewarming the CUDA compiler path."
+"${course_root}/scripts/run" \
+    python "${course_root}/environment/check_cuda_compile.py"
+
 kernel_root="${ALCHEMI_BREV_KERNEL_ROOT:-${host_jupyter_data_dir}/kernels}"
 kernel_directory="${kernel_root}/alchemi-core"
 kernel_json="${kernel_directory}/kernel.json"
