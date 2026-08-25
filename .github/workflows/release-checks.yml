@@ -1,0 +1,52 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
+name: Release checks
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  infrastructure:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install release check tools
+        run: python -m pip install pytest==8.4.2 ruff==0.16.2 uv==0.12.1
+      - name: Check the dependency lock
+        run: uv lock --check
+      - name: Check shell syntax
+        run: bash -n scripts/setup scripts/run scripts/runtime-env.sh scripts/brev-setup.sh
+      - name: Check infrastructure Python
+        run: ruff check environment
+      - name: Test Brev orchestration and release checks
+        run: pytest -q environment/test_brev_setup.py environment/test_check_dco.py
+      - name: Check commit sign-offs
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: python environment/check_dco.py
+      - name: Check whitespace
+        env:
+          GITHUB_BASE_REF: ${{ github.base_ref }}
+          GITHUB_EVENT_BEFORE: ${{ github.event.before }}
+          GITHUB_EVENT_NAME: ${{ github.event_name }}
+        run: >-
+          git diff --check
+          "$(python -c 'import os; from environment.check_dco import release_range; print(release_range(dict(os.environ)))')"
