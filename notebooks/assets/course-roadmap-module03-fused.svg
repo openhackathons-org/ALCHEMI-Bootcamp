@@ -1,13 +1,13 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="920" height="164" viewBox="0 0 920 164" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="'NVIDIA Sans', 'NVIDIA Sans Regular', Arial, Helvetica, sans-serif">
+<svg xmlns="http://www.w3.org/2000/svg" width="920" height="144" viewBox="0 0 920 144" role="img" aria-labelledby="roadmap-title roadmap-desc" font-family="'NVIDIA Sans', 'NVIDIA Sans Regular', Arial, Helvetica, sans-serif">
   <title id="roadmap-title">ALCHEMI Core roadmap, Module 03 Fuse stages</title>
   <desc id="roadmap-desc">Fuse stages is highlighted in Module 03. The roadmap continues through all four course modules.</desc>
   <metadata>SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION &amp; AFFILIATES. All rights reserved. SPDX-License-Identifier: Apache-2.0</metadata>
-  <rect width="920" height="164" rx="10" fill="#171D20"/>
+  <rect width="920" height="144" rx="10" fill="#171D20"/>
   <g transform="translate(0 -36)">
-  <g fill="#76B900"><path d="M236 115l7 5-7 5Z"/><path d="M458 115l7 5-7 5Z"/><path d="M680 115l7 5-7 5Z"/></g>
+  <g fill="#76B900"><path d="M236 103l7 5-7 5Z"/><path d="M458 103l7 5-7 5Z"/><path d="M680 103l7 5-7 5Z"/></g>
 
   <g id="module-00">
-    <rect x="24" y="52" width="206" height="132" rx="8" fill="#20262C" stroke="#4B565F"/>
+    <rect x="24" y="52" width="206" height="112" rx="8" fill="#20262C" stroke="#4B565F"/>
     <circle cx="42" cy="72" r="10" fill="#20262C" stroke="#4B565F"/>
     <text x="42" y="76" text-anchor="middle" font-size="10" font-weight="700" fill="#68737E">00</text>
     <text x="60" y="76" font-size="13" font-weight="700" fill="#F3F4F6">Toolkit Tour</text>
@@ -29,7 +29,7 @@
   </g>
 
   <g id="module-01">
-    <rect x="246" y="52" width="206" height="132" rx="8" fill="#20262C" stroke="#4B565F"/>
+    <rect x="246" y="52" width="206" height="112" rx="8" fill="#20262C" stroke="#4B565F"/>
     <circle cx="264" cy="72" r="10" fill="#20262C" stroke="#4B565F"/>
     <text x="264" y="76" text-anchor="middle" font-size="10" font-weight="700" fill="#68737E">01</text>
     <text x="282" y="76" font-size="13" font-weight="700" fill="#F3F4F6">Data and Batching</text>
@@ -51,7 +51,7 @@
   </g>
 
   <g id="module-02">
-    <rect x="468" y="52" width="206" height="132" rx="8" fill="#20262C" stroke="#4B565F"/>
+    <rect x="468" y="52" width="206" height="112" rx="8" fill="#20262C" stroke="#4B565F"/>
     <circle cx="486" cy="72" r="10" fill="#20262C" stroke="#4B565F"/>
     <text x="486" y="76" text-anchor="middle" font-size="10" font-weight="700" fill="#68737E">02</text>
     <text x="504" y="76" font-size="13" font-weight="700" fill="#F3F4F6">Simulate and Compose</text>
@@ -73,14 +73,14 @@
   </g>
 
   <g id="module-03">
-    <rect x="690" y="52" width="206" height="132" rx="8" fill="#20262C" stroke="#4B565F"/>
+    <rect x="690" y="52" width="206" height="112" rx="8" fill="#20262C" stroke="#4B565F"/>
     <circle cx="708" cy="72" r="10" fill="#20262C" stroke="#4B565F"/>
     <text x="708" y="76" text-anchor="middle" font-size="10" font-weight="700" fill="#68737E">03</text>
     <text x="726" y="76" font-size="13" font-weight="700" fill="#F3F4F6">Scale a Study</text>
     <g id="fixed-stages">
       <text x="704" y="105" font-size="11" font-weight="700" fill="#68737E">›</text>
       <rect x="714" y="92" width="76" height="17" rx="4" fill="#20262C" stroke="#3A444D"/>
-      <text x="719" y="105" font-size="10.5" font-weight="500" fill="#A8B0B8">Fixed stages</text>
+      <text x="719" y="105" font-size="10.5" font-weight="500" fill="#A8B0B8">Run in stages</text>
     </g>
     <g id="fuse-stages">
       <text x="704" y="125" font-size="11" font-weight="700" fill="#76B900">›</text>
@@ -91,11 +91,6 @@
       <text x="704" y="145" font-size="11" font-weight="700" fill="#68737E">›</text>
       <rect x="714" y="132" width="107" height="17" rx="4" fill="#20262C" stroke="#3A444D"/>
       <text x="719" y="145" font-size="10.5" font-weight="500" fill="#A8B0B8">Refill active Batch</text>
-    </g>
-    <g id="compare-routes">
-      <text x="704" y="165" font-size="11" font-weight="700" fill="#68737E">›</text>
-      <rect x="714" y="152" width="91" height="17" rx="4" fill="#20262C" stroke="#3A444D"/>
-      <text x="719" y="165" font-size="10.5" font-weight="500" fill="#A8B0B8">Compare routes</text>
     </g>
   </g>
   </g>

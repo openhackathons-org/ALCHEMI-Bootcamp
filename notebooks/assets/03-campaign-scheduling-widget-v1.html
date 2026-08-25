@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8" />
-<title>ALCHEMI: fixed, fused, and inflight scheduling</title>
+<title>ALCHEMI: sequential, fused, and inflight scheduling</title>
 <!--
   SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
   SPDX-License-Identifier: Apache-2.0
@@ -14,14 +14,23 @@
 .alchemi-sched,.alchemi-sched *{box-sizing:border-box}
 .alchemi-sched{width:100%;max-width:1104px;margin:0 auto;
   font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif;color:#F3F4F6}
-.alchemi-sched .as-bar{display:flex;align-items:center;gap:10px;margin:10px 0}
+.alchemi-sched .as-bar{display:flex;align-items:center;gap:10px;margin:10px 0;padding:0 24px;
+  min-width:0;flex-wrap:wrap}
+.alchemi-sched .as-bar>*{min-width:0}
 .alchemi-sched .as-btn{font:600 12px/1 'NVIDIA Sans',Arial,sans-serif;color:#F3F4F6;
   background:#20262C;border:1px solid #4B565F;border-radius:4px;padding:9px 14px;
-  cursor:pointer;min-width:84px}
+  cursor:pointer;min-width:84px;max-width:100%;overflow:hidden;text-overflow:ellipsis;
+  white-space:nowrap}
 .alchemi-sched .as-btn:hover{border-color:#76B900}
 .alchemi-sched .as-btn:focus-visible{outline:2px solid #76B900;outline-offset:2px}
-.alchemi-sched .as-hint{font-size:12px;font-weight:500;color:#A8B0B8}
+.alchemi-sched .as-spacer{flex:1 1 24px}
+.alchemi-sched .as-hint{flex:0 1 auto;max-width:100%;font-size:12px;font-weight:500;color:#A8B0B8;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .alchemi-sched svg{display:block;width:100%;height:auto;border-radius:8px}
+@media(max-width:520px){
+  .alchemi-sched .as-spacer{display:none}
+  .alchemi-sched .as-hint{flex:1 1 100%;white-space:normal;overflow-wrap:anywhere}
+}
 html,body{margin:0;padding:0;background:#0E1214}
 </style>
 </head>
@@ -31,7 +40,7 @@ html,body{margin:0;padding:0;background:#0E1214}
   <div class="as-bar">
     <button type="button" class="as-btn" data-as-rewind>Rewind</button>
     <button type="button" class="as-btn" data-as-play>Play</button>
-    <span style="flex:1"></span>
+    <span class="as-spacer" aria-hidden="true"></span>
     <span class="as-hint">Click any step to jump to it</span>
   </div>
   <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1104 470"
@@ -43,8 +52,8 @@ html,body{margin:0;padding:0;background:#0E1214}
       <rect id="as-seek" x="216" y="20" width="700" height="28" fill="transparent" style="cursor:pointer" />
       <g>
         <rect x="24" y="62" width="1056" height="108" rx="8" fill="#1B2126" stroke="#4B565F" />
-        <text x="44" y="112" font-size="15" font-weight="600" fill="#F3F4F6">Fixed stages</text>
-        <text x="44" y="132" font-size="11.5" font-weight="500" fill="#8A939B">NVT on whole batch, then NVE</text>
+        <text x="44" y="112" font-size="15" font-weight="600" fill="#F3F4F6" data-as-fit="210">Run in stages</text>
+        <text x="44" y="132" font-size="11.5" font-weight="500" fill="#8A939B" data-as-fit="210">NVT on whole batch, then NVE</text>
         <g id="as-strip-0"></g>
         <text id="as-tally-0" x="274" y="152" font-size="11" font-weight="500" fill="#8A939B"></text>
         <text x="861" y="104" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">COMPLETED</text>
@@ -53,8 +62,8 @@ html,body{margin:0;padding:0;background:#0E1214}
       </g>
       <g>
         <rect x="24" y="184" width="1056" height="108" rx="8" fill="#1B2126" stroke="#4B565F" />
-        <text x="44" y="234" font-size="15" font-weight="600" fill="#F3F4F6">FusedStage</text>
-        <text x="44" y="254" font-size="11.5" font-weight="500" fill="#8A939B">Each system moves on as it converges</text>
+        <text x="44" y="234" font-size="15" font-weight="600" fill="#F3F4F6" data-as-fit="210">FusedStage</text>
+        <text x="44" y="254" font-size="11.5" font-weight="500" fill="#8A939B" data-as-fit="210">Each trajectory changes stage independently</text>
         <g id="as-strip-1"></g>
         <text id="as-tally-1" x="274" y="274" font-size="11" font-weight="500" fill="#8A939B"></text>
         <text x="861" y="226" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">COMPLETED</text>
@@ -63,8 +72,8 @@ html,body{margin:0;padding:0;background:#0E1214}
       </g>
       <g>
         <rect x="24" y="306" width="1056" height="108" rx="8" fill="#1B2126" stroke="#76B900" stroke-width="1.6" />
-        <text x="44" y="356" font-size="15" font-weight="600" fill="#F3F4F6">FusedStage + inflight</text>
-        <text x="44" y="376" font-size="11.5" font-weight="500" fill="#8A939B">Finished systems are replaced</text>
+        <text x="44" y="356" font-size="15" font-weight="600" fill="#F3F4F6" data-as-fit="210">FusedStage + inflight</text>
+        <text x="44" y="376" font-size="11.5" font-weight="500" fill="#8A939B" data-as-fit="210">Finished trajectories are replaced</text>
         <g id="as-strip-2"></g>
         <text id="as-tally-2" x="274" y="396" font-size="11" font-weight="500" fill="#8A939B"></text>
         <text x="861" y="348" font-size="9.5" font-weight="700" letter-spacing="1.2" fill="#68737E">COMPLETED</text>
@@ -153,6 +162,26 @@ html,body{margin:0;padding:0;background:#0E1214}
     return n;
   }
 
+  function fitText(element, value, maxWidth) {
+    var full = String(value);
+    element.textContent = full;
+    element.removeAttribute('aria-label');
+    if (!element.getComputedTextLength || element.getComputedTextLength() <= maxWidth) return;
+    var low = 0, high = full.length, best = 0;
+    while (low <= high) {
+      var middle = Math.floor((low + high) / 2);
+      element.textContent = full.slice(0, middle).replace(/\s+$/, '') + '…';
+      if (element.getComputedTextLength() <= maxWidth) {
+        best = middle;
+        low = middle + 1;
+      } else {
+        high = middle - 1;
+      }
+    }
+    element.textContent = full.slice(0, best).replace(/\s+$/, '') + '…';
+    element.setAttribute('aria-label', full);
+  }
+
   function build(root) {
     var frame = 0, timer = null;
     var svg = root.querySelector('svg');
@@ -160,6 +189,10 @@ html,body{margin:0;padding:0;background:#0E1214}
     var rewindBtn = root.querySelector('[data-as-rewind]');
     var tickG = svg.querySelector('#as-ticks');
     var seek = svg.querySelector('#as-seek');
+
+    svg.querySelectorAll('[data-as-fit]').forEach(function (element) {
+      fitText(element, element.textContent, Number(element.getAttribute('data-as-fit')));
+    });
 
     var tickEls = [];
     for (var i = 0; i < STEPS; i++) {
@@ -171,7 +204,7 @@ html,body{margin:0;padding:0;background:#0E1214}
       tickEls.push(t);
     }
 
-    // Three rows use the representative slot count supplied by the notebook.
+    // Three rows use a preset representative slot count for the illustration.
     var cells = ROW_Y.map(function (rowY, n) {
       var g = svg.querySelector('#as-strip-' + n), row = [];
       for (var j = 0; j < CAP; j++) {
@@ -213,7 +246,7 @@ html,body{margin:0;padding:0;background:#0E1214}
         if (cnt.n) parts.push(cnt.n + ' in NVE');
         if (cnt.h) parts.push(cnt.h + ' converged, waiting');
         if (cnt.e) parts.push(cnt.e + ' idle');
-        tallies[n].textContent = parts.join('  \u00B7  ');
+        fitText(tallies[n], parts.join('  \u00B7  '), 555);
         bars[n].setAttribute('width', (199 * fr.c / LEAD).toFixed(2));
       });
     }
