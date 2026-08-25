@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import math
 import time
+import warnings
 from collections.abc import Sequence
 from dataclasses import dataclass
 from html import escape
@@ -36,6 +37,7 @@ from nvalchemi.models import (
     PipelineStep,
 )
 
+from .common import _ignore_known_aimnet2_cutoff_warning
 from .model_support import (
     DirectCoulombAdapter,
     d3_parameter_file,
@@ -49,13 +51,13 @@ __all__ = [
     "check_inflight_run",
     "compare_routes",
     "energy_window_hook",
-    "fixed_group_indices",
+    "group_indices_by_capacity",
     "keep_temperature_hook_in_control",
     "prepare_ncia250_trajectories",
     "show_scheduling_widget",
     "stage_trace_hook",
-    "summarize_fixed",
     "summarize_fused",
+    "summarize_sequential",
     "summarize_stage_trace",
     "temperature_window_hook",
     "time_route",
@@ -75,9 +77,10 @@ _NEIGHBOR_FIELDS = (
     "num_neighbors",
 )
 _KB_EV_PER_K = 8.617333262e-5
+_WIDGET_TOTAL_TRAJECTORIES = 128
 _WIDGET_MAX_BATCH_SIZE = 64
+_WIDGET_VISIBLE_SLOTS = 16
 _PREPARATION_MAX_BATCH_SIZE = 64
-_PREPARATION_MAX_ATOMS = 1182
 
 
 def _positive_finite_number(value: Real, *, name: str) -> float:
@@ -112,32 +115,26 @@ def _scaled_source_ids(source_systems: int, batch_multiplier: Real) -> tuple[int
     return tuple(index % source_systems for index in range(target_systems))
 
 
-def show_scheduling_widget(total_systems: Real, *, visible_slots: int = 16) -> HTML:
-    """Embed the supplied scheduler with its illustrative active capacity."""
+def show_scheduling_widget() -> HTML:
+    """Embed the scheduling illustration with a preset schematic workload."""
 
-    resolved_total_systems = _whole_system_count(total_systems, name="total_systems")
-    if isinstance(visible_slots, bool) or not isinstance(visible_slots, int):
-        raise TypeError("visible_slots must be an integer")
-    if visible_slots < 1:
-        raise ValueError("visible_slots must be positive")
-
-    displayed_slots = min(visible_slots, _WIDGET_MAX_BATCH_SIZE, resolved_total_systems)
     source = _SCHEDULING_WIDGET.read_text(encoding="utf-8")
     replacements = {
-        "__ALCHEMI_TOTAL_SYSTEMS__": str(resolved_total_systems),
+        "__ALCHEMI_TOTAL_SYSTEMS__": str(_WIDGET_TOTAL_TRAJECTORIES),
         "__ALCHEMI_ACTIVE_SYSTEM_LIMIT__": str(_WIDGET_MAX_BATCH_SIZE),
-        "__ALCHEMI_VISIBLE_SLOTS__": str(displayed_slots),
+        "__ALCHEMI_VISIBLE_SLOTS__": str(_WIDGET_VISIBLE_SLOTS),
     }
     for placeholder, value in replacements.items():
         source = source.replace(placeholder, value)
     root_id = f"alchemi-study-scheduling-{uuid4().hex}"
     return HTML(
-        f'<div id="{root_id}" style="width:100%">'
+        f'<div id="{root_id}" style="width:100%;container-type:inline-size">'
         f"<style>#{root_id}.is-live [data-runtime-note]{{display:none}}</style>"
         + runtime_required_notice(margin="0")
         + '<iframe title="Study scheduling routes" srcdoc="'
         + escape(source, quote=True)
-        + '" style="display:block;width:100%;height:560px;border:0"></iframe></div>'
+        + '" style="display:block;width:100%;height:470px;'
+        + 'height:clamp(330px,calc(42.6cqw + 58px),528px);border:0"></iframe></div>'
         + f'<script>(function(){{const root=document.getElementById("{root_id}");'
         + 'if(root&&root.querySelector("iframe"))root.classList.add("is-live");'
         + "})();</script>"
@@ -155,7 +152,7 @@ class _RouteSnapshot:
 
 
 class _RouteTraceHook:
-    """Record full-batch stage membership during a fused run."""
+    """Record full-batch stage counts during a fused run."""
 
     stage = DynamicsStage.AFTER_STEP
 
@@ -321,9 +318,11 @@ def _synchronize(device: torch.device) -> None:
 def _interaction_model(device: torch.device) -> PipelineModelWrapper:
     """Rebuild the composed molecular model used in Module 02."""
 
-    aimnet = AIMNet2Wrapper.from_checkpoint(
-        model_checkpoint(), device=device, dtype=torch.float32
-    ).eval()
+    with warnings.catch_warnings():
+        _ignore_known_aimnet2_cutoff_warning()
+        aimnet = AIMNet2Wrapper.from_checkpoint(
+            model_checkpoint(), device=device, dtype=torch.float32
+        ).eval()
     aimnet.set_config("active_outputs", {"energy", "forces", "charges"})
     d3 = (
         DFTD3ModelWrapper(
@@ -505,7 +504,7 @@ class _EnergyWindowHook(_WindowStatusHook):
         return ordered.amax(dim=1).sub(ordered.amin(dim=1)) <= self.span
 
 
-def fixed_group_indices(
+def group_indices_by_capacity(
     batch: Batch, *, max_batch_size: int, max_atoms: int
 ) -> list[torch.Tensor]:
     """Return indices packed under the shared system and atom limits."""
@@ -530,11 +529,11 @@ def fixed_group_indices(
 
 
 def _split_batch(batch: Batch, *, max_batch_size: int, max_atoms: int) -> list[Batch]:
-    """Pack fixed groups for hidden trajectory preparation."""
+    """Pack capacity-limited groups for hidden trajectory preparation."""
 
     return [
         batch.index_select(indices)
-        for indices in fixed_group_indices(
+        for indices in group_indices_by_capacity(
             batch, max_batch_size=max_batch_size, max_atoms=max_atoms
         )
     ]
@@ -650,12 +649,16 @@ def prepare_ncia250_trajectories(
         remove_rotations=False,
         rescale=True,
     )
+    preparation_max_atoms = math.ceil(
+        initialized.num_nodes_per_graph.float().mean().item()
+        * _PREPARATION_MAX_BATCH_SIZE
+    )
     prepared = _prepare_initial_forces(
         initialized.to_data_list(),
         model,
         resolved_device,
         max_batch_size=_PREPARATION_MAX_BATCH_SIZE,
-        max_atoms=_PREPARATION_MAX_ATOMS,
+        max_atoms=preparation_max_atoms,
     )
     _synchronize(resolved_device)
     return prepared, model
@@ -681,7 +684,7 @@ def keep_temperature_hook_in_control() -> ConvergenceHook:
 
 def temperature_window_hook(
     *,
-    total_systems: int,
+    total_trajectories: int,
     device: torch.device | str,
     frequency: int,
     window_samples: int,
@@ -693,7 +696,7 @@ def temperature_window_hook(
     """Return fresh GPU history for the per-trajectory NVT rule."""
 
     return _TemperatureWindowHook(
-        total_systems,
+        total_trajectories,
         device,
         frequency=frequency,
         window_samples=window_samples,
@@ -706,7 +709,7 @@ def temperature_window_hook(
 
 def energy_window_hook(
     *,
-    total_systems: int,
+    total_trajectories: int,
     device: torch.device | str,
     frequency: int,
     window_samples: int,
@@ -716,7 +719,7 @@ def energy_window_hook(
     """Return fresh GPU history for the per-trajectory NVE rule."""
 
     return _EnergyWindowHook(
-        total_systems,
+        total_trajectories,
         device,
         frequency=frequency,
         window_samples=window_samples,
@@ -743,7 +746,7 @@ def _result_from_batches(
     batches: Sequence[Batch],
     timer: RouteTimer,
     *,
-    expected_systems: int,
+    expected_trajectories: int,
     device: torch.device | str,
     replacement_systems: int = 0,
 ) -> RouteResult:
@@ -754,7 +757,7 @@ def _result_from_batches(
         raise ValueError(f"{route} trajectories left the selected device")
     identities = torch.cat([_batch_identity_tensor(batch) for batch in batches])
     expected = torch.arange(
-        expected_systems, device=identities.device, dtype=identities.dtype
+        expected_trajectories, device=identities.device, dtype=identities.dtype
     )
     if identities.numel() != expected.numel() or not torch.equal(
         torch.sort(identities).values, expected
@@ -769,20 +772,20 @@ def _result_from_batches(
     )
 
 
-def summarize_fixed(
+def summarize_sequential(
     results: Sequence[Batch],
     timer: RouteTimer,
     *,
-    expected_systems: int,
+    expected_trajectories: int,
     device: torch.device | str,
 ) -> RouteResult:
-    """Check the fixed-stage outputs and summarize their timing."""
+    """Check the sequential-stage outputs and summarize their timing."""
 
     return _result_from_batches(
-        "Fixed stages",
+        "Run in stages",
         results,
         timer,
-        expected_systems=expected_systems,
+        expected_trajectories=expected_trajectories,
         device=device,
     )
 
@@ -791,10 +794,10 @@ def summarize_fused(
     results: Sequence[Batch],
     timer: RouteTimer,
     *,
-    expected_systems: int,
+    expected_trajectories: int,
     device: torch.device | str,
 ) -> RouteResult:
-    """Check fixed-membership FusedStage outputs and summarize timing."""
+    """Check the unrefilled FusedStage outputs and summarize their timing."""
 
     if any(not bool((batch.status.reshape(-1) == 2).all()) for batch in results):
         raise ValueError("FusedStage stopped before every trajectory completed")
@@ -802,7 +805,7 @@ def summarize_fused(
         "FusedStage",
         results,
         timer,
-        expected_systems=expected_systems,
+        expected_trajectories=expected_trajectories,
         device=device,
     )
 
@@ -849,7 +852,7 @@ def check_inflight_run(
     remaining: Batch | None,
     timer: RouteTimer,
     *,
-    expected_systems: int,
+    expected_trajectories: int,
     device: torch.device | str,
     max_batch_size: int,
 ) -> RouteResult:
@@ -858,14 +861,14 @@ def check_inflight_run(
     if remaining is not None:
         raise ValueError("Inflight batching stopped with trajectories still active")
     completed_batch = completed.read()
-    initially_active = min(max_batch_size, expected_systems)
+    initially_active = min(max_batch_size, expected_trajectories)
     result = _result_from_batches(
         "FusedStage + inflight",
         [completed_batch],
         timer,
-        expected_systems=expected_systems,
+        expected_trajectories=expected_trajectories,
         device=device,
-        replacement_systems=expected_systems - initially_active,
+        replacement_systems=expected_trajectories - initially_active,
     )
     return result
 

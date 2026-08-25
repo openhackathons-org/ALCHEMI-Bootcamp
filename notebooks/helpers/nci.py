@@ -11,10 +11,7 @@ from typing import TYPE_CHECKING, Any
 
 import matplotlib.pyplot as plt
 import numpy as np
-import torch
 from ase import Atoms
-from ase import units as ase_units
-from nvalchemi.data import Batch
 
 from .data_records import PROJECT_ROOT, load_science_context_record, sha256_file
 from .figures import (
@@ -41,7 +38,6 @@ _NCI_DATA_FILE = (
     / "nci-atlas-curves.csv.gz"
 )
 NCI_ATLAS_SHA256 = "7ffbc071e2998cee8e487a2697517187110a05f436920f8611d28d2af5d4d7b7"
-_EV_TO_KCAL_MOL = 1.0 / (ase_units.kcal / ase_units.mol)
 _NCI_SCALES = (0.80, 0.85, 0.90, 0.95, 1.00, 1.05, 1.10, 1.25, 1.50, 2.00)
 _NCI_SYSTEMS = {
     "1.041": ("phenol - N-methylacetamide", "neutral hydrogen bond"),
@@ -307,132 +303,6 @@ def checked_nci_interaction_curves(references: pd.DataFrame) -> pd.DataFrame:
     curves["d3_increment"] = curves["base_d3"] - curves["aimnet_base"]
     curves["electrostatic_increment"] = curves["complete"] - curves["base_d3"]
     return curves
-
-
-def _ordered_nci_graph_rows(graph_rows: pd.DataFrame) -> pd.DataFrame:
-    import pandas as pd
-
-    required = {"graph_index", *_NCI_CURVE_KEYS, "fragment"}
-    missing = required - set(graph_rows.columns)
-    if missing:
-        raise ValueError(f"graph rows are missing {sorted(missing)!r}")
-    graph_indices = pd.to_numeric(graph_rows["graph_index"], errors="coerce").to_numpy(
-        dtype=float
-    )
-    expected = np.arange(len(graph_rows), dtype=float)
-    if (
-        not np.isfinite(graph_indices).all()
-        or not np.equal(graph_indices, np.rint(graph_indices)).all()
-        or not np.array_equal(np.sort(graph_indices), expected)
-    ):
-        raise ValueError("graph_index must be a permutation of 0 through N-1")
-    ordered = graph_rows.assign(graph_index=graph_indices.astype(np.int64)).sort_values(
-        "graph_index"
-    )
-    grouped = ordered.groupby(list(_NCI_CURVE_KEYS), sort=False, dropna=False)
-    for key, group in grouped:
-        if len(group) != 3 or set(group["fragment"]) != {"AB", "A", "B"}:
-            raise ValueError(f"curve {key!r} must contain one AB, A, and B graph")
-    return ordered.reset_index(drop=True)
-
-
-def _graph_energy_array(values: Any, graph_count: int, name: str) -> np.ndarray:
-    if isinstance(values, torch.Tensor):
-        array = values.detach().cpu().numpy()
-    else:
-        array = np.asarray(values)
-    if array.shape == (graph_count, 1):
-        array = array[:, 0]
-    if array.shape != (graph_count,):
-        raise ValueError(
-            f"{name!r} must have shape ({graph_count},) or ({graph_count}, 1)"
-        )
-    array = np.asarray(array, dtype=float)
-    if not np.isfinite(array).all():
-        raise ValueError(f"{name!r} contains a non-finite graph energy")
-    return array
-
-
-def interaction_components(
-    graph_rows: pd.DataFrame,
-    graph_energies_ev: Mapping[str, Any],
-) -> pd.DataFrame:
-    """Reduce named AB, A, and B graph energies to interaction curves."""
-
-    import pandas as pd
-
-    if not graph_energies_ev:
-        raise ValueError("at least one energy component is required")
-    ordered = _ordered_nci_graph_rows(graph_rows)
-    curve_order = ordered[list(_NCI_CURVE_KEYS)].drop_duplicates(ignore_index=True)
-    curve_index = pd.MultiIndex.from_frame(curve_order)
-    result = curve_order.copy()
-    for name, values in graph_energies_ev.items():
-        if not isinstance(name, str) or not name.strip():
-            raise ValueError("component names must be non-empty strings")
-        rows = ordered[list(_NCI_CURVE_KEYS) + ["fragment"]].copy()
-        rows["energy"] = _graph_energy_array(values, len(ordered), name)
-        wide = rows.pivot(
-            index=list(_NCI_CURVE_KEYS),
-            columns="fragment",
-            values="energy",
-        ).reindex(curve_index)
-        result[name] = (
-            (wide["AB"] - wide["A"] - wide["B"]) * _EV_TO_KCAL_MOL
-        ).to_numpy(dtype=float)
-    return result
-
-
-def max_system_charge_error(batch: Batch, charges: torch.Tensor) -> float:
-    """Return the largest per-system charge error in a batch."""
-
-    flat_charges = charges.reshape(-1)
-    if flat_charges.numel() != batch.num_nodes:
-        raise ValueError("charges must contain one value per atom")
-    expected = batch.charge.reshape(-1).to(
-        device=flat_charges.device,
-        dtype=flat_charges.dtype,
-    )
-    if expected.numel() != batch.num_graphs:
-        raise ValueError("batch charge must contain one value per system")
-    predicted = torch.zeros_like(expected).index_add(
-        0,
-        batch.batch_idx.to(device=flat_charges.device, dtype=torch.long),
-        flat_charges,
-    )
-    return float((predicted - expected).abs().max().item())
-
-
-def nci_curve_deltas(
-    live_curves: pd.DataFrame,
-    checked_curves: pd.DataFrame,
-) -> dict[str, float]:
-    """Return the largest absolute live-to-checked difference for each route."""
-
-    keys = ["subset", "system_id", "system_name", "interaction_class", "scale"]
-    routes = ("aimnet_base", "base_d3", "complete")
-    required = {*keys, *routes}
-    for name, table in (
-        ("live_curves", live_curves),
-        ("checked_curves", checked_curves),
-    ):
-        missing = required - set(table.columns)
-        if missing:
-            raise ValueError(f"{name} is missing {sorted(missing)!r}")
-    comparison = live_curves.merge(
-        checked_curves,
-        on=keys,
-        suffixes=("_live", "_checked"),
-        validate="one_to_one",
-    )
-    if len(comparison) != len(live_curves) or len(comparison) != len(checked_curves):
-        raise ValueError("live and checked curves describe different scan points")
-    return {
-        route: float(
-            (comparison[f"{route}_live"] - comparison[f"{route}_checked"]).abs().max()
-        )
-        for route in routes
-    }
 
 
 def plot_nci_interaction_curves(

@@ -15,18 +15,14 @@ from .common import configure_tutorial
 from .model_support import (
     DirectCoulombAdapter,
     d3_parameter_file,
-    model_checkpoint,
 )
 from .nci import (
     checked_nci_interaction_curves,
-    interaction_components,
     load_nci_atlas,
-    max_system_charge_error,
-    nci_curve_deltas,
     plot_nci_interaction_curves,
 )
 from .ncia250 import load_ncia250
-from .relaxation import graph_temperatures
+from .relaxation import system_temperatures
 from .viewers import (
     show_bias_comparison_player,
     show_nci_separation_player,
@@ -40,19 +36,22 @@ __all__ = [
     "equilibrium_nci_complexes",
     "fragment_com_harmonic_bias",
     "fragment_com_separations",
-    "graph_temperatures",
-    "interaction_components",
     "load_nci_atlas",
-    "load_ncia250",
-    "max_system_charge_error",
-    "model_checkpoint",
-    "nci_curve_deltas",
+    "load_supported_ncia250",
     "nci_scan_player_data",
     "plot_fragment_separation_comparison",
     "plot_nci_interaction_curves",
     "show_bias_comparison_player",
     "show_nci_separation_player",
+    "system_temperatures",
 ]
+
+
+def load_supported_ncia250() -> tuple[list[Any], Any]:
+    """Return the checkpoint-compatible NCIA250 structures and references."""
+
+    structures, _, references, _, _ = load_ncia250()
+    return structures, references
 
 
 def equilibrium_nci_complexes(

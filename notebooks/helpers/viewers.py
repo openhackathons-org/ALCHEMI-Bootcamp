@@ -90,7 +90,8 @@ def runtime_required_notice(
               background:{_BACKGROUND};color:{_TEXT};
               font-family:'NVIDIA Sans',Arial,sans-serif;">
   <strong style="font-size:.92rem;font-weight:700;">Runtime required</strong>
-  <span style="max-width:620px;color:{_MUTED};font-size:.84rem;line-height:1.45;">
+  <span style="min-width:0;max-width:620px;color:{_MUTED};font-size:.84rem;
+               line-height:1.45;overflow-wrap:anywhere;">
     This interactive output may not display properly on GitHub. Open the notebook
     in Jupyter or VS Code, connect to a runtime, and run this cell.
   </span>
@@ -248,10 +249,12 @@ def _viewer_html(
   <div style="display:flex; flex-wrap:wrap; align-items:baseline; justify-content:space-between;
               gap:16px; padding:12px 16px 10px; background:{_SURFACE};">
     <div style="display:flex; align-items:baseline; gap:10px; min-width:0;">
-      <strong style="font-size:1.05rem; font-weight:650;">{formula_text}</strong>
-      <span style="color:{_MUTED}; font-size:0.84rem;">{atom_count} atoms</span>
+      <strong style="min-width:0; overflow:hidden; text-overflow:ellipsis;
+                     white-space:nowrap; font-size:1.05rem; font-weight:650;">{formula_text}</strong>
+      <span style="flex:none; color:{_MUTED}; font-size:0.84rem;">{atom_count} atoms</span>
     </div>
-    <span style="color:{_MUTED}; font-size:0.78rem; text-align:right;">
+    <span style="min-width:0; max-width:100%; color:{_MUTED}; font-size:0.78rem;
+                 text-align:right; overflow-wrap:anywhere;">
       Drag to rotate · scroll to zoom · select up to 3 atoms
     </span>
   </div>
@@ -260,11 +263,11 @@ def _viewer_html(
               background:{_BACKGROUND};">
     {preamble}{viewer_markup}
   </div>
-  <div style="display:flex; align-items:center; justify-content:space-between;
+  <div style="display:flex; flex-wrap:wrap; align-items:center; justify-content:space-between;
               gap:14px; padding:10px 16px 12px; background:{_SURFACE};">
     <div data-atom-detail role="status" aria-live="polite"
-         style="min-height:22px; color:{_TEXT}; font-size:0.84rem;
-                font-variant-numeric:tabular-nums;">
+         style="min-width:0; min-height:22px; color:{_TEXT}; font-size:0.84rem;
+                font-variant-numeric:tabular-nums; overflow-wrap:anywhere;">
       Select 1 atom to inspect, 2 for a distance, or 3 for an angle.
     </div>
     <button type="button" data-clear-measurement disabled
@@ -905,7 +908,8 @@ def _common_css(root_id: str) -> str:
 #{root_id}.is-live [data-interactive].alchemi-grid{{display:grid}}
 #{root_id}.is-live [data-static-fallback]{{display:none}}
 #{root_id} .alchemi-toolbar{{display:flex;align-items:center;gap:8px;flex-wrap:wrap}}
-#{root_id} .alchemi-muted{{color:{_MUTED}}}
+#{root_id} .alchemi-toolbar>*{{min-width:0}}
+#{root_id} .alchemi-muted{{color:{_MUTED};overflow-wrap:anywhere}}
 @media (max-width:640px){{
   #{root_id} .alchemi-grid{{grid-template-columns:1fr!important}}
   #{root_id} [data-live-view]{{height:{_VIEWER_HEIGHT}px}}
@@ -1101,8 +1105,10 @@ class StructureSelection:
 }}
 .{widget_class} .alchemi-picker-head {{padding:12px 12px 10px;border:1px solid {_BORDER};
   border-bottom:0;border-radius:10px 10px 0 0;background:{_BACKGROUND}}}
-.{widget_class} .alchemi-picker-head strong{{font-size:1rem}}
-.{widget_class} .alchemi-picker-guidance{{display:block;margin-top:3px;color:{_MUTED};font-size:.82rem}}
+.{widget_class} .alchemi-picker-head>*{{min-width:0;max-width:100%}}
+.{widget_class} .alchemi-picker-head strong{{font-size:1rem;overflow-wrap:anywhere}}
+.{widget_class} .alchemi-picker-guidance{{display:block;margin-top:3px;color:{_MUTED};
+  font-size:.82rem;overflow-wrap:anywhere}}
 .{widget_class} .alchemi-picker-grid{{padding:0 12px 12px;border:1px solid {_BORDER};
   border-top:0;border-radius:0 0 10px 10px;background:{_BACKGROUND}}}
 .{widget_class} .alchemi-picker-card{{border:2px solid {_BORDER};border-radius:10px;
@@ -1114,9 +1120,11 @@ class StructureSelection:
   overflow:hidden;text-overflow:ellipsis}}
 .{widget_class} .alchemi-picker-facts span{{display:block;margin-top:2px;color:{_MUTED};
   font-size:.75rem;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
-.{widget_class} .alchemi-picker-facts p{{margin:3px 0 0;font-size:.77rem;line-height:1.25}}
+.{widget_class} .alchemi-picker-facts p{{margin:3px 0 0;font-size:.77rem;line-height:1.25;
+  overflow-wrap:anywhere}}
 .{widget_class} .alchemi-picker-state button{{width:100%;height:40px;border:2px solid {_GREEN};
-  border-radius:7px;background:{_SURFACE_RAISED};color:{_GREEN};font-weight:800}}
+  min-width:0;border-radius:7px;background:{_SURFACE_RAISED};color:{_GREEN};font-weight:800;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
 .{widget_class} .alchemi-picker-state.is-selected button{{background:{_GREEN};color:{_BACKGROUND}}}
 @media(max-width:760px){{.{widget_class} .alchemi-picker-grid{{grid-template-columns:repeat(2,minmax(0,1fr)) !important}}}}
 @media(max-width:520px){{.{widget_class} .alchemi-picker-grid{{grid-template-columns:1fr !important}}}}
@@ -1187,7 +1195,8 @@ class StructureSelection:
         self._status.value = (
             f"<div style='font-family:NVIDIA Sans,Arial,sans-serif;"
             f"background:{_BACKGROUND};color:{color};"
-            f"font-size:.86rem;font-weight:650'>{message}</div>"
+            f"max-width:100%;font-size:.86rem;font-weight:650;"
+            f"overflow-wrap:anywhere'>{message}</div>"
         )
 
     def _build_static_fallback(self) -> str:
@@ -1376,31 +1385,33 @@ def _py3dmol_relaxation_player(
 <html><head><meta charset="utf-8"><style>
 html,body{{height:100%;overflow:hidden;margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif}}
 *{{box-sizing:border-box}}.player{{width:100%;height:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
-.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;overflow:hidden;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+.toolbar>*{{min-width:0}}
 button{{min-width:92px;height:36px;padding:0 16px;border:0;border-radius:7px;background:{_GREEN};color:#11170D;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s ease}}
 button:hover{{background:#8CD400}}button:active{{background:#6AA700}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
-.batch-status{{flex:0 0 auto;padding:5px 8px;border:1px solid #3A444D;border-radius:5px;color:{_TEXT};font-size:.72rem;font-weight:650;white-space:nowrap}}
-.frame-control{{flex:1;min-width:180px;display:flex;align-items:center;gap:14px;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}
-input{{accent-color:{_GREEN}}}.range-shell{{position:relative;display:flex;align-items:center;flex:1;height:18px;margin:0}}
+.batch-status{{flex:0 1 34ch;max-width:34ch;padding:5px 8px;border:1px solid #3A444D;border-radius:5px;color:{_TEXT};font-size:.72rem;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}}
+.frame-control{{flex:1;min-width:120px;display:flex;align-items:center;gap:14px;overflow:hidden;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}
+.control-label-text{{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+input{{accent-color:{_GREEN}}}.range-shell{{position:relative;display:flex;align-items:center;flex:1;min-width:48px;height:18px;margin:0}}
 .range-shell input{{position:absolute;z-index:2;inset:0;width:100%;height:18px;margin:0;opacity:0;cursor:pointer}}
 .range-track{{position:absolute;z-index:1;left:7px;right:7px;top:7px;height:4px;border-radius:2px;background:#3A444D;pointer-events:none}}
 .range-fill{{position:absolute;inset:0;border-radius:inherit;background:{_GREEN};transform:scaleX(0);transform-origin:left center;transition:transform 110ms linear}}
 .range-thumb{{position:absolute;left:0;top:-5px;width:14px;height:14px;border-radius:50%;background:{_GREEN};box-shadow:0 0 0 3px {_SURFACE};transform:translate3d(-7px,0,0);transition:transform 110ms linear}}
 .range-shell input:focus-visible~.range-track{{outline:3px solid {_GREEN};outline-offset:3px}}
-.force-toggle{{display:flex;align-items:center;gap:7px;white-space:nowrap}}.force-toggle input{{width:16px;height:16px;margin:0}}
-output{{flex:0 0 auto;text-align:right;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}}
+.force-toggle{{display:flex;align-items:center;gap:7px;min-width:0;overflow:hidden;white-space:nowrap}}.force-toggle input{{flex:none;width:16px;height:16px;margin:0}}.force-toggle span{{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}
+output{{flex:0 1 auto;max-width:9ch;overflow:hidden;text-overflow:ellipsis;text-align:right;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}}
 output .of{{color:#68737E;font-weight:500}}
 .stage-grid{{display:grid;grid-template-columns:{grid_columns};grid-template-rows:repeat({rows},{row_height}px);justify-content:start;gap:12px;width:100%;height:{stage_height}px;padding:14px;overflow:hidden;background:{_BACKGROUND}}}
 .trajectory-card{{position:relative;min-width:0;overflow:hidden;border:1px solid #3A444D;border-radius:8px;background:{_SURFACE}}}
 .trajectory-placeholder{{display:grid;place-items:center;padding:16px;border-style:dashed;background:#1B2126}}
-.placeholder-message{{max-width:120px;text-align:center;color:#8A939B;font-size:.66rem;line-height:1.4}}
+.placeholder-message{{max-width:120px;text-align:center;color:#8A939B;font-size:.66rem;line-height:1.4;overflow-wrap:anywhere}}
 .molecule-view{{position:absolute;inset:0 0 82px;margin:10px 14px 0;overflow:hidden;border-radius:5px;background:#12181A}}
 .molecule-view canvas{{position:absolute!important;inset:0;width:100%!important;height:100%!important}}
 .card-title{{position:absolute;z-index:3;top:12px;left:12px;display:flex;align-items:baseline;gap:7px;max-width:calc(100% - 24px);width:max-content;padding:4px 7px;border-radius:5px;overflow:hidden;white-space:nowrap;background:rgba(23,29,32,.86);pointer-events:none}}
-.card-title strong{{overflow:hidden;text-overflow:ellipsis;font-size:.82rem}}.card-title span{{flex:0 0 auto;color:#A8B0B8;font-size:.68rem;font-weight:600}}
+.card-title strong{{display:block;min-width:0;overflow:hidden;text-overflow:ellipsis;font-size:.82rem}}.card-title span{{flex:0 0 auto;color:#A8B0B8;font-size:.68rem;font-weight:600}}
 .force-panel{{position:absolute;left:0;right:0;bottom:0;height:82px;padding:0 14px 4px;border-top:1px solid #2C353B;background:{_SURFACE};pointer-events:auto;cursor:crosshair}}
 [data-panel-status]{{height:36px;display:flex;align-items:flex-end;gap:20px;color:{_TEXT}}}
-.metric{{display:flex;flex-direction:column;min-width:118px}}.metric b{{font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.94rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.72rem;font-weight:500;color:#8A939B;margin-left:.25em}}
+.metric{{display:flex;flex-direction:column;min-width:0;max-width:100%}}.metric b{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.94rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.72rem;font-weight:500;color:#8A939B;margin-left:.25em}}
 [data-trace-cursor]{{transition:x1 110ms linear,x2 110ms linear}}
 [data-trace-dot]{{transition:cx 110ms linear,cy 110ms linear}}
 @media(prefers-reduced-motion:reduce){{button,.range-fill,.range-thumb,[data-trace-cursor],[data-trace-dot]{{transition:none}}}}
@@ -1408,11 +1419,11 @@ output .of{{color:#68737E;font-weight:500}}
 <main class="player" aria-label="Synchronized py3Dmol relaxation player" data-batch-multiplier="{batch_multiplier}" data-total-graphs="{total_graphs}" data-total-atoms="{total_atoms}">
   <div class="toolbar"><button type="button" data-play aria-label="Play relaxation">▶ Play</button>
     <span class="batch-status">{batch_status}</span>
-    <label class="frame-control">Shared step<span class="range-shell" data-range-shell>
+    <label class="frame-control"><span class="control-label-text">Shared step</span><span class="range-shell" data-range-shell>
       <input data-frame aria-label="Shared relaxation step" type="range" min="0" max="{frame_count - 1}" value="0" step="1">
       <span class="range-track"><span class="range-fill" data-progress-fill></span><span class="range-thumb" data-progress-thumb></span></span>
     </span></label>
-    <label class="force-toggle"><input data-force-color type="checkbox" checked>Color atoms by force</label>
+    <label class="force-toggle"><input data-force-color type="checkbox" checked><span>Color atoms by force</span></label>
     <output data-frame-label>Step 1<span class="of"> / {frame_count}</span></output></div>
   <div class="stage-grid">{cards}</div>
 </main>
@@ -1773,7 +1784,7 @@ def _static_nci_frame_svg(
         f'<text x="12" y="18" fill="{_TEXT}" font-size="11" font-weight="650">'
         f"{escape(state_label)}</text>"
         f'<text x="12" y="36" fill="{_MUTED}" font-size="9.5">'
-        f"D min = {distance:.3f} Å; ΔD = {delta_distance:+.3f} Å</text>"
+        f"d_min = {distance:.3f} Å; Δd_min = {delta_distance:+.3f} Å</text>"
         f'<line x1="{line_xy[0, 0]:.1f}" y1="{line_xy[0, 1]:.1f}" '
         f'x2="{line_xy[1, 0]:.1f}" y2="{line_xy[1, 1]:.1f}" '
         f'stroke="{_BLUE}" stroke-width="2" stroke-dasharray="3 4"/>'
@@ -1798,8 +1809,8 @@ def _py3dmol_nci_player(
         f'aria-label="NCI scan for {escape(str(item["name"]), quote=True)}"></div>'
         f'<strong class="card-title">{escape(str(item["name"]))}</strong>'
         '<div class="separation-readout" data-separation-readout>'
-        '<span class="metric"><b>D MIN</b><em>…<i>Å</i></em></span>'
-        '<span class="metric"><b>ΔD</b><em>…<i>Å</i></em></span>'
+        '<span class="metric"><b>d_min</b><em>…<i>Å</i></em></span>'
+        '<span class="metric"><b>Δd_min</b><em>…<i>Å</i></em></span>'
         "</div></section>"
         for index, item in enumerate(items)
     )
@@ -1807,21 +1818,22 @@ def _py3dmol_nci_player(
 <html><head><meta charset="utf-8"><style>
 html,body{{margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif}}
 *{{box-sizing:border-box}}.player{{width:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
-.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;overflow:hidden;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+.toolbar>*{{min-width:0}}
 button{{min-width:92px;height:36px;padding:0 16px;border:0;border-radius:7px;background:{_GREEN};color:#11170D;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s ease}}
 button:hover{{background:#8CD400}}button:active{{background:#6AA700}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
-label{{flex:1;min-width:180px;display:flex;align-items:center;gap:14px;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}input{{width:100%;margin:0;accent-color:{_GREEN}}}
+label{{flex:1;min-width:0;display:flex;align-items:center;gap:14px;overflow:hidden;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}.control-label-text{{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}input{{min-width:48px;width:100%;margin:0;accent-color:{_GREEN}}}
 .stage-grid{{display:grid;grid-template-columns:repeat(auto-fit,minmax(0,1fr));gap:12px;padding:14px;background:{_BACKGROUND}}}
 .nci-card{{position:relative;min-width:0;height:340px;overflow:hidden;border:1px solid #3A444D;border-radius:8px;background:{_SURFACE}}}
 .molecule-view{{position:absolute;inset:0 0 60px;margin:10px 14px 0;border-radius:5px;overflow:hidden;background:#12181A}}.molecule-view canvas{{position:absolute!important;inset:0;width:100%!important;height:100%!important}}
 .card-title{{position:absolute;z-index:3;top:12px;left:12px;display:block;max-width:calc(100% - 24px);padding:4px 7px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(23,29,32,.86);font-size:.82rem;pointer-events:none}}
 .separation-readout{{position:absolute;left:0;right:0;bottom:0;height:60px;padding:10px 14px;border-top:1px solid #2C353B;background:{_SURFACE};display:flex;align-items:flex-end;gap:20px;color:{_TEXT}}}
-.metric{{display:flex;flex-direction:column;min-width:92px}}.metric b{{font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.94rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.72rem;font-weight:500;color:#8A939B;margin-left:.25em}}
+.metric{{display:flex;flex:1;flex-direction:column;min-width:0}}.metric b{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.6rem;font-weight:700;letter-spacing:.12em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.94rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.72rem;font-weight:500;color:#8A939B;margin-left:.25em}}
 @media(max-width:700px){{.stage-grid{{grid-template-columns:1fr}}.nci-card{{height:340px}}}}
 </style></head><body>{_bundle_preamble()}
 <main class="player" aria-label="Synchronized py3Dmol NCI separation player">
   <div class="toolbar"><button type="button" data-play aria-label="Play NCI separation scan">▶ Play</button>
-    <label>Shared NCI Atlas coordinate
+    <label><span class="control-label-text">Shared NCI Atlas coordinate</span>
       <input data-frame aria-label="Shared NCI Atlas scan coordinate" type="range" min="0" max="{frame_count - 1}" value="0" step="1">
     </label>
   </div>
@@ -1832,7 +1844,7 @@ const items={_json_for_script(list(items))};const scales={_json_for_script(list(
 {_trajectory_viewers_javascript()}
 const slider=document.querySelector('[data-frame]');const play=document.querySelector('[data-play]');let timer=null;let queue=Promise.resolve();
 const point=function(values){{return {{x:values[0],y:values[1],z:values[2]}};}};
-const update=function(index){{queue=queue.then(function(){{return Promise.all(viewers.map(function(viewer){{return viewer.setFrame(index);}}));}}).then(function(){{viewers.forEach(function(viewer,panel){{const line=items[panel].contact_lines[index];viewer.removeAllShapes();viewer.addLine({{start:point(line.start),end:point(line.end),color:'{_BLUE}',dashed:true,dashLength:.12,gapLength:.08}});applyStyle(viewer);viewer.render();document.querySelector('[data-panel="'+panel+'"] [data-separation-readout]').innerHTML='<span class="metric"><b>D MIN</b><em>'+line.distance_a.toFixed(3)+'<i>Å</i></em></span><span class="metric"><b>ΔD</b><em>'+(line.delta_distance_a>=0?'+':'')+line.delta_distance_a.toFixed(3)+'<i>Å</i></em></span>';}});slider.value=String(index);}});return queue;}};
+const update=function(index){{queue=queue.then(function(){{return Promise.all(viewers.map(function(viewer){{return viewer.setFrame(index);}}));}}).then(function(){{viewers.forEach(function(viewer,panel){{const line=items[panel].contact_lines[index];viewer.removeAllShapes();viewer.addLine({{start:point(line.start),end:point(line.end),color:'{_BLUE}',dashed:true,dashLength:.12,gapLength:.08}});applyStyle(viewer);viewer.render();document.querySelector('[data-panel="'+panel+'"] [data-separation-readout]').innerHTML='<span class="metric"><b>d_min</b><em>'+line.distance_a.toFixed(3)+'<i>Å</i></em></span><span class="metric"><b>Δd_min</b><em>'+(line.delta_distance_a>=0?'+':'')+line.delta_distance_a.toFixed(3)+'<i>Å</i></em></span>';}});slider.value=String(index);}});return queue;}};
 const stop=function(){{if(timer!==null)window.clearTimeout(timer);timer=null;play.textContent='▶ Play';}};
 const advance=function(){{if(timer===null)return;update((Number(slider.value)+1)%{frame_count}).then(function(){{if(timer!==null)timer=window.setTimeout(advance,{frame_interval_ms});}});}};
 play.addEventListener('click',function(){{if(timer!==null){{stop();return;}}play.textContent='❚❚ Pause';timer=window.setTimeout(advance,{frame_interval_ms});}});
@@ -1976,22 +1988,23 @@ def _py3dmol_bias_comparison_player(
 <html><head><meta charset="utf-8"><style>
 html,body{{margin:0;width:100%;background:{_BACKGROUND};color:{_TEXT};font-family:'NVIDIA Sans','NVIDIA Sans Regular',Arial,Helvetica,sans-serif}}
 *{{box-sizing:border-box}}.player{{width:100%;overflow:hidden;border:1px solid {_BORDER};border-radius:10px;background:{_BACKGROUND}}}
-.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+.toolbar{{height:56px;padding:0 14px;display:flex;align-items:center;gap:16px;overflow:hidden;border-bottom:1px solid {_BORDER};background:{_SURFACE}}}
+.toolbar>*{{min-width:0}}
 button{{min-width:92px;height:36px;padding:0 16px;border:0;border-radius:7px;background:{_GREEN};color:#11170D;font:inherit;font-size:.8rem;font-weight:700;cursor:pointer;transition:background .15s ease}}
 button:hover{{background:#8CD400}}button:active{{background:#6AA700}}button:focus-visible,input:focus-visible{{outline:3px solid {_GREEN};outline-offset:2px}}
-label{{flex:1;min-width:180px;display:flex;align-items:center;gap:14px;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}input{{width:100%;margin:0;accent-color:{_GREEN}}}
-output{{flex:0 0 auto;text-align:right;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}}output .of{{color:#68737E;font-weight:500}}
+label{{flex:1;min-width:0;display:flex;align-items:center;gap:14px;overflow:hidden;color:#8A939B;font-size:.66rem;font-weight:700;letter-spacing:.13em;text-transform:uppercase;white-space:nowrap}}.control-label-text{{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}}input{{min-width:48px;width:100%;margin:0;accent-color:{_GREEN}}}
+output{{flex:0 1 auto;max-width:9ch;overflow:hidden;text-overflow:ellipsis;text-align:right;font-size:.78rem;font-weight:600;font-variant-numeric:tabular-nums;white-space:nowrap}}output .of{{color:#68737E;font-weight:500}}
 .stage-grid{{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(2,278px);gap:12px;padding:14px;background:{_BACKGROUND}}}
 .trajectory-card{{position:relative;min-width:0;overflow:hidden;border:1px solid #3A444D;border-radius:8px;background:{_SURFACE}}}
 .molecule-view{{position:absolute;inset:0 0 66px;margin:10px 14px 0;border-radius:5px;overflow:hidden;background:#12181A}}.molecule-view canvas{{position:absolute!important;inset:0;width:100%!important;height:100%!important}}
-.card-title{{position:absolute;z-index:3;top:12px;left:12px;display:block;max-width:calc(100% - 24px);padding:4px 7px;border-radius:5px;background:rgba(23,29,32,.86);font-size:.8rem;pointer-events:none}}
+.card-title{{position:absolute;z-index:3;top:12px;left:12px;display:block;max-width:calc(100% - 24px);padding:4px 7px;border-radius:5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;background:rgba(23,29,32,.86);font-size:.8rem;pointer-events:none}}
 .card-sub{{position:absolute;z-index:3;top:42px;left:12px;display:block;max-width:calc(100% - 24px);padding:2px 7px;border-radius:4px;background:rgba(23,29,32,.82);color:#8A939B;font-size:.7rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;pointer-events:none}}
 .trajectory-readout{{position:absolute;left:0;right:0;bottom:0;height:66px;padding:10px 14px;border-top:1px solid #2C353B;background:{_SURFACE};display:flex;align-items:flex-end;gap:18px;color:{_TEXT}}}
-.metric{{display:flex;flex-direction:column;min-width:92px}}.metric b{{font-size:.58rem;font-weight:700;letter-spacing:.1em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.9rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.68rem;font-weight:500;color:#8A939B;margin-left:.25em}}
+.metric{{display:flex;flex:1;flex-direction:column;min-width:0}}.metric b{{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.58rem;font-weight:700;letter-spacing:.1em;color:#8A939B}}.metric em{{margin-top:4px;font-size:.9rem;font-weight:600;font-style:normal;font-variant-numeric:tabular-nums}}.metric i{{font-style:normal;font-size:.68rem;font-weight:500;color:#8A939B;margin-left:.25em}}
 </style></head><body>{_bundle_preamble()}
 <main class="player" aria-label="Matched molecular dynamics comparison">
   <div class="toolbar"><button type="button" data-play aria-label="Play matched trajectories">▶ Play</button>
-    <label>Shared trajectory frame
+    <label><span class="control-label-text">Shared trajectory frame</span>
       <input data-frame aria-label="Shared trajectory frame" type="range" min="0" max="{frame_count - 1}" value="0" step="1">
     </label>
     <output data-frame-label>1<span class="of"> / {frame_count}</span></output>

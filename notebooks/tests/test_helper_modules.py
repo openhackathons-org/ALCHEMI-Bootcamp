@@ -107,7 +107,7 @@ def test_module_three_embeds_the_supplied_scheduling_widget() -> None:
     sys.path.insert(0, str(CORE_DIR))
     from helpers import module03
 
-    html = module03.show_scheduling_widget(total_systems=23).data
+    html = module03.show_scheduling_widget().data
 
     assert '<iframe title="Study scheduling routes"' in html
     assert "srcdoc=" in html
@@ -116,7 +116,7 @@ def test_module_three_embeds_the_supplied_scheduling_widget() -> None:
     assert 'role="note"' in html
     assert ".alchemi-sched .as-bar" in html
     assert "margin:10px 0" in html
-    assert "TOTAL = 23, ACTIVE = 64, CAP = 16" in html
+    assert "TOTAL = 128, ACTIVE = 64, CAP = 16" in html
     assert "__ALCHEMI_" not in html
 
 

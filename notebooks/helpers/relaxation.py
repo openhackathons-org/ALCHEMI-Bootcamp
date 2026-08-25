@@ -69,18 +69,18 @@ def prepare_dynamics_batch(batch: Batch) -> Batch:
     return prepared
 
 
-def graph_temperatures(batch: Batch) -> torch.Tensor:
-    """Return the instantaneous kinetic temperature of each graph in kelvin."""
+def system_temperatures(batch: Batch) -> torch.Tensor:
+    """Return the instantaneous kinetic temperature of each system in kelvin."""
 
     masses = batch.atomic_masses.reshape(-1)
     atom_kinetic_energy = 0.5 * masses * batch.velocities.square().sum(dim=1)
-    graph_kinetic_energy = torch.zeros(
+    system_kinetic_energy = torch.zeros(
         batch.num_graphs,
         device=batch.device,
         dtype=batch.positions.dtype,
     ).index_add_(0, batch.batch_idx.long(), atom_kinetic_energy)
-    degrees_of_freedom = 3.0 * batch.num_nodes_per_graph.to(graph_kinetic_energy)
-    return 2.0 * graph_kinetic_energy / (degrees_of_freedom * ase_units.kB)
+    degrees_of_freedom = 3.0 * batch.num_nodes_per_graph.to(system_kinetic_energy)
+    return 2.0 * system_kinetic_energy / (degrees_of_freedom * ase_units.kB)
 
 
 def maximum_force_history(
@@ -238,8 +238,6 @@ def relax_selected_structures(
 ) -> dict[str, Any]:
     """Relax one picker selection as a single Batch for the Module 00 tour."""
 
-    from nvalchemi.models import MACEWrapper
-
     specs = selection.selected_specs()
     if len(specs) > MAX_RELAXATION_SYSTEMS:
         raise ValueError(
@@ -277,6 +275,8 @@ def relax_selected_structures(
     labels = [spec.display_name for spec in specs]
 
     with suppress_known_mace_load_noise():
+        from nvalchemi.models import MACEWrapper
+
         model = MACEWrapper.from_checkpoint(
             mace_checkpoint_path("medium-mpa-0"),
             device=run_device,

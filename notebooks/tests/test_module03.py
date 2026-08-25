@@ -53,7 +53,7 @@ def _identity_batch(*simulation_ids: int, device: torch.device | str = "cpu") ->
 
 def test_stage_hooks_receive_their_stage_local_rules() -> None:
     temperature = module03.temperature_window_hook(
-        total_systems=2,
+        total_trajectories=2,
         device="cpu",
         frequency=10,
         window_samples=10,
@@ -63,7 +63,7 @@ def test_stage_hooks_receive_their_stage_local_rules() -> None:
         trend_tolerance=45.0,
     )
     energy = module03.energy_window_hook(
-        total_systems=2,
+        total_trajectories=2,
         device="cpu",
         frequency=10,
         window_samples=10,
@@ -117,7 +117,7 @@ def test_completion_identity_only_requires_simulation_id() -> None:
         "test route",
         batches,
         timer,
-        expected_systems=2,
+        expected_trajectories=2,
         device="cpu",
     )
 
@@ -169,7 +169,7 @@ def test_inflight_check_reads_the_standard_sink_interface() -> None:
         completed,
         remaining=None,
         timer=timer,
-        expected_systems=2,
+        expected_trajectories=2,
         device="cpu",
         max_batch_size=1,
     )
@@ -187,7 +187,7 @@ def test_inflight_check_allows_a_study_that_fits_the_initial_batch() -> None:
         completed,
         remaining=None,
         timer=timer,
-        expected_systems=2,
+        expected_trajectories=2,
         device="cpu",
         max_batch_size=64,
     )

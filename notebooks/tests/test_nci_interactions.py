@@ -153,6 +153,7 @@ def test_nci_subset_identity_and_reference_reduction(
     )
     assert all(not structure.pbc.any() for structure in atoms)
     assert graph_rows["graph_index"].tolist() == list(range(90))
+    assert graph_rows["fragment"].tolist() == ["AB", "A", "B"] * 30
 
     ionic_equilibrium = references[
         (references["system_id"] == "08.007") & np.isclose(references["scale"], 1.0)
@@ -185,62 +186,6 @@ def test_nci_loader_rejects_changed_bytes(tmp_path: Path) -> None:
 
     with pytest.raises(ValueError, match="SHA-256 mismatch"):
         nci.load_nci_atlas(changed)
-
-
-def test_interaction_components_uses_graph_index_and_ab_minus_a_minus_b(
-    nci_data: tuple[list[Atoms], pd.DataFrame, pd.DataFrame],
-) -> None:
-    _, graph_rows, _ = nci_data
-    graph_energies = []
-    for row in graph_rows.itertuples(index=False):
-        fragment_energy = {
-            "A": 10.0,
-            "B": 20.0,
-            "AB": 30.0 + float(row.scale),
-        }
-        graph_energies.append(fragment_energy[row.fragment])
-
-    curves = nci.interaction_components(
-        graph_rows.sample(frac=1.0, random_state=7),
-        {"synthetic": torch.tensor(graph_energies, dtype=torch.float64)},
-    )
-
-    expected = curves["scale"].to_numpy() / (units.kcal / units.mol)
-    np.testing.assert_allclose(curves["synthetic"], expected)
-
-
-def test_max_system_charge_error_reduces_atom_charges() -> None:
-    first = AtomicData.from_atoms(
-        Atoms("H2", positions=[[0.0, 0.0, 0.0], [0.7, 0.0, 0.0]])
-    )
-    first.add_system_property("charge", torch.tensor([[0.0]]))
-    second = AtomicData.from_atoms(Atoms("H", positions=[[0.0, 0.0, 0.0]]))
-    second.add_system_property("charge", torch.tensor([[1.0]]))
-    batch = Batch.from_data_list([first, second])
-
-    error = nci.max_system_charge_error(
-        batch,
-        torch.tensor([0.25, -0.25, 0.9]),
-    )
-
-    assert error == pytest.approx(0.1)
-
-
-def test_nci_curve_deltas_compare_matching_routes(
-    nci_data: tuple[list[Atoms], pd.DataFrame, pd.DataFrame],
-) -> None:
-    _, _, references = nci_data
-    checked = nci.checked_nci_interaction_curves(references)
-    live = checked.copy()
-    live["complete"] += 0.125
-
-    deltas = nci.nci_curve_deltas(live, checked)
-
-    assert deltas == {
-        "aimnet_base": pytest.approx(0.0),
-        "base_d3": pytest.approx(0.0),
-        "complete": pytest.approx(0.125),
-    }
 
 
 def test_direct_coulomb_adapter_returns_energy_and_fixed_charge_forces() -> None:

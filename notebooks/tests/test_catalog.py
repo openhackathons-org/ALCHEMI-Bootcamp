@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 import sys
@@ -61,4 +64,3 @@ def test_smiles_preparation_errors_are_clear(smiles: str) -> None:
 def test_mace_checkpoint_helper_rejects_unpinned_alias() -> None:
     with pytest.raises(ValueError, match="pins 'medium-mpa-0'"):
         mace_checkpoint_path("medium-0b2")
-

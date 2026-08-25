@@ -45,11 +45,8 @@ def _prime_tree_set_notice() -> None:
         os.close(saved_stderr)
 
 
-def configure_tutorial() -> None:
-    """Apply the shared tutorial style and silence known library notices."""
-
-    _configure_local_runtime()
-    import matplotlib.pyplot as plt
+def _ignore_known_aimnet2_cutoff_warning() -> None:
+    """Ignore the pinned wrapper's scalar cutoff conversion notice."""
 
     warnings.filterwarnings(
         "ignore",
@@ -57,6 +54,15 @@ def configure_tutorial() -> None:
         category=UserWarning,
         module=r"nvalchemi\.models\.aimnet2",
     )
+
+
+def configure_tutorial() -> None:
+    """Apply the shared tutorial style and silence known library notices."""
+
+    _configure_local_runtime()
+    import matplotlib.pyplot as plt
+
+    _ignore_known_aimnet2_cutoff_warning()
     warnings.filterwarnings(
         "ignore",
         message=r'install "ipywidgets".*',

@@ -1,3 +1,6 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+
 from __future__ import annotations
 
 import json
@@ -70,13 +73,18 @@ def test_mace_noise_filter_is_narrow() -> None:
     with warnings.catch_warnings(record=True) as caught:
         warnings.simplefilter("always")
         with suppress_known_mace_load_noise():
+            warnings.warn("invalid escape sequence '\\.'", SyntaxWarning)
             warnings.warn(
                 "Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected, details",
                 UserWarning,
             )
+            warnings.warn("scientific syntax warning", SyntaxWarning)
             warnings.warn("scientific warning", UserWarning)
 
-    assert [str(item.message) for item in caught] == ["scientific warning"]
+    assert [str(item.message) for item in caught] == [
+        "scientific syntax warning",
+        "scientific warning",
+    ]
 
 
 @pytest.mark.parametrize(

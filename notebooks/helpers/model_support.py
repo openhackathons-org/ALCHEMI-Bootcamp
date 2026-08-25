@@ -17,14 +17,21 @@ from typing import Any
 
 import numpy as np
 import torch
-from nvalchemi.data import AtomicData, Batch
-from nvalchemi.dynamics import DynamicsStage
-from nvalchemi.models.base import (
-    BaseModelMixin,
-    ModelConfig,
-    NeighborConfig,
-    NeighborListFormat,
-)
+
+with warnings.catch_warnings():
+    warnings.filterwarnings(
+        "ignore",
+        message=r"invalid escape sequence.*",
+        category=SyntaxWarning,
+    )
+    from nvalchemi.data import AtomicData, Batch
+    from nvalchemi.dynamics import DynamicsStage
+    from nvalchemi.models.base import (
+        BaseModelMixin,
+        ModelConfig,
+        NeighborConfig,
+        NeighborListFormat,
+    )
 
 from .data_records import PROJECT_ROOT, sha256_file
 
@@ -51,6 +58,11 @@ def suppress_known_mace_load_noise():
     """Hide pinned dependency notices that do not describe the learner's run."""
 
     with warnings.catch_warnings(), redirect_stdout(StringIO()):
+        warnings.filterwarnings(
+            "ignore",
+            message=r"invalid escape sequence.*",
+            category=SyntaxWarning,
+        )
         warnings.filterwarnings(
             "ignore",
             message="Environment variable TORCH_FORCE_NO_WEIGHTS_ONLY_LOAD detected.*",
