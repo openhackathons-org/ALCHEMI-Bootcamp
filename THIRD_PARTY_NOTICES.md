@@ -54,8 +54,8 @@ README.
 The tutorials pin Toolkit and Toolkit-Ops to immutable commits in
 `environment/runtime-pins.toml`.
 
-- [Toolkit Apache-2.0 license at the pinned commit](https://github.com/NVIDIA/nvalchemi-toolkit/blob/8c2c307c1c0c76baee6f7a68eb75a45da83ffd18/LICENSE)
-- [Toolkit-Ops Apache-2.0 license at the pinned commit](https://github.com/NVIDIA/nvalchemi-toolkit-ops/blob/c1e23460859a784e1d78043bcd1c8af0d1095fa2/LICENSE)
+- [Toolkit Apache-2.0 license at the pinned commit](https://github.com/NVIDIA/nvalchemi-toolkit/blob/31ab73ed0b0bcf44e4769467dff06b7d2674bd37/LICENSE)
+- [Toolkit-Ops Apache-2.0 license at the pinned commit](https://github.com/NVIDIA/nvalchemi-toolkit-ops/blob/6702138e404d40ea79dec62f68c2fa67e858580e/LICENSE)
 
 ### PyTorch, CUDA, and ASE
 

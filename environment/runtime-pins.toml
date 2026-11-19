@@ -6,19 +6,19 @@ cuda_index = "cu130"
 
 [toolkit]
 distribution = "nvalchemi-toolkit"
-version = "0.2.0"
+version = "0.3.0"
 repository = "https://github.com/NVIDIA/nvalchemi-toolkit.git"
-commit = "8c2c307c1c0c76baee6f7a68eb75a45da83ffd18"
+commit = "31ab73ed0b0bcf44e4769467dff06b7d2674bd37"
 verified_remote = "refs/heads/main"
-verified_date = "2026-08-11"
+verified_date = "2026-11-19"
 
 [toolkit_ops]
 distribution = "nvalchemi-toolkit-ops"
-version = "0.4.1"
+version = "0.5.0"
 repository = "https://github.com/NVIDIA/nvalchemi-toolkit-ops.git"
-commit = "c1e23460859a784e1d78043bcd1c8af0d1095fa2"
-verified_remote = "refs/heads/main"
-verified_date = "2026-08-11"
+commit = "6702138e404d40ea79dec62f68c2fa67e858580e"
+verified_remote = "refs/tags/v0.5.0"
+verified_date = "2026-11-19"
 
 [model]
 package = "aimnet"
