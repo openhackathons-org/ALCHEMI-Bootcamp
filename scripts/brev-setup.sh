@@ -103,10 +103,18 @@ validation_finished_epoch="$(date +%s)"
 uv_bin="${ALCHEMI_UV_BIN:-${bootstrap_root}/bin/uv}"
 if [[ ! -x "${uv_bin}" ]]; then
     echo "Installing uv ${uv_version} for the Brev runtime."
-    python3 -m venv "${bootstrap_root}"
-    "${bootstrap_root}/bin/python" -m pip install \
-        --disable-pip-version-check \
-        "uv==${uv_version}"
+    if python3 -m venv "${bootstrap_root}"; then
+        "${bootstrap_root}/bin/python" -m pip install \
+            --disable-pip-version-check \
+            "uv==${uv_version}"
+    else
+        # Some Brev images ship python3 without the venv module.
+        echo "Using the uv ${uv_version} standalone installer instead."
+        rm -rf "${bootstrap_root}"
+        mkdir -p "${bootstrap_root}/bin"
+        curl -LsSf "https://astral.sh/uv/${uv_version}/install.sh" \
+            | env UV_UNMANAGED_INSTALL="${bootstrap_root}/bin" sh
+    fi
     uv_bin="${bootstrap_root}/bin/uv"
 fi
 

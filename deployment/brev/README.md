@@ -176,7 +176,10 @@ the Launchable.
 
 ### Setup stops while installing `uv`
 
-Confirm that the Brev VM includes `python3` and the `venv` module. Then rerun:
+The script installs uv with `python3 -m venv` and pip. When the image lacks
+the `venv` module, it downloads the same uv version with the standalone
+installer from `astral.sh`. Confirm that the VM has `python3` and either the
+`venv` module or outbound HTTPS with `curl`. Then rerun:
 
 ```bash
 cd ~/workspace/ALCHEMI-Bootcamp
