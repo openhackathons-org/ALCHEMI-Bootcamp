@@ -86,11 +86,6 @@
       "license": "LicenseRef-Qt-Commercial OR LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
       "evidence": "Official Qt for Python v6.10.2 setup.py SPDX expression: https://github.com/qtproject/pyside-pyside-setup/blob/v6.10.2/setup.py"
     },
-    "tensordict": {
-      "version": "0.11.0",
-      "license": "MIT",
-      "evidence": "The installed 0.11.0 wheel includes the MIT terms in tensordict-0.11.0.dist-info/licenses/LICENSE; its short metadata value says BSD."
-    },
     "torch": {
       "version": "2.12.0+cu130",
       "license": "BSD-3-Clause",

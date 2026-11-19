@@ -2,7 +2,7 @@
 
 This generated snapshot includes direct and transitive Python packages installed for the locked Linux tutorial environment.
 
-- Source: pyproject.toml and uv.lock (SHA-256 `8c7ab4e1ca7dce56d3c9ca8f82f97fbbe624fdfb19e96ba42bdbfe4ef8742f9f`)
+- Source: pyproject.toml and uv.lock (SHA-256 `b79baafd6b098cedf47c10c063e1b7ae4f093ec412735f1b84b66cad8f412cda`)
 - Environment: Python 3.12.13 on linux-x86_64
 - Packages: 217 installed, 20 direct
 
@@ -22,8 +22,8 @@ This generated snapshot includes direct and transitive Python packages installed
 | direct | dm-tree | 0.1.10 | Apache-2.0 | pyproject.toml [project.dependencies] | https://github.com/deepmind/tree |
 | direct | mace-torch | 0.3.15 | MIT | pyproject.toml [project.dependencies] | https://github.com/ACEsuit/mace |
 | direct | matplotlib | 3.11.1 | PSF-2.0 | pyproject.toml [project.dependencies] | https://matplotlib.org |
-| direct | nvalchemi-toolkit | 0.2.0 | Apache-2.0 | pyproject.toml [project.dependencies] | git+https://github.com/NVIDIA/nvalchemi-toolkit.git@8c2c307c1c0c76baee6f7a68eb75a45da83ffd18 |
-| direct | nvalchemi-toolkit-ops | 0.4.1 | Apache-2.0 | pyproject.toml [project.dependencies] | git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2 |
+| direct | nvalchemi-toolkit | 0.3.0 | Apache-2.0 | pyproject.toml [project.dependencies] | git+https://github.com/NVIDIA/nvalchemi-toolkit.git@31ab73ed0b0bcf44e4769467dff06b7d2674bd37 |
+| direct | nvalchemi-toolkit-ops | 0.5.0 | Apache-2.0 | pyproject.toml [project.dependencies] | git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@6702138e404d40ea79dec62f68c2fa67e858580e |
 | direct | numpy | 2.3.5 | BSD-3-Clause | pyproject.toml [project.dependencies] | https://github.com/numpy/numpy |
 | direct | pandas | 2.3.3 | BSD-3-Clause | pyproject.toml [project.dependencies] | https://github.com/pandas-dev/pandas |
 | direct | py3Dmol | 2.5.5 | MIT | pyproject.toml [project.dependencies] | https://3dmol.org |
@@ -153,7 +153,7 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | nvidia-nvjitlink | 13.0.88 | LicenseRef-NVIDIA-Proprietary |  | https://developer.nvidia.com/cuda-zone |
 | transitive | nvidia-nvshmem-cu13 | 3.4.5 | LicenseRef-NVIDIA-Proprietary |  | https://developer.nvidia.com/cuda-zone |
 | transitive | nvidia-nvtx | 13.0.85 | Apache-2.0 |  | https://developer.nvidia.com/cuda-zone |
-| transitive | nvidia-physicsnemo | 2.1.1 | Apache-2.0 |  | https://github.com/NVIDIA/physicsnemo |
+| transitive | nvidia-physicsnemo | 2.2.2 | Apache-2.0 |  | https://github.com/NVIDIA/physicsnemo |
 | transitive | nvtx | 0.2.15 | Apache-2.0 WITH LLVM-exception |  | https://github.com/NVIDIA/NVTX |
 | transitive | omegaconf | 2.3.1 | BSD-3-Clause |  | https://github.com/omry/omegaconf |
 | transitive | onnx | 1.22.0 | Apache-2.0 |  | https://github.com/onnx/onnx |
@@ -206,7 +206,7 @@ This generated snapshot includes direct and transitive Python packages installed
 | transitive | soupsieve | 2.9.2 | MIT |  | https://github.com/facelessuser/soupsieve |
 | transitive | stack-data | 0.6.3 | MIT |  | http://github.com/alexmojaki/stack_data |
 | transitive | sympy | 1.14.0 | BSD-3-Clause |  | https://github.com/sympy/sympy |
-| transitive | tensordict | 0.11.0 | MIT |  | https://github.com/pytorch/tensordict |
+| transitive | tensordict | 0.15.6 | MIT |  | https://github.com/pytorch/tensordict |
 | transitive | termcolor | 3.3.0 | MIT |  | https://github.com/termcolor/termcolor |
 | transitive | terminado | 0.18.1 | BSD-2-Clause |  | https://github.com/jupyter/terminado |
 | transitive | timm | 1.0.28 | Apache-2.0 |  | https://github.com/huggingface/pytorch-image-models |
