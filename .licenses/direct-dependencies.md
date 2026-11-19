@@ -2,7 +2,7 @@
 
 Generated from the dependency declarations in `pyproject.toml` and the Linux environment synchronized from `uv.lock`. License texts and additional metadata are available in [details.json](details.json) and [Third_party_attr.txt](Third_party_attr.txt).
 
-- Source: pyproject.toml and uv.lock (SHA-256 `8c7ab4e1ca7dce56d3c9ca8f82f97fbbe624fdfb19e96ba42bdbfe4ef8742f9f`)
+- Source: pyproject.toml and uv.lock (SHA-256 `b79baafd6b098cedf47c10c063e1b7ae4f093ec412735f1b84b66cad8f412cda`)
 - Environment: Python 3.12.13 on linux-x86_64
 - Packages: 217 installed, 20 direct
 
@@ -22,8 +22,8 @@ Generated from the dependency declarations in `pyproject.toml` and the Linux env
 | runtime | dm-tree | 0.1.10 | Apache-2.0 | dm-tree==0.1.10 | https://github.com/deepmind/tree |
 | runtime | mace-torch | 0.3.15 | MIT | mace-torch==0.3.15 | https://github.com/ACEsuit/mace |
 | runtime | matplotlib | 3.11.1 | PSF-2.0 | matplotlib>=3.10,<4 | https://matplotlib.org |
-| runtime | nvalchemi-toolkit | 0.2.0 | Apache-2.0 | nvalchemi-toolkit[mace] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@8c2c307c1c0c76baee6f7a68eb75a45da83ffd18 | git+https://github.com/NVIDIA/nvalchemi-toolkit.git@8c2c307c1c0c76baee6f7a68eb75a45da83ffd18 |
-| runtime | nvalchemi-toolkit-ops | 0.4.1 | Apache-2.0 | nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2 | git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@c1e23460859a784e1d78043bcd1c8af0d1095fa2 |
+| runtime | nvalchemi-toolkit | 0.3.0 | Apache-2.0 | nvalchemi-toolkit[mace] @ git+https://github.com/NVIDIA/nvalchemi-toolkit.git@31ab73ed0b0bcf44e4769467dff06b7d2674bd37 | git+https://github.com/NVIDIA/nvalchemi-toolkit.git@31ab73ed0b0bcf44e4769467dff06b7d2674bd37 |
+| runtime | nvalchemi-toolkit-ops | 0.5.0 | Apache-2.0 | nvalchemi-toolkit-ops[torch-cu13] @ git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@6702138e404d40ea79dec62f68c2fa67e858580e | git+https://github.com/NVIDIA/nvalchemi-toolkit-ops.git@6702138e404d40ea79dec62f68c2fa67e858580e |
 | runtime | numpy | 2.3.5 | BSD-3-Clause | numpy>=2,<2.4 | https://github.com/numpy/numpy |
 | runtime | pandas | 2.3.3 | BSD-3-Clause | pandas>=2.3,<3 | https://github.com/pandas-dev/pandas |
 | runtime | py3Dmol | 2.5.5 | MIT | py3dmol==2.5.5 | https://3dmol.org |

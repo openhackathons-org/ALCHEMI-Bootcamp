@@ -125,7 +125,7 @@ The exact versions, commits, aliases, and file hashes are recorded in
 [`environment/runtime-pins.toml`](environment/runtime-pins.toml). The installed
 Python package inventory and license texts are under [`.licenses/`](.licenses/).
 
-- NVIDIA ALCHEMI Toolkit 0.2.0 and Toolkit-Ops 0.4.1: Apache-2.0.
+- NVIDIA ALCHEMI Toolkit 0.3.0 (commit `31ab73e`) and Toolkit-Ops 0.5.0 (commit `6702138`): Apache-2.0.
 - AIMNet software and `aimnet2-wb97m-d3_0` weights: MIT. Runtime setup verifies
   checkpoint SHA-256
   `f0f7c054539ad3261bd36f9b11c56d12f87cb723e25bea7521755bbd3ec24e28`.
